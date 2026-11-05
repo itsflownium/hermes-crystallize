@@ -144,123 +144,239 @@ function Column({ title, items, empty, render }) {
   })
 }
 
-// ---------------------------------------------------------------- sections
+// ---------------------------------------------------------------- bubbles
 
-function Hero({ data }) {
-  const live = data.live.length
-  const testing = data.testing.length
-  const status = live || testing
-    ? [live && `${live} live`, testing && `${testing} testing`].filter(Boolean).join(' · ')
-    : data.spotted.length ? `${data.spotted.length} ready to try` : 'Watching for repeated work'
+const bubble = (children, key, extra) =>
+  jsx('div', {
+    key,
+    style: {
+      background: C.tile, borderRadius: 14, padding: '12px 12px 11px', display: 'flex',
+      flexDirection: 'column', gap: 6, ...(extra || {})
+    },
+    children
+  })
+
+const chip = (text, color) =>
+  jsx('span', {
+    style: {
+      fontSize: '0.625rem', letterSpacing: '0.04em', padding: '1px 7px', borderRadius: 999,
+      border: `0.5px solid ${color}`, color, whiteSpace: 'nowrap'
+    },
+    children: text
+  })
+
+const big = (text, color) =>
+  jsx('div', { style: { fontSize: '1.25rem', lineHeight: 1.15, color: color || C.text, fontVariantNumeric: 'tabular-nums' }, children: text })
+
+function secs(v) {
+  if (v === null || v === undefined) return '—'
+  return v >= 90 ? `${Math.round(v / 60)} min` : `${Math.round(v)}s`
+}
+
+const perWeek = v => (v ? `${money(v)}/wk` : '—')
+const perMonth = v => (v ? `≈ ${money(v * 4.33)} a month` : '')
+
+function Bars({ timeline }) {
+  if (!timeline || timeline.length < 2) return null
+  const max = Math.max(...timeline.map(t => t.cost_usd || 0), 1e-9)
+  return jsx('div', {
+    title: 'Cost of each recent run. Green runs used the routine.',
+    style: { display: 'flex', alignItems: 'flex-end', gap: 2, height: 28, marginTop: 2 },
+    children: timeline.map((t, i) =>
+      jsx('span', {
+        key: i,
+        style: {
+          flex: 1, borderRadius: 2, minHeight: 2,
+          height: `${Math.max(8, Math.round(((t.cost_usd || 0) / max) * 100))}%`,
+          background: t.after ? C.green : C.stroke
+        }
+      }))
+  })
+}
+
+function Compare({ before, after }) {
+  if (!before) return null
+  const cell = (title, b, a) =>
+    jsxs('div', {
+      style: { flex: 1, minWidth: 0 },
+      children: [
+        jsx('div', { style: { fontSize: '0.625rem', color: C.muted }, children: title }),
+        jsxs('div', {
+          style: { fontSize: '0.75rem', color: C.text, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' },
+          children: [b, a !== null ? jsx('span', { style: { color: C.green }, children: ` → ${a}` }) : null]
+        })
+      ]
+    })
+  const has = after && after.runs
   return jsxs('div', {
-    style: { display: 'flex', flexDirection: 'column', gap: 8 },
+    style: { display: 'flex', gap: 8 },
     children: [
-      jsxs('div', {
-        style: { display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' },
-        children: [
-          jsxs('div', {
-            children: [
-              label('Savings score'),
-              jsxs('div', {
-                style: { fontSize: '2rem', lineHeight: 1.1, color: C.text, fontVariantNumeric: 'tabular-nums' },
-                children: [
-                  data.score === null ? '—' : data.score,
-                  jsx('span', { style: { fontSize: '0.75rem', color: C.muted, marginLeft: 2 }, children: '/100' })
-                ]
-              })
-            ]
-          }),
-          jsx('div', { style: { fontSize: '0.6875rem', color: C.muted, textAlign: 'right', paddingBottom: 4 }, children: status })
-        ]
-      }),
-      jsxs('div', {
-        style: { display: 'flex', gap: 6 },
-        children: [
-          jsx(Tile, { title: 'Saved', value: money(data.saved_usd), color: C.green }),
-          jsx(Tile, { title: 'Could save', value: `${money(data.could_save_usd_per_week)}/wk` })
-        ]
-      })
+      cell('Cost a run', money(before.cost_usd), has ? money(after.cost_usd) : null),
+      cell('Time', secs(before.seconds), has ? secs(after.seconds) : null),
+      cell('Tool calls', before.tool_calls == null ? '—' : before.tool_calls.toFixed(1), has ? after.tool_calls.toFixed(1) : null)
     ]
   })
 }
 
+function explain(item) {
+  const n = item.fetch_steps || 0
+  if (!n) return null
+  return `The routine runs ${n === 1 ? 'the fetch step' : `${n} fetch steps`} for Hermes, so the AI only has to read the data and write the result.`
+}
+
+function JobBubble({ item, status, act }) {
+  const tone = status === 'live' ? C.green : status === 'testing' ? C.yellow : C.accent
+  let headline, sub, action
+  if (status === 'live') {
+    const measured = item.after && item.after.runs
+    headline = measured ? big(perWeek(item.saving_per_week), C.green) : big('Measuring…', C.soft)
+    sub = measured
+      ? `${perMonth(item.saving_per_week)} · saved ${money(item.saved_usd)} so far over ${item.live_runs} runs`
+      : 'Savings show after its first live run.'
+    action = pill('Undo', () => act('/undo', { routine_id: item.routine_id }), C.muted)
+  } else if (status === 'testing') {
+    headline = big(perWeek(item.saving_per_week))
+    sub = `estimated · ${perMonth(item.saving_per_week)}`
+    action = item.ready
+      ? pill('Promote', () => act('/promote', { routine_id: item.routine_id }), C.green)
+      : jsx('span', { style: { fontSize: '0.6875rem', color: C.muted }, children: `${item.matches} of ${item.needed} tests` })
+  } else {
+    headline = big(perWeek(item.saving_per_week))
+    sub = `estimated · ${perMonth(item.saving_per_week)}`
+    action = pill('Try', () => act('/try', { job_id: item.job_id }))
+  }
+  return bubble([
+    jsxs('div', {
+      key: 'top',
+      style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+      children: [
+        jsxs('div', {
+          style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 },
+          children: [
+            jsx('span', { style: { fontSize: '0.8125rem', color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: item.name }),
+            chip(status === 'live' ? 'Live' : status === 'testing' ? (item.ready ? 'Ready' : 'Testing') : 'Spotted', tone)
+          ]
+        }),
+        action
+      ]
+    }),
+    headline,
+    small(sub),
+    status === 'testing' && !item.ready ? jsx(Progress, { key: 'p', value: Math.min(item.matches, item.needed), total: item.needed }) : null,
+    jsx(Compare, { key: 'c', before: item.before, after: status === 'live' ? item.after : null }),
+    jsx(Bars, { key: 'b', timeline: item.timeline }),
+    explain(item) ? small(explain(item), C.soft) : null,
+    status === 'testing' && item.last_test && !item.last_test.ok ? small(`Last test: ${item.last_test.why}`, C.soft) : null
+  ], item.job_id)
+}
+
+function Hero({ data }) {
+  const scoreBar = jsx('div', {
+    style: { height: 4, borderRadius: 2, background: C.stroke, overflow: 'hidden' },
+    children: jsx('div', { style: { width: `${data.score || 0}%`, height: '100%', background: C.green } })
+  })
+  const stat = (title, value, color) =>
+    jsxs('div', {
+      style: { flex: 1, minWidth: 0 },
+      children: [
+        jsx('div', { style: { fontSize: '0.625rem', color: C.muted }, children: title }),
+        jsx('div', { style: { fontSize: '0.8125rem', color: color || C.text, fontVariantNumeric: 'tabular-nums' }, children: value })
+      ]
+    })
+  return bubble([
+    jsxs('div', {
+      key: 'score',
+      style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' },
+      children: [
+        label('Savings score'),
+        jsxs('div', {
+          style: { fontSize: '1.75rem', lineHeight: 1, color: C.text, fontVariantNumeric: 'tabular-nums' },
+          children: [data.score === null ? '—' : data.score, jsx('span', { style: { fontSize: '0.6875rem', color: C.muted }, children: '/100' })]
+        })
+      ]
+    }),
+    scoreBar,
+    small('How much of your repeated work already runs on proven routines.'),
+    jsxs('div', {
+      key: 'stats',
+      style: { display: 'flex', gap: 8, marginTop: 4 },
+      children: [
+        stat('Saved so far', money(data.saved_usd), C.green),
+        stat('Saving now', perWeek(data.live_saving_usd_per_week), C.green),
+        stat('Could still save', perWeek(data.could_save_usd_per_week))
+      ]
+    })
+  ], 'hero')
+}
+
+function HowItWorks({ onHide }) {
+  return bubble([
+    row('How Crystallize saves', pill('Got it', onHide, C.muted)),
+    small('Hermes normally works out and runs every step of a job itself, and each of those decisions costs AI time.', C.soft),
+    small('Crystallize finds the steps a job repeats, like fetching the same feeds or calling the same API, and saves them as a routine. After three matching test runs you can promote it.', C.soft),
+    small('A live job runs its routine first, so the AI only reads the data and writes the result. If the routine fails, Hermes does the whole job itself.', C.soft)
+  ], 'how')
+}
+
 function ChatCard({ chat, enabled, hasSession }) {
   if (hasSession && !enabled) {
-    return box([
-      row('This chat', jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: 'off' })),
-      small('Crystallize is off for this chat. Click ◆ Crystallize in the message box and press Enter to turn it on.')
-    ])
+    return bubble([
+      row('This chat', chip('Off', C.muted)),
+      small('Click ◆ Crystallize in the message box and press Enter to analyse this chat.')
+    ], 'chat')
   }
   if (!chat) {
-    return box([
-      row('This chat', null),
-      small('Open a chat to analyse it. Crystallize points out steps Hermes keeps repeating.')
-    ])
+    return bubble([row('This chat', null), small('Open a chat to analyse it.')], 'chat')
   }
   const lines = []
   for (const [i, r] of (chat.repeats || []).entries()) {
     lines.push(jsxs('div', {
       key: `r${i}`,
-      style: { marginTop: 4 },
       children: [
-        row(r.steps.map(x => x.tool).join(' → '), jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: `${r.times}×` })),
-        small(r.has_side_effects
-          ? 'Sends or changes something, so Hermes keeps this step.'
-          : `A routine would skip ${r.calls_saved} tool calls.`, r.has_side_effects ? C.soft : C.green)
+        row(r.steps.map(x => x.tool).join(' → '), chip(`${r.times}×`, C.accent)),
+        small(r.has_side_effects ? 'Sends or changes something, so Hermes keeps this step.'
+          : `Saving it as a routine would skip ${r.calls_saved} tool calls.`, r.has_side_effects ? C.soft : C.green)
       ]
     }))
   }
   for (const [i, p] of (chat.patterns || []).entries()) {
     lines.push(jsxs('div', {
       key: `p${i}`,
-      style: { marginTop: 4 },
       children: [
-        row(p.kind === 'streak' ? `${p.tools[0]} ${p.times}× in a row` : `${p.tools.join(' → ')} ${p.times}×`,
-          jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: 'pattern' })),
-        small('Same kind of step, different inputs each time.')
+        row(p.kind === 'streak' ? `${p.tools[0]} ${p.times}× in a row` : `${p.tools.join(' → ')} ${p.times}×`, chip('pattern', C.muted)),
+        small('Same kind of step with different inputs each time.')
       ]
     }))
   }
-  return box([
-    row('This chat', jsx('span', { style: { fontSize: '0.6875rem', color: C.muted }, children: money(chat.spent_usd) })),
-    small(`${chat.tool_calls} tool calls${chat.calls_saveable ? ` · ${chat.calls_saveable} could be skipped` : ''}`),
+  return bubble([
+    row('This chat', chip('On', C.green)),
+    jsxs('div', {
+      key: 'stats',
+      style: { display: 'flex', gap: 8 },
+      children: [
+        jsxs('div', { style: { flex: 1 }, children: [small('Spent'), big(money(chat.spent_usd))] }),
+        jsxs('div', { style: { flex: 1 }, children: [small('Tool calls'), big(String(chat.tool_calls))] }),
+        jsxs('div', { style: { flex: 1 }, children: [small('Could skip'), big(String(chat.calls_saveable), chat.calls_saveable ? C.green : null)] })
+      ]
+    }),
     ...(lines.length ? lines : [small(chat.tool_calls ? 'No repeated steps yet.' : 'No tool calls yet.')])
-  ])
+  ], 'chat')
 }
 
 function Jobs({ data, act }) {
+  const items = [
+    ...data.testing.filter(x => x.ready).map(x => ['testing', x]),
+    ...data.live.map(x => ['live', x]),
+    ...data.testing.filter(x => !x.ready).map(x => ['testing', x]),
+    ...data.spotted.map(x => ['spotted', x])
+  ]
   return jsxs('div', {
-    style: { display: 'flex', flexDirection: 'column', gap: 12 },
+    style: { display: 'flex', flexDirection: 'column', gap: 8 },
     children: [
-      jsx(Column, {
-        title: 'Spotted', items: data.spotted, empty: 'Nothing new yet.',
-        render: it => jsx(Card, { item: it, action: pill('Try', () => act('/try', { job_id: it.job_id })) })
-      }),
-      jsx(Column, {
-        title: 'Testing', items: data.testing, empty: 'Nothing being tested.',
-        render: it => jsx(Card, {
-          item: it,
-          border: C.yellow,
-          action: it.ready
-            ? pill('Promote', () => act('/promote', { routine_id: it.routine_id }), C.green)
-            : jsx('span', { style: { fontSize: '0.6875rem', color: C.muted }, children: `${it.matches} of ${it.needed}` }),
-          children: [
-            jsx(Progress, { key: 'p', value: Math.min(it.matches, it.needed), total: it.needed }),
-            small(it.ready ? 'Matched every test. Ready to promote.'
-              : it.last_test ? `Last test: ${it.last_test.why}` : 'Tested after its next scheduled run.',
-              it.ready ? C.green : C.muted)
-          ]
-        })
-      }),
-      jsx(Column, {
-        title: 'Live', items: data.live, empty: 'Nothing live yet.',
-        render: it => jsx(Card, {
-          item: it,
-          border: C.green,
-          action: pill('Undo', () => act('/undo', { routine_id: it.routine_id }), C.muted),
-          children: [small(`Saved ${money(it.saved_usd)} over ${it.live_runs} runs${it.failures ? ` · ${it.failures} failed, fell back` : ''}`, C.green)]
-        })
-      })
+      label(`Scheduled jobs · ${items.length}`),
+      ...(items.length
+        ? items.map(([status, item]) => jsx(JobBubble, { key: item.job_id, item, status, act }))
+        : [small('No repeated jobs yet. Jobs that run on a schedule show up here.')])
     ]
   })
 }
@@ -284,17 +400,16 @@ function Settings({ prefs, setPref }) {
     jsxs('label', {
       key,
       style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.6875rem', color: C.soft, cursor: 'pointer' },
-      children: [
-        jsx('input', { type: 'checkbox', checked: prefs[key], onChange: e => setPref(key, e.target.checked) }),
-        text
-      ]
+      children: [jsx('input', { type: 'checkbox', checked: prefs[key] !== false, onChange: e => setPref(key, e.target.checked) }), text]
     })
-  return box([
+  return bubble([
     label('Show'),
+    opt('explain', 'How Crystallize saves'),
     opt('chat', 'This chat'),
-    opt('jobs', 'Spotted, Testing and Live'),
-    opt('watching', 'Watching')
-  ])
+    opt('jobs', 'Scheduled jobs'),
+    opt('watching', 'Watching'),
+    opt('popups', 'Pop-ups when a job is ready to promote')
+  ], 'settings')
 }
 
 // ---------------------------------------------------------------- message-box toggle
@@ -384,7 +499,7 @@ function Panel({ ctx }) {
       .catch(err => host.notify({ kind: 'error', message: `Crystallize: ${String(err)}` }))
   }, [ctx, load])
 
-  const [prefs, setPrefs] = useState(() => ctx.storage.get('prefs', { chat: true, jobs: true, watching: true }))
+  const [prefs, setPrefs] = useState(() => ctx.storage.get('prefs', { explain: true, chat: true, jobs: true, watching: true, popups: true }))
   const [showSettings, setShowSettings] = useState(false)
   const setPref = (key, value) => {
     const next = { ...prefs, [key]: value }
@@ -418,6 +533,7 @@ function Panel({ ctx }) {
   else if (!data) body = [small('Loading…')]
   else {
     body = [jsx(Hero, { key: 'hero', data })]
+    if (prefs.explain !== false) body.push(jsx(HowItWorks, { key: 'how', onHide: () => setPref('explain', false) }))
     if (prefs.chat) body.push(jsx(ChatCard, { key: 'chat', chat: data.chat, enabled: data.chat_enabled, hasSession: Boolean(sessionId) }))
     if (prefs.jobs) body.push(jsx(Jobs, { key: 'jobs', data, act }))
     if (prefs.watching) body.push(jsx(Watching, { key: 'watching', items: data.watching }))
@@ -483,6 +599,47 @@ export default {
     }
 
     if (ctx.storage.get('open', true)) disposePane = ctx.register(PANE)
+
+    // App-wide "Promotion available" pop-up: works on any page, once per routine.
+    const notified = new Set(ctx.storage.get('notified', []))
+    const checkPromotions = () => {
+      const prefs = ctx.storage.get('prefs', {})
+      if (prefs.popups === false) return
+      ctx.rest('/summary')
+        .then(res => {
+          let changed = false
+          for (const it of (res && res.testing) || []) {
+            if (!it.ready) {
+              if (notified.delete(it.routine_id)) changed = true
+              continue
+            }
+            if (notified.has(it.routine_id)) continue
+            notified.add(it.routine_id)
+            changed = true
+            diag('promotion popup', { routine: it.routine_id })
+            host.notify({
+              kind: 'info',
+              icon: 'ruby',
+              title: 'Promotion available',
+              message: `${it.name} matched ${it.matches} test runs in a row.`,
+              meta: it.saving_per_week ? `Estimated saving ${money(it.saving_per_week)}/wk` : undefined,
+              persistent: true,
+              action: {
+                label: 'Promote',
+                onClick: () =>
+                  ctx.rest('/promote', { method: 'POST', body: { routine_id: it.routine_id } })
+                    .then(r => host.notify({ kind: r && r.ok ? 'success' : 'warning', message: (r && r.message) || 'Done.' }))
+                    .catch(err => host.notify({ kind: 'error', message: `Crystallize: ${String(err)}` }))
+              },
+              secondaryAction: { label: 'Open Crystallize', onClick: () => { if (!isVisible()) show() } }
+            })
+          }
+          if (changed) ctx.storage.set('notified', [...notified])
+        })
+        .catch(() => {})
+    }
+    ctx.setTimeout(checkPromotions, 4000)
+    ctx.setInterval(checkPromotions, 60000)
 
     // Top-bar button, drawn by our own component so the click handler is ours.
     // It's marked no-drag: on macOS, Windows and Linux the title bar is a window

@@ -18,6 +18,32 @@ def _runs_per_week(runs: list[history.Run]) -> Optional[float]:
     return WEEK_S / statistics.median(gaps)
 
 
+def _stats(runs: list[history.Run]) -> dict[str, Optional[float]]:
+    def avg(xs):
+        xs = [float(x) for x in xs if x is not None]
+        return sum(xs) / len(xs) if xs else None
+    return {
+        "runs": len(runs),
+        "cost_usd": avg([r.cost_usd for r in runs]),
+        "seconds": avg([r.duration_s for r in runs]),
+        "tool_calls": avg([len(r.steps) for r in runs]),
+        "ai_calls": avg([r.api_calls for r in runs]),
+    }
+
+
+def _before_after(runs: list[history.Run], promoted_at: Optional[float]) -> dict[str, Any]:
+    """Measured numbers: runs before Promote vs runs after it."""
+    if not promoted_at:
+        return {"before": _stats(runs), "after": None}
+    return {"before": _stats([r for r in runs if r.started_ts < promoted_at]),
+            "after": _stats([r for r in runs if r.started_ts >= promoted_at])}
+
+
+def _timeline(runs: list[history.Run], promoted_at: Optional[float], limit: int = 16) -> list[dict[str, Any]]:
+    return [{"cost_usd": r.cost_usd, "after": bool(promoted_at and r.started_ts >= promoted_at)}
+            for r in runs[-limit:]]
+
+
 def _saved_since(runs: list[history.Run], promoted_at: Optional[float],
                  baseline: Optional[float]) -> float:
     """Money saved by runs after promotion: baseline cost minus what each run cost."""
@@ -58,7 +84,10 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         if a.avg_cost_usd is not None and a.est_cost_after_usd is not None:
             per_run_saving = max(0.0, a.avg_cost_usd - a.est_cost_after_usd)
 
+        fetch_steps = sum(1 for s in a.steps if s.kind in ("fixed", "fill-in", "varies", "frozen"))
         card = {
+            "fetch_steps": fetch_steps,
+            "strategy": a.strategy,
             "job_id": job_id,
             "name": summary["job_name"] or job_id,
             "runs": a.runs_used,
@@ -72,6 +101,10 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
 
         routine = routines.get(job_id) or routines.get(f"name:{summary['job_name']}")
         meta = (routine or {}).get("meta") or {}
+        if routine:
+            card["fetch_steps"] = routine.get("steps") or card["fetch_steps"]  # list_routines gives the step count
+        card.update(_before_after(runs, meta.get("promoted_at") if (routine or {}).get("status") == "live" else None))
+        card["timeline"] = _timeline(runs, meta.get("promoted_at") if (routine or {}).get("status") == "live" else None)
         weight = a.avg_cost_usd or 0.0
         week_saving = per_run_saving * per_week if per_run_saving is not None and per_week is not None else 0.0
         card["saving_per_week"] = week_saving
@@ -82,6 +115,9 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
             job_saved = _saved_since(runs, meta.get("promoted_at"), (meta.get("baseline_cost")
                                                                    or a.avg_cost_usd))
             saved += job_saved
+            b, af = card["before"], card["after"]
+            if b and af and b.get("cost_usd") is not None and af.get("cost_usd") is not None and per_week:
+                card["saving_per_week"] = max(0.0, b["cost_usd"] - af["cost_usd"]) * per_week
             live.append({**card, "routine_id": routine["id"], "saved_usd": job_saved,
                          "live_runs": meta.get("live_runs", 0), "failures": meta.get("failures", 0)})
         elif routine and routine["status"] == "testing":
@@ -102,7 +138,9 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
 
     score = round(100 * score_done / score_weight) if score_weight > 0 else None
 
+    live_week = sum(x.get("saving_per_week") or 0.0 for x in live)
     return {
+        "live_saving_usd_per_week": live_week,
         "session_id": session_id,
         "chat_enabled": store.chat_enabled(session_id),
         "chat": chat.analyse(session_id) if store.chat_enabled(session_id) else None,
