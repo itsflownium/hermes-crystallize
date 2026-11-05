@@ -84,17 +84,30 @@ def make_post_tool_call(ctx: Any) -> Callable[..., None]:
     return on_post_tool_call
 
 
+RUN_MARKER = "__run__"  # stands for a cron run that made no tool calls
+
+
 def make_on_session_end(ctx: Any) -> Callable[..., None]:
-    """After a scheduled cron run, test the job's routine (if it's being tested)."""
+    """After a scheduled cron run: make sure the run is on record (a live
+    routine's run may make no tool calls at all), then test the job's routine
+    if it's being tested."""
     from . import lifecycle, tools
 
-    def on_session_end(**_: Any) -> None:
+    def on_session_end(session_id: str = "", **_: Any) -> None:
         try:
             run = ctx.current_cron_execution()
             if run is None or not getattr(run, "scheduled_instant", None):
                 return
-            lifecycle.test_after(str(run.execution_id), run.job_id, tools.dispatch)
+            execution_id = str(run.execution_id)
+            if not store.execution_traces(execution_id):
+                store.add_trace({
+                    "ts": store.now(), "session_id": session_id or None, "tool_name": RUN_MARKER,
+                    "args_json": "{}", "cron_job_id": getattr(run, "job_id", None),
+                    "cron_job_name": getattr(run, "job_name", None),
+                    "cron_execution_id": execution_id, "cron_scheduled": 1,
+                })
+            lifecycle.test_after(execution_id, run.job_id, tools.dispatch)
         except Exception:  # noqa: BLE001 — an observer must never break the run
-            logger.debug("crystallize: test run after cron failed", exc_info=True)
+            logger.debug("crystallize: after-run bookkeeping failed", exc_info=True)
 
     return on_session_end

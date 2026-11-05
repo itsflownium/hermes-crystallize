@@ -83,6 +83,8 @@ def crystal_run(args: dict[str, Any] | None = None, **_: Any) -> str:
     except Exception:  # noqa: BLE001
         logger.debug("crystallize: live_result bookkeeping failed", exc_info=True)
     for out in result.get("outputs", []):
+        out.pop("started", None)
+        out.pop("args", None)
         text = out.get("output") or ""
         if len(text) > runner.MAX_OUTPUT_CHARS:
             out["output"] = text[:runner.MAX_OUTPUT_CHARS] + f"\n… (cut, {len(text)} characters in total)"

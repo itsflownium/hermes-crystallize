@@ -19,43 +19,62 @@ def _runs_per_week(runs: list[history.Run]) -> Optional[float]:
 
 
 def _stats(runs: list[history.Run]) -> dict[str, Optional[float]]:
-    def avg(xs):
+    # Median, not average: one odd run (a cache miss, a long answer) can't hide the trend.
+    def mid(xs):
         xs = [float(x) for x in xs if x is not None]
-        return sum(xs) / len(xs) if xs else None
+        return statistics.median(xs) if xs else None
     return {
         "runs": len(runs),
-        "cost_usd": avg([r.cost_usd for r in runs]),
-        "seconds": avg([r.duration_s for r in runs]),
-        "tool_calls": avg([len(r.steps) for r in runs]),
-        "ai_calls": avg([r.api_calls for r in runs]),
+        "cost_usd": mid([r.cost_usd for r in runs]),
+        "seconds": mid([r.duration_s for r in runs]),
+        "tool_calls": mid([len(r.steps) for r in runs]),
+        "ai_calls": mid([r.api_calls for r in runs]),
+        "skipped": sum(1 for r in runs if r.model == SKIPPED),
     }
 
 
-def _before_after(runs: list[history.Run], promoted_at: Optional[float]) -> dict[str, Any]:
+SKIPPED = "(skipped: no change)"
+
+
+def _skipped_runs(meta: dict[str, Any], job_name: str) -> list[history.Run]:
+    """Runs where the data hadn't changed, so the AI never started: they cost nothing."""
+    return [history.Run(execution_id=f"skip-{ts}", job_id=None, job_name=job_name, session_id=None,
+                        scheduled=True, started_ts=ts, outcome="completed", cost_usd=0.0,
+                        api_calls=0, duration_s=None, model=SKIPPED)
+            for ts in meta.get("skips") or []]
+
+
+def _live_runs(name: str, meta: dict[str, Any]) -> list[history.Run]:
+    """Every run since Promote, including ones that made no tool calls or were skipped."""
+    promoted_at = meta.get("promoted_at") or 0
+    ran = [r for r in history.load_runs(name)
+           if r.scheduled and r.outcome in (None, "completed") and r.started_ts >= promoted_at]
+    return sorted(ran + _skipped_runs(meta, name), key=lambda r: r.started_ts)
+
+
+def _before_after(before: list[history.Run], after: Optional[list[history.Run]]) -> dict[str, Any]:
     """Measured numbers: runs before Promote vs runs after it."""
-    if not promoted_at:
-        return {"before": _stats(runs), "after": None}
-    return {"before": _stats([r for r in runs if r.started_ts < promoted_at]),
-            "after": _stats([r for r in runs if r.started_ts >= promoted_at])}
+    return {"before": _stats(before), "after": _stats(after) if after is not None else None}
 
 
-def _timeline(runs: list[history.Run], promoted_at: Optional[float], limit: int = 16) -> list[dict[str, Any]]:
+def _timeline(before: list[history.Run], after: list[history.Run], limit: int = 16) -> list[dict[str, Any]]:
+    rows = [(r, False) for r in before] + [(r, True) for r in after]
     return [{
         "cost_usd": r.cost_usd,
-        "after": bool(promoted_at and r.started_ts >= promoted_at),
+        "after": is_after,
+        "skipped": r.model == SKIPPED,
         "ts": r.started_ts,
         "seconds": r.duration_s,
         "tool_calls": len(r.steps),
         "ai_calls": r.api_calls,
-    } for r in runs[-limit:]]
+    } for r, is_after in rows[-limit:]]
 
 
-def _saved_since(runs: list[history.Run], promoted_at: Optional[float],
-                 baseline: Optional[float]) -> float:
-    """Money saved by runs after promotion: baseline cost minus what each run cost."""
-    if not promoted_at or baseline is None:
+def _saved_since(after: list[history.Run], baseline: Optional[float]) -> float:
+    """Money saved since Promote: what each run would have cost minus what it did."""
+    if baseline is None:
         return 0.0
-    return sum(max(0.0, baseline - (r.cost_usd or 0.0)) for r in runs if r.started_ts >= promoted_at)
+    return sum(max(0.0, baseline - (r.cost_usd or 0.0)) for r in after)
 
 
 def _chat_spent(session_id: Optional[str]) -> Optional[float]:
@@ -109,8 +128,18 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         meta = (routine or {}).get("meta") or {}
         if routine:
             card["fetch_steps"] = routine.get("steps") or card["fetch_steps"]  # list_routines gives the step count
-        card.update(_before_after(runs, meta.get("promoted_at") if (routine or {}).get("status") == "live" else None))
-        card["timeline"] = _timeline(runs, meta.get("promoted_at") if (routine or {}).get("status") == "live" else None)
+        is_live = (routine or {}).get("status") == "live"
+        promoted_at = meta.get("promoted_at") if is_live else None
+        cutoff = (meta.get("first_promoted_at") or promoted_at) if is_live else None
+        before = [r for r in runs if not cutoff or r.started_ts < cutoff]
+        after = _live_runs(summary["job_name"] or job_id, meta) if is_live else None
+        card.update(_before_after(before, after))
+        card["timeline"] = _timeline(before, after or [])
+        if is_live:
+            card["mode"] = meta.get("mode") or "tool"
+            card["skip_unchanged"] = meta.get("skip_unchanged", True)
+            fit, why = analyze.no_ai_fit(before)
+            card["no_ai_fit"], card["no_ai_why"] = fit, why
         weight = a.avg_cost_usd or 0.0
         week_saving = per_run_saving * per_week if per_run_saving is not None and per_week is not None else 0.0
         card["saving_per_week"] = week_saving
@@ -118,8 +147,7 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         if routine and routine["status"] == "live":
             score_weight += weight
             score_done += weight
-            job_saved = _saved_since(runs, meta.get("promoted_at"), (meta.get("baseline_cost")
-                                                                   or a.avg_cost_usd))
+            job_saved = _saved_since(after or [], card["before"].get("cost_usd") or meta.get("baseline_cost"))
             saved += job_saved
             b, af = card["before"], card["after"]
             if b and af and b.get("cost_usd") is not None and af.get("cost_usd") is not None and per_week:

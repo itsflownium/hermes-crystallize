@@ -226,7 +226,8 @@ def execution_traces(execution_id: str) -> list[dict[str, Any]]:
     cols = ("tool_name", "args_json", "result_preview", "result_len", "status")
     with _lock:
         rows = _db().execute(
-            f"SELECT {', '.join(cols)} FROM traces WHERE cron_execution_id = ? ORDER BY ts, id",
+            f"SELECT {', '.join(cols)} FROM traces WHERE cron_execution_id = ? AND tool_name != '__run__' "
+            "ORDER BY ts, id",
             (execution_id,),
         ).fetchall()
     return [dict(zip(cols, r)) for r in rows]

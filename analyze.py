@@ -22,6 +22,8 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
+from . import history
+
 MIN_RUNS = 3
 
 # Tools that only load context for the agent. A script doesn't need them.
@@ -358,3 +360,42 @@ def analyze_job(job: str) -> Analysis:
     runs = history.load_runs(job, only_usable=True)
     job_id = runs[-1].job_id if runs else None
     return analyze_runs(runs, job_prompt(job_id or job))
+
+
+# ---------------------------------------------------------------- no-AI check
+
+_DATA_TOKEN = re.compile(r"https?://[^\s)\]>,]+|#?\d+(?:\.\d+)?")
+NO_AI_MAX_ANSWER = 1500
+
+
+def no_ai_fit(runs: list[history.Run], last: int = 5) -> tuple[bool, str]:
+    """Is this job's answer just its data, restated? Then it could run with no AI.
+
+    Looks at the last few real answers: they must be short, and nearly every
+    link and number in them must come straight from the tool outputs. A digest
+    or summary fails this (it adds judgement); a status check passes.
+    """
+    meta_tools = {"tool_describe", "tool_search", "tool_call", "crystal_run", "crystal_list"}
+    runs = [r for r in runs if r.usable and r.session_id
+            and any(s.tool_name not in meta_tools for s in r.steps)][-last:]
+    if len(runs) < 3:
+        return False, "needs at least 3 runs to judge"
+    answers = history.final_answers([r.session_id for r in runs])
+    covered = []
+    for r in runs:
+        answer = answers.get(r.session_id or "")
+        if not answer:
+            return False, "some runs have no recorded answer"
+        if len(answer) > NO_AI_MAX_ANSWER:
+            return False, "its answers are longer than the data they restate"
+        # Dates and clock times are the AI stamping its answer, not facts from the data.
+        plain = re.sub(r"\d{4}-\d\d-\d\d([T ]\d\d:\d\d(:\d\d)?)?|\b\d{1,2}:\d\d(:\d\d)?\b", " ", answer)
+        tokens = [t.rstrip(".") for t in _DATA_TOKEN.findall(plain)]
+        if len(tokens) < 2:
+            return False, "its answers aren't made of data"
+        data = " ".join(s.result_preview or "" for s in r.steps)
+        covered.append(sum(1 for t in tokens if t.lstrip("#") in data) / len(tokens))
+    share = min(covered)
+    if share < 0.8:
+        return False, f"only {share:.0%} of the facts in its answers come from the data"
+    return True, f"{share:.0%} of the links and numbers in its answers come straight from the data"

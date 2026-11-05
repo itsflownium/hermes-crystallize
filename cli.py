@@ -105,13 +105,15 @@ def _print_routine(r: dict) -> None:
         for t in (meta.get("tests") or [])[-3:]:
             print(f"    {'match' if t['ok'] else 'no match'} ({t['source']}): {t['why']}")
     if r["status"] == "live":
-        print(f"  Live runs: {meta.get('live_runs', 0)}, failures in a row: {meta.get('failures', 0)}")
+        mode = {"no_ai": "no AI", "prerun": "pre-run script"}.get(meta.get("mode"), "crystal_run tool")
+        print(f"  Live runs: {meta.get('live_runs', 0)}, skipped (no change): {len(meta.get('skips') or [])}, "
+              f"failures in a row: {meta.get('failures', 0)}  [{mode}]")
     steps = r["steps"] if isinstance(r["steps"], dict) else {}
     for line in steplist.describe(steps):
         print(f"  {line}")
 
 
-def _lifecycle_action(sub: str, job: str, ctx: Any) -> None:
+def _lifecycle_action(sub: str, job: str, args: Any = None) -> None:
     from . import lifecycle, tools
 
     try:
@@ -128,8 +130,29 @@ def _lifecycle_action(sub: str, job: str, ctx: Any) -> None:
             if not r:
                 print(f"No routine for {job!r}. Run `hermes crystal try {job}` first.")
                 return
-            lifecycle.promote(r["id"])
-            print(f"{r['name']} is live. Its cron job now calls crystal_run first and falls back to the full task.")
+            no_ai = bool(getattr(args, "no_ai", False))
+            lifecycle.promote(r["id"], mode="no_ai" if no_ai else "prerun")
+            if no_ai:
+                print(f"{r['name']} is live with no AI: the routine's output is the job's result.")
+            else:
+                print(f"{r['name']} is live. A pre-run script now collects the data before the AI starts; "
+                      "runs where nothing changed skip the AI.")
+        elif sub == "mode":
+            if not r:
+                print(f"No routine for {job!r}.")
+                return
+            mode = {"ai": "prerun", "no-ai": "no_ai"}[args.mode]
+            lifecycle.set_mode(r["id"], mode)
+            print(f"{r['name']} now runs " + ("with no AI." if mode == "no_ai" else
+                  "with the AI writing the answer from the pre-run data."))
+        elif sub == "skip":
+            if not r:
+                print(f"No routine for {job!r}.")
+                return
+            on = getattr(args, "state", "on") == "on"
+            lifecycle.set_skip_unchanged(r["id"], on)
+            print("Runs with unchanged data will skip the AI." if on else
+                  "The AI will run every time, even when the data hasn't changed.")
         elif sub == "undo":
             if not r:
                 print(f"No routine for {job!r}.")
@@ -142,10 +165,28 @@ def _lifecycle_action(sub: str, job: str, ctx: Any) -> None:
         print(str(exc))
 
 
+def _prerun(routine_id: str) -> None:
+    import sys
+
+    from . import prerun, tools
+
+    try:
+        text, code = prerun.run(routine_id, tools.dispatch)
+    except Exception as exc:  # noqa: BLE001 — the AI must still get to do the job
+        text, code = f"Crystallize: the routine couldn't run ({type(exc).__name__}: {exc}). Do the whole task yourself.", 0
+    sys.stdout.write(text + "\n")
+    sys.stdout.flush()
+    if code:
+        sys.exit(code)
+
+
 def _handle(args: Any) -> None:
     sub = getattr(args, "crystal_command", None)
-    if sub in ("try", "test", "promote", "undo", "show"):
-        _lifecycle_action(sub, args.job, None)
+    if sub == "prerun":
+        _prerun(args.routine_id)
+        return
+    if sub in ("try", "test", "promote", "undo", "show", "skip", "mode"):
+        _lifecycle_action(sub, args.job, args)
         return
     if sub == "history":
         job = getattr(args, "job", None)
@@ -153,7 +194,7 @@ def _handle(args: Any) -> None:
     elif sub == "analyze":
         _print_analysis(args.job, getattr(args, "json", False))
     else:
-        print("Usage: hermes crystal history [job] | analyze <job> [--json] | try|test|promote|undo|show <job>")
+        print("Usage: hermes crystal history [job] | analyze <job> [--json] | try|test|promote|undo|show <job> | mode <job> ai|no-ai | skip <job> on|off")
 
 
 def _setup(subparser: Any) -> None:
@@ -170,6 +211,17 @@ def _setup(subparser: Any) -> None:
                        ("show", "Show a job's routine and its test results")):
         p = subs.add_parser(name, help=text)
         p.add_argument("job", help="Job name or id")
+        if name == "promote":
+            p.add_argument("--no-ai", action="store_true",
+                           help="Use the routine's output as the job's result, with no AI at all")
+    sk = subs.add_parser("skip", help="Skip the AI when a live job's data hasn't changed (on by default)")
+    sk.add_argument("job", help="Job name or id")
+    sk.add_argument("state", choices=("on", "off"))
+    md = subs.add_parser("mode", help="Switch a live job between AI-written answers and no AI")
+    md.add_argument("job", help="Job name or id")
+    md.add_argument("mode", choices=("ai", "no-ai"))
+    pr = subs.add_parser("prerun", help="(used by a promoted job's pre-run script) run a routine and print its data")
+    pr.add_argument("routine_id")
     subparser.set_defaults(func=_handle)
 
 

@@ -202,13 +202,13 @@ function Bars({ timeline }) {
         style: { display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 2 },
         children: [
           jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: when(t.ts) }),
-          jsx('span', { style: { fontSize: '0.625rem', color: t.after ? C.green : C.muted }, children: t.after ? 'Routine' : 'Full run' })
+          jsx('span', { style: { fontSize: '0.625rem', color: t.after ? C.green : C.muted }, children: t.skipped ? 'Skipped: no change' : t.after ? 'Routine' : 'Full run' })
         ]
       }),
       jsx('div', { style: { fontSize: '0.8125rem', color: C.text, fontVariantNumeric: 'tabular-nums' }, children: money(t.cost_usd) }),
       jsx('div', {
         style: { fontSize: '0.625rem', color: C.soft, fontVariantNumeric: 'tabular-nums' },
-        children: [secs(t.seconds), `${t.tool_calls} tool call${t.tool_calls === 1 ? '' : 's'}`,
+        children: t.skipped ? 'The AI never started' : [secs(t.seconds), `${t.tool_calls} tool call${t.tool_calls === 1 ? '' : 's'}`,
           t.ai_calls != null ? `${t.ai_calls} AI call${t.ai_calls === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')
       })
     ]
@@ -228,7 +228,8 @@ function Bars({ timeline }) {
             style: {
               flex: 1, borderRadius: 2, minHeight: 2, cursor: 'pointer',
               height: `${Math.max(8, Math.round(((r.cost_usd || 0) / max) * 100))}%`,
-              background: r.after ? C.green : C.stroke,
+              background: r.skipped ? 'transparent' : r.after ? C.green : C.stroke,
+              border: r.skipped ? `1px dashed ${C.green}` : 'none', boxSizing: 'border-box',
               opacity: hover === null || hover === i ? 1 : 0.45,
               outline: hover === i ? `1px solid ${C.text}` : 'none',
               transition: 'opacity 120ms'
@@ -263,10 +264,39 @@ function Compare({ before, after }) {
   })
 }
 
-function explain(item) {
+function explain(item, status) {
   const n = item.fetch_steps || 0
   if (!n) return null
-  return `The routine runs ${n === 1 ? 'the fetch step' : `${n} fetch steps`} for Hermes, so the AI only has to read the data and write the result.`
+  const what = n === 1 ? 'the fetch step' : `${n} fetch steps`
+  if (status === 'live' && item.mode === 'no_ai') return `The routine runs ${what} and its output is the result. No AI is used.`
+  if (status === 'live' && item.mode !== 'tool') {
+    return `The routine runs ${what} before the AI starts, so the AI only writes the result.` +
+      (item.skip_unchanged ? ' When nothing has changed, the AI is skipped and the run costs nothing.' : '')
+  }
+  return `The routine runs ${what} for Hermes, so the AI only has to read the data and write the result.`
+}
+
+// Live job options: how the answer is written, and whether unchanged runs skip the AI.
+function LiveOptions({ item, act }) {
+  const id = { routine_id: item.routine_id }
+  const opts = []
+  if (item.mode === 'tool') {
+    opts.push(pill('Use pre-run', () => act('/mode', { ...id, mode: 'prerun' }), C.accent))
+  } else {
+    opts.push(pill(item.skip_unchanged ? 'Skip if unchanged: on' : 'Skip if unchanged: off',
+      () => act('/skip', { ...id, on: !item.skip_unchanged }), item.skip_unchanged ? C.green : C.muted))
+    if (item.mode === 'no_ai') opts.push(pill('Let AI write it', () => act('/mode', { ...id, mode: 'prerun' }), C.muted))
+    else if (item.no_ai_fit) opts.push(pill('Run with no AI', () => act('/mode', { ...id, mode: 'no_ai' }), C.accent))
+  }
+  return jsxs('div', {
+    key: 'opts',
+    style: { display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2 },
+    children: [
+      jsx('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 }, children: opts }),
+      item.mode !== 'no_ai' && item.no_ai_fit
+        ? small(`No AI needed: ${item.no_ai_why}.`, C.soft) : null
+    ]
+  })
 }
 
 function JobBubble({ item, status, act }) {
@@ -275,8 +305,10 @@ function JobBubble({ item, status, act }) {
   if (status === 'live') {
     const measured = item.after && item.after.runs
     headline = measured ? big(perWeek(item.saving_per_week), C.green) : big('Measuring…', C.soft)
+    const skipped = (item.after && item.after.skipped) || 0
     sub = measured
-      ? `${perMonth(item.saving_per_week)} · saved ${money(item.saved_usd)} so far over ${item.live_runs} runs`
+      ? `${perMonth(item.saving_per_week)} · saved ${money(item.saved_usd)} so far over ${item.after.runs} runs` +
+        (skipped ? ` · ${skipped} skipped, nothing changed` : '')
       : 'Savings show after its first live run.'
     action = pill('Undo', () => act('/undo', { routine_id: item.routine_id }), C.muted)
   } else if (status === 'testing') {
@@ -310,7 +342,8 @@ function JobBubble({ item, status, act }) {
     status === 'testing' && !item.ready ? jsx(Progress, { key: 'p', value: Math.min(item.matches, item.needed), total: item.needed }) : null,
     jsx(Compare, { key: 'c', before: item.before, after: status === 'live' ? item.after : null }),
     jsx(Bars, { key: 'b', timeline: item.timeline }),
-    explain(item) ? small(explain(item), C.soft) : null,
+    explain(item, status) ? small(explain(item, status), C.soft) : null,
+    status === 'live' ? jsx(LiveOptions, { key: 'o', item, act }) : null,
     status === 'testing' && item.last_test && !item.last_test.ok ? small(`Last test: ${item.last_test.why}`, C.soft) : null
   ], item.job_id)
 }
@@ -359,7 +392,7 @@ function HowItWorks({ onHide }) {
     row('How Crystallize saves', pill('Got it', onHide, C.muted)),
     small('Hermes normally works out and runs every step of a job itself, and each of those decisions costs AI time.', C.soft),
     small('Crystallize finds the steps a job repeats, like fetching the same feeds or calling the same API, and saves them as a routine. After three matching test runs you can promote it.', C.soft),
-    small('A live job runs its routine first, so the AI only reads the data and writes the result. If the routine fails, Hermes does the whole job itself.', C.soft)
+    small('A live job runs its routine before the AI starts, so the AI only writes the result. If the data hasn\'t changed since last time, the AI is skipped and the run costs nothing. If the routine fails, Hermes does the whole job itself.', C.soft)
   ], 'how')
 }
 

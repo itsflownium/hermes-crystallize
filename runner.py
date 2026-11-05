@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Callable, Optional
 
 from . import steplist
@@ -54,6 +55,7 @@ def run(routine: dict[str, Any], dispatch: Dispatch) -> dict[str, Any]:
     outputs = []
     for i, step in enumerate(routine.get("steps", []), 1):
         args = steplist.fill(step["args"], step.get("fill_ins") or [])
+        started = time.time()
         try:
             result = dispatch(step["tool"], args if isinstance(args, dict) else {"input": args})
         except Exception as exc:  # noqa: BLE001 — reported as a failed step
@@ -61,7 +63,7 @@ def run(routine: dict[str, Any], dispatch: Dispatch) -> dict[str, Any]:
                     "reason": f"the tool raised {type(exc).__name__}: {exc}", "outputs": outputs}
         why = step_failure(result, step.get("check"))
         text = result if isinstance(result, str) else json.dumps(result, default=str)
-        outputs.append({"step": i, "tool": step["tool"], "output": text})
+        outputs.append({"step": i, "tool": step["tool"], "output": text, "started": started, "args": args})
         if why:
             return {"ok": False, "failed_step": i, "tool": step["tool"], "reason": why, "outputs": outputs}
     return {"ok": True, "outputs": outputs}

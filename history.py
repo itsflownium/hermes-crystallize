@@ -144,6 +144,29 @@ def _session_costs(session_ids: list[str]) -> dict[str, dict[str, Any]]:
         conn.close()
 
 
+def final_answers(session_ids: list[str]) -> dict[str, str]:
+    """The last thing the AI wrote in each session (a cron run's result)."""
+    conn = _open_readonly(_hermes_home() / "state.db")
+    if conn is None or not session_ids:
+        return {}
+    try:
+        if not {"session_id", "role", "content"} <= _columns(conn, "messages"):
+            return {}
+        out: dict[str, str] = {}
+        for sid in session_ids:
+            row = conn.execute(
+                "SELECT content FROM messages WHERE session_id = ? AND role = 'assistant' "
+                "AND COALESCE(content, '') != '' ORDER BY rowid DESC LIMIT 1", (sid,)).fetchone()
+            if row and isinstance(row["content"], str):
+                out[sid] = row["content"]
+        return out
+    except sqlite3.Error:
+        logger.debug("crystallize: reading final answers failed", exc_info=True)
+        return {}
+    finally:
+        conn.close()
+
+
 def _parse_args(text: Optional[str]) -> Any:
     if not text:
         return {}
@@ -173,6 +196,8 @@ def load_runs(job: Optional[str] = None, only_usable: bool = False) -> list[Run]
             runs[run.execution_id] = run
         if run.session_id is None and r["session_id"]:
             run.session_id = r["session_id"]
+        if r["tool_name"] == "__run__":
+            continue  # the run is on record but made no tool calls
         run.steps.append(Step(
             tool_name=r["tool_name"],
             args=_parse_args(r["args_json"]),

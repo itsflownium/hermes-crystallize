@@ -97,6 +97,31 @@ async def undo_routine(body: dict) -> dict[str, Any]:
         return {"ok": False, "message": str(exc)}
 
 
+@router.post("/mode")
+async def mode_routine(body: dict) -> dict[str, Any]:
+    """Switch a live routine between AI-written answers ("prerun") and no AI ("no_ai")."""
+    lc = _lifecycle()
+    mode = str((body or {}).get("mode") or "")
+    try:
+        r = lc.set_mode(str((body or {}).get("routine_id") or ""), mode)
+        return {"ok": True, "message": f"{r['name']} now runs " +
+                ("with no AI." if mode == "no_ai" else "with the AI writing the answer.")}
+    except lc.LifecycleError as exc:
+        return {"ok": False, "message": str(exc)}
+
+
+@router.post("/skip")
+async def skip_unchanged(body: dict) -> dict[str, Any]:
+    """Turn 'skip the AI when nothing changed' on or off for a live routine."""
+    lc = _lifecycle()
+    on = bool((body or {}).get("on"))
+    try:
+        lc.set_skip_unchanged(str((body or {}).get("routine_id") or ""), on)
+        return {"ok": True, "message": "Unchanged runs will skip the AI." if on else "The AI will run every time."}
+    except lc.LifecycleError as exc:
+        return {"ok": False, "message": str(exc)}
+
+
 @router.get("/chat-state")
 async def chat_state(session_id: Optional[str] = None) -> dict[str, Any]:
     """Whether Crystallize is on for a chat (drives the message-box toggle)."""
