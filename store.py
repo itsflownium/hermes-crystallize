@@ -107,6 +107,27 @@ def trace_stats() -> dict[str, Any]:
     }
 
 
+def cron_trace_rows(job: Optional[str] = None) -> list[dict[str, Any]]:
+    """Recorded tool calls that belong to cron runs, oldest first.
+
+    ``job`` filters by cron job id or job name.
+    """
+    cols = (
+        "ts", "session_id", "tool_name", "args_json", "result_sha256", "result_len",
+        "result_preview", "status", "duration_ms", "cron_job_id", "cron_job_name",
+        "cron_execution_id", "cron_scheduled",
+    )
+    q = f"SELECT {', '.join(cols)} FROM traces WHERE cron_execution_id IS NOT NULL"
+    params: list[Any] = []
+    if job:
+        q += " AND (cron_job_id = ? OR cron_job_name = ?)"
+        params = [job, job]
+    q += " ORDER BY ts, id"
+    with _lock:
+        rows = _db().execute(q, params).fetchall()
+    return [dict(zip(cols, r)) for r in rows]
+
+
 def list_routines() -> list[dict[str, Any]]:
     with _lock:
         rows = _db().execute(

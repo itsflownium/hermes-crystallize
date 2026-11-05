@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from . import capture, schemas, store, tools
+from . import capture, cli, schemas, store, tools
 
 logger = logging.getLogger(__name__)
 
@@ -55,3 +55,5 @@ def register(ctx: Any) -> None:
         "crystallize", handler=_crystallize_command,
         description="Show what Crystallize has recorded", args_hint="[status]",
     )
+
+    cli.register(ctx)
