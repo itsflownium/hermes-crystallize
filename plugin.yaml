@@ -1,0 +1,33 @@
+name: crystallize
+version: 0.1.0
+manifest_version: 2
+api_version: 1
+description: >-
+  Turns Hermes's repeated work into fast, cheap, reliable step lists. Spots routines
+  Hermes keeps redoing, proves a step list matches the original, and only switches
+  over when you approve.
+author: itsflownium
+license: MIT
+homepage: https://github.com/itsflownium/hermes-crystallize
+tags: [automation, cost, cron, reliability]
+requires_hermes: ">=0.22.7"
+
+provides_tools:
+  - crystal_list
+  - crystal_run
+
+provides_hooks:
+  - post_tool_call
+  - on_session_end
+
+config_schema:
+  capture_enabled:
+    type: bool
+    default: true
+    label: Record tool calls
+    description: Record which tools Hermes calls so Crystallize can spot repeated routines.
+  result_preview_chars:
+    type: int
+    default: 2000
+    label: Result preview length
+    description: How many characters of each tool result to keep for comparing runs.
