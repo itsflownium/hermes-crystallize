@@ -258,32 +258,55 @@ export default {
   name: 'Crystallize',
   register(ctx) {
     diagCtx = ctx
-    const open = source => {
-      diag('open requested', { source, reveal: typeof host.revealPane, undismiss: typeof host.undismissPane })
-      try {
-        if (typeof host.undismissPane === 'function') host.undismissPane(PANE_ID)
-        if (typeof host.revealPane === 'function') host.revealPane(PANE_ID)
-        const visible = typeof host.paneVisibility === 'function' ? host.paneVisibility(PANE_ID).get() : 'unknown'
-        diag('after reveal', { visible })
-        if (visible === false) {
-          host.notify({ kind: 'warning', message: "Crystallize couldn't open its panel. Try ⌘K → Reload desktop plugins." })
-        }
-      } catch (err) {
-        diag('open failed', String(err))
-        host.notify({ kind: 'error', message: `Crystallize couldn't open: ${String(err)}` })
-      }
-    }
-
-    // Always registered: the layout adopts it like any other panel (drag, resize
-    // or close it). The button and ⌘K command bring it back and to the front.
-    ctx.register({
+    // Open / close. The SDK can reveal a panel but has no "hide" call, so closing
+    // removes our panel contribution from the layout and opening adds it back.
+    const PANE = {
       id: 'panel',
       area: 'panes',
       title: 'Crystallize',
       // Dock on the chat's right edge so it shows even when the right side is collapsed.
       data: { placement: 'right', dock: { pane: 'workspace', pos: 'right' }, width: '300px' },
       render: () => jsx(Panel, { ctx })
-    })
+    }
+    let disposePane = null
+
+    const isVisible = () => {
+      if (!disposePane) return false
+      if (typeof host.paneVisibility !== 'function') return true
+      try { return Boolean(host.paneVisibility(PANE_ID).get()) } catch { return true }
+    }
+
+    const reveal = () => {
+      if (typeof host.undismissPane === 'function') host.undismissPane(PANE_ID)
+      if (typeof host.revealPane === 'function') host.revealPane(PANE_ID)
+    }
+
+    const show = () => {
+      if (!disposePane) disposePane = ctx.register(PANE)
+      reveal()
+      // Adoption into the layout can land a moment after registering.
+      ctx.setTimeout(reveal, 60)
+      ctx.storage.set('open', true)
+    }
+
+    const hide = () => {
+      if (disposePane) disposePane()
+      disposePane = null
+      ctx.storage.set('open', false)
+    }
+
+    const open = source => {
+      try {
+        const visible = isVisible()
+        diag('toggle', { source, visible })
+        visible ? hide() : show()
+      } catch (err) {
+        diag('toggle failed', String(err))
+        host.notify({ kind: 'error', message: `Crystallize couldn't open: ${String(err)}` })
+      }
+    }
+
+    if (ctx.storage.get('open', true)) disposePane = ctx.register(PANE)
 
     // Top-bar button, drawn by our own component so the click handler is ours.
     // It's marked no-drag: on macOS, Windows and Linux the title bar is a window
@@ -309,8 +332,8 @@ export default {
           render: () =>
             jsx('button', {
               type: 'button',
-              title: 'Open Crystallize',
-              'aria-label': 'Open Crystallize',
+              title: 'Show or hide Crystallize',
+              'aria-label': 'Show or hide Crystallize',
               onPointerDown: event => { event.stopPropagation(); diag('top button pointerdown') },
               onClick: () => open('top button'),
               style: {
@@ -351,7 +374,7 @@ export default {
       render: () =>
         jsxs('button', {
           type: 'button',
-          title: 'Open Crystallize',
+          title: 'Show or hide Crystallize',
           onClick: () => open('statusbar'),
           onPointerDown: () => diag('statusbar pointerdown'),
           style: {
@@ -376,7 +399,7 @@ export default {
       area: PALETTE,
       data: {
         id: 'crystallize.open',
-        label: 'Crystallize: Open savings panel',
+        label: 'Crystallize: Show or hide savings panel',
         keywords: ['crystallize', 'savings', 'cost', 'repeat'],
         run: () => open('palette')
       }
