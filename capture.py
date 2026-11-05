@@ -54,6 +54,8 @@ def make_post_tool_call(ctx: Any) -> Callable[..., None]:
             args_text = _as_text(args or {})[:_MAX_ARGS_CHARS]
 
             run = ctx.current_cron_execution()
+            if run is None and not store.chat_enabled(session_id):
+                return  # Crystallize is off for this chat
             execution_id = getattr(run, "execution_id", None) if run else None
             scheduled = None
             if run is not None:

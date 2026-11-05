@@ -14,7 +14,7 @@ two failures in a row undo the switch automatically.
 
 ## What you get
 
-- **Recording.** Every tool call Hermes makes is recorded with its chat or cron run.
+- **Recording.** Tool calls in scheduled cron runs, and in chats where you turned Crystallize on.
 - **Analysis.** `hermes crystal analyze <job>` lines up a job's runs and labels each step:
   - `fixed`: the same every run.
   - `fill-in`: the same apart from dates, ids or temp paths, which are refreshed each run.
@@ -54,7 +54,11 @@ hermes crystal promote morning-brief   # switch over (after 3 matching tests)
 hermes crystal undo morning-brief      # put the original prompt back
 ```
 
-In chat: `/crystallize status`. The same Try / Promote / Undo actions are in the panel.
+Crystallize is **off for each chat until you turn it on.** Click **◆ Crystallize** in the message box:
+it puts `/crystallize on` in the box, and nothing changes until you press Enter. Click it again
+for `/crystallize off`. While a chat is on, its tool calls are recorded and the panel analyses it.
+Scheduled cron runs are always recorded. `/crystallize status` works in any chat, including
+Telegram and Discord. The Try / Promote / Undo actions are in the panel.
 
 ## How a routine runs
 

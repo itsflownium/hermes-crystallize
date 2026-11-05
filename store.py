@@ -36,6 +36,12 @@ CREATE TABLE IF NOT EXISTS traces (
 CREATE INDEX IF NOT EXISTS idx_traces_session ON traces(session_id, ts);
 CREATE INDEX IF NOT EXISTS idx_traces_cron ON traces(cron_job_id, cron_execution_id, ts);
 
+CREATE TABLE IF NOT EXISTS chats (
+    session_id  TEXT PRIMARY KEY,
+    enabled     INTEGER NOT NULL,
+    updated_at  REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS routines (
     id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
@@ -216,6 +222,26 @@ def execution_traces(execution_id: str) -> list[dict[str, Any]]:
             (execution_id,),
         ).fetchall()
     return [dict(zip(cols, r)) for r in rows]
+
+
+def chat_enabled(session_id: Optional[str]) -> bool:
+    """Whether the user turned Crystallize on for this chat (off by default)."""
+    if not session_id:
+        return False
+    with _lock:
+        r = _db().execute("SELECT enabled FROM chats WHERE session_id = ?", (session_id,)).fetchone()
+    return bool(r and r[0])
+
+
+def set_chat_enabled(session_id: str, enabled: bool) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute(
+            """INSERT INTO chats (session_id, enabled, updated_at) VALUES (?, ?, ?)
+               ON CONFLICT(session_id) DO UPDATE SET enabled=excluded.enabled, updated_at=excluded.updated_at""",
+            (session_id, 1 if enabled else 0, time.time()),
+        )
+        conn.commit()
 
 
 def now() -> float:

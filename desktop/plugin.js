@@ -184,7 +184,13 @@ function Hero({ data }) {
   })
 }
 
-function ChatCard({ chat }) {
+function ChatCard({ chat, enabled, hasSession }) {
+  if (hasSession && !enabled) {
+    return box([
+      row('This chat', jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: 'off' })),
+      small('Crystallize is off for this chat. Click ◆ Crystallize in the message box and press Enter to turn it on.')
+    ])
+  }
   if (!chat) {
     return box([
       row('This chat', null),
@@ -291,6 +297,54 @@ function Settings({ prefs, setPref }) {
   ])
 }
 
+// ---------------------------------------------------------------- message-box toggle
+
+// Puts `/crystallize on` (or `off`) into the message box. Nothing changes until
+// the user sends it, so turning Crystallize on or off is always their action.
+function ComposerToggle({ ctx }) {
+  const sessionId = useValue(host.state.focusedStoredSessionId)
+  const [enabled, setEnabled] = useState(false)
+
+  const refresh = useCallback(() => {
+    if (!sessionId) { setEnabled(false); return }
+    ctx.rest(`/chat-state?session_id=${encodeURIComponent(sessionId)}`)
+      .then(res => setEnabled(Boolean(res && res.enabled)))
+      .catch(() => {})
+  }, [ctx, sessionId])
+
+  useEffect(() => {
+    refresh()
+    return ctx.setInterval(refresh, 4000)
+  }, [ctx, refresh])
+
+  const onClick = async () => {
+    const command = enabled ? '/crystallize off' : '/crystallize on'
+    diag('composer toggle', { sessionId, command })
+    const ok = await host.composer.insertText(null, command, { mode: 'prefix' })
+    host.composer.focus(null)
+    host.notify(ok
+      ? { kind: 'info', message: `Press Enter to send ${command}.` }
+      : { kind: 'warning', message: 'Click into the message box first, then try again.' })
+  }
+
+  return jsxs('button', {
+    type: 'button',
+    title: enabled ? 'Crystallize is on for this chat. Click to prepare /crystallize off.'
+                   : 'Crystallize is off for this chat. Click to prepare /crystallize on.',
+    onClick,
+    style: {
+      display: 'inline-flex', alignItems: 'center', gap: 4, height: 24, padding: '0 7px',
+      borderRadius: 6, border: `0.5px solid ${enabled ? C.green : C.stroke}`, background: 'none',
+      color: enabled ? C.text : C.muted, fontSize: '0.6875rem', cursor: 'pointer', whiteSpace: 'nowrap'
+    },
+    children: [
+      jsx(Codicon, { name: 'ruby', size: '0.75rem' }),
+      'Crystallize',
+      jsx('span', { style: { width: 6, height: 6, borderRadius: 3, background: enabled ? C.green : C.stroke } })
+    ]
+  })
+}
+
 // ---------------------------------------------------------------- panel
 
 function Panel({ ctx }) {
@@ -364,7 +418,7 @@ function Panel({ ctx }) {
   else if (!data) body = [small('Loading…')]
   else {
     body = [jsx(Hero, { key: 'hero', data })]
-    if (prefs.chat) body.push(jsx(ChatCard, { key: 'chat', chat: data.chat }))
+    if (prefs.chat) body.push(jsx(ChatCard, { key: 'chat', chat: data.chat, enabled: data.chat_enabled, hasSession: Boolean(sessionId) }))
     if (prefs.jobs) body.push(jsx(Jobs, { key: 'jobs', data, act }))
     if (prefs.watching) body.push(jsx(Watching, { key: 'watching', items: data.watching }))
   }
@@ -514,6 +568,13 @@ export default {
           },
           children: [jsx(Codicon, { name: 'ruby', size: '0.75rem' }), 'Crystallize']
         })
+    })
+
+    ctx.register({
+      id: 'composer-toggle',
+      area: 'composer.actions',
+      order: 50,
+      render: () => jsx(ComposerToggle, { ctx })
     })
 
     ctx.register({

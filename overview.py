@@ -100,7 +100,8 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
 
     return {
         "session_id": session_id,
-        "chat": chat.analyse(session_id),
+        "chat_enabled": store.chat_enabled(session_id),
+        "chat": chat.analyse(session_id) if store.chat_enabled(session_id) else None,
         "chat_spent_usd": _chat_spent(session_id),
         "score": score,
         "saved_usd": saved,

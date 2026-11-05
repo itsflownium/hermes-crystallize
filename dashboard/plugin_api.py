@@ -95,3 +95,15 @@ async def undo_routine(body: dict) -> dict[str, Any]:
         return {"ok": True, "message": f"{r['name']} is back to its original prompt."}
     except lc.LifecycleError as exc:
         return {"ok": False, "message": str(exc)}
+
+
+@router.get("/chat-state")
+async def chat_state(session_id: Optional[str] = None) -> dict[str, Any]:
+    """Whether Crystallize is on for a chat (drives the message-box toggle)."""
+    try:
+        _overview()
+        store = importlib.import_module(f"{_PKG}.store")
+        return {"session_id": session_id, "enabled": store.chat_enabled(session_id)}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("crystallize: chat-state failed: %s", exc)
+        return {"session_id": session_id, "enabled": False, "error": "Couldn't read Crystallize state."}
