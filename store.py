@@ -60,6 +60,9 @@ def _db() -> sqlite3.Connection:
 
         conn = plugin_db(PLUGIN_NAME)
         conn.executescript(_SCHEMA)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(routines)")}
+        if "meta_json" not in cols:
+            conn.execute("ALTER TABLE routines ADD COLUMN meta_json TEXT")
         conn.commit()
         _conn = conn
     return _conn
@@ -131,7 +134,7 @@ def cron_trace_rows(job: Optional[str] = None) -> list[dict[str, Any]]:
 def list_routines() -> list[dict[str, Any]]:
     with _lock:
         rows = _db().execute(
-            "SELECT id, name, source, source_ref, status, steps_json, updated_at "
+            "SELECT id, name, source, source_ref, status, steps_json, updated_at, meta_json "
             "FROM routines WHERE status != 'retired' ORDER BY updated_at DESC"
         ).fetchall()
     out = []
@@ -143,6 +146,7 @@ def list_routines() -> list[dict[str, Any]]:
         out.append({
             "id": r[0], "name": r[1], "source": r[2], "source_ref": r[3],
             "status": r[4], "steps": step_count, "updated_at": r[6],
+            "meta": json.loads(r[7]) if r[7] else {},
         })
     return out
 
@@ -150,7 +154,7 @@ def list_routines() -> list[dict[str, Any]]:
 def get_routine(routine_id: str) -> Optional[dict[str, Any]]:
     with _lock:
         r = _db().execute(
-            "SELECT id, name, source, source_ref, status, steps_json FROM routines WHERE id = ?",
+            "SELECT id, name, source, source_ref, status, steps_json, meta_json FROM routines WHERE id = ?",
             (routine_id,),
         ).fetchone()
     if r is None:
@@ -158,7 +162,60 @@ def get_routine(routine_id: str) -> Optional[dict[str, Any]]:
     return {
         "id": r[0], "name": r[1], "source": r[2], "source_ref": r[3],
         "status": r[4], "steps": json.loads(r[5]),
+        "meta": json.loads(r[6]) if r[6] else {},
     }
+
+
+def save_routine(routine_id: str, *, name: str, source: str, source_ref: str, status: str,
+                 steps: dict[str, Any], meta: dict[str, Any]) -> None:
+    """Create or replace a routine."""
+    t = time.time()
+    with _lock:
+        conn = _db()
+        conn.execute(
+            """INSERT INTO routines (id, name, source, source_ref, status, steps_json, meta_json, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET name=excluded.name, source=excluded.source,
+                 source_ref=excluded.source_ref, status=excluded.status, steps_json=excluded.steps_json,
+                 meta_json=excluded.meta_json, updated_at=excluded.updated_at""",
+            (routine_id, name, source, source_ref, status, json.dumps(steps), json.dumps(meta), t, t),
+        )
+        conn.commit()
+
+
+def update_routine(routine_id: str, *, status: Optional[str] = None,
+                   meta: Optional[dict[str, Any]] = None) -> None:
+    sets, vals = ["updated_at = ?"], [time.time()]
+    if status is not None:
+        sets.append("status = ?")
+        vals.append(status)
+    if meta is not None:
+        sets.append("meta_json = ?")
+        vals.append(json.dumps(meta))
+    with _lock:
+        conn = _db()
+        conn.execute(f"UPDATE routines SET {', '.join(sets)} WHERE id = ?", (*vals, routine_id))
+        conn.commit()
+
+
+def routine_for_job(job_id: str) -> Optional[dict[str, Any]]:
+    with _lock:
+        r = _db().execute(
+            "SELECT id FROM routines WHERE source = 'cron' AND source_ref = ? AND status != 'retired'",
+            (job_id,),
+        ).fetchone()
+    return get_routine(r[0]) if r else None
+
+
+def execution_traces(execution_id: str) -> list[dict[str, Any]]:
+    """Tool calls recorded for one cron run, in order."""
+    cols = ("tool_name", "args_json", "result_preview", "result_len", "status")
+    with _lock:
+        rows = _db().execute(
+            f"SELECT {', '.join(cols)} FROM traces WHERE cron_execution_id = ? ORDER BY ts, id",
+            (execution_id,),
+        ).fetchall()
+    return [dict(zip(cols, r)) for r in rows]
 
 
 def now() -> float:

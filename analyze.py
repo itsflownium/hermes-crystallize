@@ -49,7 +49,9 @@ _FILL_INS: list[tuple[str, re.Pattern[str], str]] = [
         r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?"), "{date}"),
     ("uuid", re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I), "{id}"),
     ("timestamp", re.compile(r"\b1\d{9}(?:\d{3})?\b"), "{timestamp}"),
-    ("temp_path", re.compile(r"(/tmp|/var/folders|/private/tmp)/[\w./-]+"), "{temp}"),
+    ("temp_path", re.compile(r"(?:/tmp|/var/folders|/private/tmp)/[\w./-]+"
+                            r"|[A-Za-z]:(?:\\\\|\\|/)[^\"\s]*?\b(?:Temp|TEMP|tmp)(?:\\\\|\\|/)[\w.\\/-]+"),
+     "{temp}"),
     ("hex_id", re.compile(r"\b[0-9a-f]{12,}\b", re.I), "{id}"),
 ]
 
@@ -63,6 +65,7 @@ class StepPlan:
     fill_ins: list[str] = field(default_factory=list)
     distinct_inputs: int = 1
     note: str = ""
+    result_lens: list[int] = field(default_factory=list)
 
 
 @dataclass
@@ -184,7 +187,8 @@ def analyze_runs(runs: list[Any]) -> Analysis:
         latest = steps[-1].args
         raw = [_canon(s.args) for s in steps]
         distinct = len(set(raw))
-        plan = StepPlan(position=pos, tool_name=tool, kind="fixed", args=latest, distinct_inputs=distinct)
+        plan = StepPlan(position=pos, tool_name=tool, kind="fixed", args=latest, distinct_inputs=distinct,
+                        result_lens=[s.result_len for s in steps if s.result_len is not None])
 
         if any(_is_side_effect(tool, s.args) for s in steps):
             plan.kind, plan.note = "side", "Sends or changes something, so the agent keeps this step."

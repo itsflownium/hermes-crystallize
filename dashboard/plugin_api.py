@@ -32,6 +32,27 @@ def _overview():
     return importlib.import_module(f"{_PKG}.overview")
 
 
+@router.post("/diag")
+async def diag(body: dict) -> dict[str, Any]:
+    """The Desktop half reports what it's doing here (loads, clicks, errors).
+
+    Written to <hermes home>/plugin-data/crystallize/desktop-diag.log, because
+    Desktop's own log doesn't reliably keep plugin console output.
+    """
+    try:
+        import json
+        import time
+
+        from plugins.plugin_storage import plugin_data_dir
+
+        line = json.dumps({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), **(body or {})}, default=str)[:2000]
+        with open(plugin_data_dir("crystallize") / "desktop-diag.log", "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+    except Exception:  # noqa: BLE001
+        logger.debug("crystallize: diag write failed", exc_info=True)
+    return {"ok": True}
+
+
 @router.get("/summary")
 async def summary(session_id: Optional[str] = None) -> dict[str, Any]:
     try:
@@ -39,3 +60,38 @@ async def summary(session_id: Optional[str] = None) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 — the panel shows a friendly error instead
         logger.warning("crystallize: summary failed: %s", exc, exc_info=True)
         return {"error": "Couldn't load Crystallize data."}
+
+
+def _lifecycle():
+    _overview()
+    return importlib.import_module(f"{_PKG}.lifecycle")
+
+
+@router.post("/try")
+async def try_routine(body: dict) -> dict[str, Any]:
+    lc = _lifecycle()
+    try:
+        r = lc.try_job(str((body or {}).get("job_id") or ""))
+        return {"ok": True, "message": f"{r['name']} is being tested. It needs 3 matching runs.", "routine_id": r["id"]}
+    except lc.LifecycleError as exc:
+        return {"ok": False, "message": str(exc)}
+
+
+@router.post("/promote")
+async def promote_routine(body: dict) -> dict[str, Any]:
+    lc = _lifecycle()
+    try:
+        r = lc.promote(str((body or {}).get("routine_id") or ""))
+        return {"ok": True, "message": f"{r['name']} is live."}
+    except lc.LifecycleError as exc:
+        return {"ok": False, "message": str(exc)}
+
+
+@router.post("/undo")
+async def undo_routine(body: dict) -> dict[str, Any]:
+    lc = _lifecycle()
+    try:
+        r = lc.undo(str((body or {}).get("routine_id") or ""))
+        return {"ok": True, "message": f"{r['name']} is back to its original prompt."}
+    except lc.LifecycleError as exc:
+        return {"ok": False, "message": str(exc)}

@@ -82,6 +82,17 @@ def make_post_tool_call(ctx: Any) -> Callable[..., None]:
     return on_post_tool_call
 
 
-def on_session_end(**_: Any) -> None:
-    """Placeholder: routine detection will run here once analyze.py exists."""
-    return None
+def make_on_session_end(ctx: Any) -> Callable[..., None]:
+    """After a scheduled cron run, test the job's routine (if it's being tested)."""
+    from . import lifecycle, tools
+
+    def on_session_end(**_: Any) -> None:
+        try:
+            run = ctx.current_cron_execution()
+            if run is None or not getattr(run, "scheduled_instant", None):
+                return
+            lifecycle.test_after(str(run.execution_id), run.job_id, tools.dispatch)
+        except Exception:  # noqa: BLE001 — an observer must never break the run
+            logger.debug("crystallize: test run after cron failed", exc_info=True)
+
+    return on_session_end

@@ -73,7 +73,7 @@ def _open_readonly(path: Path) -> Optional[sqlite3.Connection]:
     if not path.exists():
         return None
     try:
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2.0)
+        conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=2.0)
         conn.row_factory = sqlite3.Row
         return conn
     except sqlite3.Error:

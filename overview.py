@@ -18,6 +18,14 @@ def _runs_per_week(runs: list[history.Run]) -> Optional[float]:
     return WEEK_S / statistics.median(gaps)
 
 
+def _saved_since(runs: list[history.Run], promoted_at: Optional[float],
+                 baseline: Optional[float]) -> float:
+    """Money saved by runs after promotion: baseline cost minus what each run cost."""
+    if not promoted_at or baseline is None:
+        return 0.0
+    return sum(max(0.0, baseline - (r.cost_usd or 0.0)) for r in runs if r.started_ts >= promoted_at)
+
+
 def _chat_spent(session_id: Optional[str]) -> Optional[float]:
     if not session_id:
         return None
@@ -55,10 +63,18 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         }
 
         routine = routines.get(job_id)
+        meta = (routine or {}).get("meta") or {}
         if routine and routine["status"] == "live":
-            live.append({**card, "routine_id": routine["id"]})
+            job_saved = _saved_since(runs, meta.get("promoted_at"), (meta.get("baseline_cost")
+                                                                   or a.avg_cost_usd))
+            saved += job_saved
+            live.append({**card, "routine_id": routine["id"], "saved_usd": job_saved,
+                         "live_runs": meta.get("live_runs", 0), "failures": meta.get("failures", 0)})
         elif routine and routine["status"] == "testing":
-            testing.append({**card, "routine_id": routine["id"], "matches": 0, "needed": 3})
+            tests = meta.get("tests") or []
+            testing.append({**card, "routine_id": routine["id"], "matches": meta.get("matches", 0),
+                            "needed": meta.get("needed", 3), "ready": bool(meta.get("ready")),
+                            "last_test": tests[-1] if tests else None})
         elif a.ready:
             spotted.append(card)
             if per_run_saving is not None and per_week is not None:

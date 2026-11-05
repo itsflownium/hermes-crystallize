@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from . import capture, cli, schemas, store, tools
@@ -38,8 +39,9 @@ def register(ctx: Any) -> None:
         schema=schemas.CRYSTAL_RUN, handler=tools.crystal_run,
     )
 
+    tools.set_context(ctx)
     ctx.register_hook("post_tool_call", capture.make_post_tool_call(ctx))
-    ctx.register_hook("on_session_end", capture.on_session_end)
+    ctx.register_hook("on_session_end", capture.make_on_session_end(ctx))
 
     def _crystallize_command(raw_args: str = "", **_: Any) -> str:
         sub = (raw_args or "").strip().split(" ", 1)[0].lower()
@@ -57,3 +59,9 @@ def register(ctx: Any) -> None:
     )
 
     cli.register(ctx)
+
+    skills_dir = Path(__file__).parent / "skills"
+    if skills_dir.is_dir():
+        for child in sorted(skills_dir.iterdir()):
+            if child.is_dir() and (child / "SKILL.md").exists():
+                ctx.register_skill(child.name, child / "SKILL.md")

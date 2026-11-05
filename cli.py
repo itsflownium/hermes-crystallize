@@ -85,15 +85,74 @@ def _print_analysis(job: str, as_json: bool) -> None:
         print("Every step is fixed: this job could run with no AI at all.")
 
 
+def _routine_for(job: str):
+    from . import history, store
+
+    runs = history.load_runs(job)
+    job_id = runs[-1].job_id if runs else job
+    return store.routine_for_job(job_id or job)
+
+
+def _print_routine(r: dict) -> None:
+    from . import steplist
+
+    meta = r.get("meta") or {}
+    print(f"{r['name']}  [{r['status']}]  id {r['id']}")
+    if r["status"] == "testing":
+        print(f"  Test runs matching in a row: {meta.get('matches', 0)} of {meta.get('needed', 3)}"
+              + ("  → ready to promote" if meta.get("ready") else ""))
+        for t in (meta.get("tests") or [])[-3:]:
+            print(f"    {'match' if t['ok'] else 'no match'} ({t['source']}): {t['why']}")
+    if r["status"] == "live":
+        print(f"  Live runs: {meta.get('live_runs', 0)}, failures in a row: {meta.get('failures', 0)}")
+    steps = r["steps"] if isinstance(r["steps"], dict) else {}
+    for line in steplist.describe(steps):
+        print(f"  {line}")
+
+
+def _lifecycle_action(sub: str, job: str, ctx: Any) -> None:
+    from . import lifecycle, tools
+
+    try:
+        if sub == "try":
+            r = lifecycle.try_job(job)
+            print("Saved as a routine. It's now being tested after every scheduled run.")
+            _print_routine(r)
+            return
+        r = _routine_for(job)
+        if sub == "test":
+            meta = lifecycle.test_now(job, tools.dispatch)
+            print(f"Test run: {meta['tests'][-1]['why']}. Matching in a row: {meta['matches']} of {meta['needed']}.")
+        elif sub == "promote":
+            if not r:
+                print(f"No routine for {job!r}. Run `hermes crystal try {job}` first.")
+                return
+            lifecycle.promote(r["id"])
+            print(f"{r['name']} is live. Its cron job now calls crystal_run first and falls back to the full task.")
+        elif sub == "undo":
+            if not r:
+                print(f"No routine for {job!r}.")
+                return
+            lifecycle.undo(r["id"])
+            print(f"Undone. {r['name']} is back to its original prompt.")
+        elif sub == "show":
+            _print_routine(r) if r else print(f"No routine for {job!r}.")
+    except lifecycle.LifecycleError as exc:
+        print(str(exc))
+
+
 def _handle(args: Any) -> None:
     sub = getattr(args, "crystal_command", None)
+    if sub in ("try", "test", "promote", "undo", "show"):
+        _lifecycle_action(sub, args.job, None)
+        return
     if sub == "history":
         job = getattr(args, "job", None)
         _print_job(job) if job else _print_summaries()
     elif sub == "analyze":
         _print_analysis(args.job, getattr(args, "json", False))
     else:
-        print("Usage: hermes crystal history [job] | hermes crystal analyze <job> [--json]")
+        print("Usage: hermes crystal history [job] | analyze <job> [--json] | try|test|promote|undo|show <job>")
 
 
 def _setup(subparser: Any) -> None:
@@ -103,6 +162,13 @@ def _setup(subparser: Any) -> None:
     a = subs.add_parser("analyze", help="Find the steps a job repeats every run")
     a.add_argument("job", help="Job name or id")
     a.add_argument("--json", action="store_true", help="Print the full analysis as JSON")
+    for name, text in (("try", "Save a job's steps as a routine and start testing it"),
+                       ("test", "Run the routine once now and compare with the latest real run"),
+                       ("promote", "Switch the job over to its routine (needs 3 matching test runs)"),
+                       ("undo", "Put the job's original prompt back"),
+                       ("show", "Show a job's routine and its test results")):
+        p = subs.add_parser(name, help=text)
+        p.add_argument("job", help="Job name or id")
     subparser.set_defaults(func=_handle)
 
 
