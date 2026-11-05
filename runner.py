@@ -15,7 +15,8 @@ from . import steplist
 
 logger = logging.getLogger(__name__)
 
-MAX_OUTPUT_CHARS = 6000
+# What crystal_run hands back to Hermes per step. Test comparisons use the full output.
+MAX_OUTPUT_CHARS = 60000
 
 Dispatch = Callable[[str, dict], str]
 
@@ -60,7 +61,7 @@ def run(routine: dict[str, Any], dispatch: Dispatch) -> dict[str, Any]:
                     "reason": f"the tool raised {type(exc).__name__}: {exc}", "outputs": outputs}
         why = step_failure(result, step.get("check"))
         text = result if isinstance(result, str) else json.dumps(result, default=str)
-        outputs.append({"step": i, "tool": step["tool"], "output": text[:MAX_OUTPUT_CHARS]})
+        outputs.append({"step": i, "tool": step["tool"], "output": text})
         if why:
             return {"ok": False, "failed_step": i, "tool": step["tool"], "reason": why, "outputs": outputs}
     return {"ok": True, "outputs": outputs}

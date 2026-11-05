@@ -28,7 +28,7 @@ from typing import Any, Optional
 
 from . import analyze
 
-RUNNABLE_KINDS = ("fixed", "fill-in", "varies")
+RUNNABLE_KINDS = ("fixed", "fill-in", "varies", "frozen")
 
 
 class NotCrystallizable(ValueError):
@@ -66,6 +66,8 @@ def build(a: analyze.Analysis) -> dict[str, Any]:
         "version": 1,
         "job_id": a.job_id,
         "job_name": a.job_name,
+        "strategy": a.strategy,
+        "source_execution_id": a.source_execution_id,
         "steps": steps,
         "baseline": {
             "cost_usd": a.avg_cost_usd,

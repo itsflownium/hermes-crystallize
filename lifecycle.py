@@ -120,6 +120,19 @@ def _align(routine_steps: list[dict], traces: list[dict]) -> list[Optional[dict]
     return matched
 
 
+def _reference_traces(routine: dict[str, Any], execution_id: str) -> list[dict]:
+    """What a test run is compared against.
+
+    Common-steps routines: the real run that just happened (same steps every run).
+    Best-run routines: the run the steps were frozen from, since Hermes takes a
+    different path each time and the latest run may not use these tools at all.
+    """
+    steps = routine.get("steps") or {}
+    if steps.get("strategy") == "best-run" and steps.get("source_execution_id"):
+        return store.execution_traces(steps["source_execution_id"])
+    return store.execution_traces(execution_id)
+
+
 def compare(routine: dict[str, Any], result: dict[str, Any], traces: list[dict]) -> tuple[bool, str]:
     if not result.get("ok"):
         return False, f"step {result.get('failed_step')} ({result.get('tool')}) failed: {result.get('reason')}"
@@ -149,7 +162,7 @@ def test_after(execution_id: str, job_id: str, dispatch: runner.Dispatch) -> Opt
     routine = store.routine_for_job(job_id)
     if not routine or routine["status"] != "testing":
         return None
-    traces = store.execution_traces(execution_id)
+    traces = _reference_traces(routine, execution_id)
     if not traces:
         return None
     result = runner.run(routine["steps"], dispatch)
@@ -166,7 +179,7 @@ def test_now(job: str, dispatch: runner.Dispatch) -> dict[str, Any]:
     if not routine or routine["status"] != "testing":
         raise LifecycleError("Try the job first so there's a routine to test.")
     result = runner.run(routine["steps"], dispatch)
-    ok, why = compare(routine, result, store.execution_traces(a_runs[-1].execution_id))
+    ok, why = compare(routine, result, _reference_traces(routine, a_runs[-1].execution_id))
     return record_test(routine, ok, why, "manual")
 
 

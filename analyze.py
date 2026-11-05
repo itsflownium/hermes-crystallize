@@ -84,6 +84,9 @@ class Analysis:
     est_api_calls_after: Optional[float] = None
     est_cost_after_usd: Optional[float] = None
     agent_free: bool = False             # whole job could run with no AI at all
+    strategy: str = "common-steps"       # or "best-run" when Hermes takes a new path each run
+    source_execution_id: Optional[str] = None  # best-run: the run the steps were frozen from
+    sources: list[str] = field(default_factory=list)  # URLs / repos the job's prompt names
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -151,10 +154,102 @@ def _avg(values: list[Optional[float]]) -> Optional[float]:
     return sum(nums) / len(nums) if nums else None
 
 
+# ---------------------------------------------------------------- best run
+
+_URL = re.compile(r"https?://[^\s)\"'<>]+")
+_REPO = re.compile(r"\b([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)\b")
+
+
+def prompt_sources(prompt: Optional[str]) -> list[str]:
+    """The URLs and owner/repo names a job's prompt asks Hermes to read."""
+    if not prompt:
+        return []
+    found: list[str] = []
+    for url in _URL.findall(prompt):
+        url = url.rstrip(".,;:!?")
+        token = re.sub(r"^https?://", "", url).split("?")[0].rstrip("/").lower()
+        if token and token not in found:
+            found.append(token)
+    text_without_urls = _URL.sub(" ", prompt)
+    for repo in _REPO.findall(text_without_urls):
+        if "." not in repo.split("/")[0] and repo.lower() not in found:
+            found.append(repo.lower())
+    return found
+
+
+def _sources_in(args: Any, sources: list[str]) -> set[str]:
+    text = _canon(args).lower()
+    return {s for s in sources if s in text}
+
+
+def _best_run(runs: list[Any], sources: list[str]) -> Optional[tuple[Any, list[Any]]]:
+    """The cheapest run whose fetch steps cover the most sources, and those steps."""
+    best_key, best = None, None
+    for run in runs:
+        steps, covered = [], set()
+        for s in run.steps:
+            if s.tool_name in SETUP_TOOLS or _is_side_effect(s.tool_name, s.args):
+                continue
+            if s.status not in (None, "ok") or not s.result_len:
+                continue
+            hit = _sources_in(s.args, sources)
+            if hit:
+                steps.append(s)
+                covered |= hit
+        if not steps:
+            continue
+        key = (-len(covered), run.cost_usd if run.cost_usd is not None else 1e9, len(steps))
+        if best_key is None or key < best_key:
+            best_key, best = key, (run, steps)
+    return best
+
+
+def _plan_best_run(base: Analysis, runs: list[Any], sources: list[str]) -> bool:
+    picked = _best_run(runs, sources)
+    if not picked:
+        return False
+    run, steps = picked
+    plans = []
+    for i, s in enumerate(steps):
+        _, kinds = _blank(_canon(s.args))
+        plans.append(StepPlan(
+            position=i, tool_name=s.tool_name, kind="frozen", args=s.args, fill_ins=kinds,
+            result_lens=[s.result_len] if s.result_len else [],
+            note=f"Frozen from the run on {_when(run)} that fetched every source for the least money.",
+        ))
+    covered = set().union(*(_sources_in(s.args, sources) for s in steps))
+    costs = [r.cost_usd for r in runs if r.cost_usd is not None]
+    base.strategy = "best-run"
+    base.source_execution_id = run.execution_id
+    base.steps = plans
+    base.est_api_calls_after = max(1.0, (base.avg_api_calls or 2.0) - len(plans))
+    if base.avg_api_calls and base.avg_cost_usd is not None:
+        base.est_cost_after_usd = base.avg_cost_usd * min(1.0, base.est_api_calls_after / base.avg_api_calls)
+    spread = f" (cost ${min(costs):.4f}–${max(costs):.4f})" if costs else ""
+    base.ready = True
+    base.reason = (f"Hermes takes a different path each run{spread}. Crystallize can freeze the "
+                   f"{len(plans)} fetch step{'s' if len(plans) != 1 else ''} from its cheapest run, "
+                   f"covering {len(covered)} of {len(sources)} sources.")
+    return True
+
+
+def _when(run: Any) -> str:
+    import datetime as _dt
+
+    try:
+        return _dt.datetime.fromtimestamp(run.started_ts).strftime("%b %d %H:%M")
+    except (TypeError, ValueError, OSError):
+        return "an earlier run"
+
+
 # ---------------------------------------------------------------- main entry
 
-def analyze_runs(runs: list[Any]) -> Analysis:
-    """Analyze usable runs of one job (``history.Run`` objects, oldest first)."""
+def analyze_runs(runs: list[Any], prompt: Optional[str] = None) -> Analysis:
+    """Analyze usable runs of one job (``history.Run`` objects, oldest first).
+
+    ``prompt`` is the job's own prompt. When Hermes takes a different path every
+    run, its URLs and repo names let us fall back to the "best run" strategy.
+    """
     runs = [r for r in runs if getattr(r, "usable", True) and r.steps]
     job_id = runs[-1].job_id if runs else None
     job_name = runs[-1].job_name if runs else None
@@ -169,7 +264,11 @@ def analyze_runs(runs: list[Any]) -> Analysis:
 
     sequences = [[s.tool_name for s in r.steps] for r in runs]
     backbone = _backbone(sequences)
+    sources = prompt_sources(prompt)
+    base.sources = sources
     if not backbone:
+        if sources and _plan_best_run(base, runs, sources):
+            return base
         base.reason = "The runs have no tool calls in common, so there's nothing stable to save."
         return base
 
@@ -226,8 +325,12 @@ def analyze_runs(runs: list[Any]) -> Analysis:
     )
 
     if not scriptable:
+        if sources and _plan_best_run(base, runs, sources):
+            return base
         base.reason = "Every common step needs the agent, so there's nothing to save yet."
     elif base.same_shape_share < 0.5:
+        if sources and _plan_best_run(base, runs, sources):
+            return base
         base.reason = ("Runs take different paths more than half the time. "
                        "Wait for more runs before saving a step list.")
     else:
@@ -236,7 +339,22 @@ def analyze_runs(runs: list[Any]) -> Analysis:
     return base
 
 
+def job_prompt(job_id: Optional[str]) -> Optional[str]:
+    """The job's own task text (the original one if a routine has taken over)."""
+    if not job_id:
+        return None
+    from . import lifecycle
+
+    job = lifecycle.cron_job(job_id)
+    prompt = (job or {}).get("prompt")
+    if prompt and lifecycle.MARKER in prompt and "\nTask:\n" in prompt:
+        prompt = prompt.split("\nTask:\n", 1)[1]
+    return prompt
+
+
 def analyze_job(job: str) -> Analysis:
     from . import history
 
-    return analyze_runs(history.load_runs(job, only_usable=True))
+    runs = history.load_runs(job, only_usable=True)
+    job_id = runs[-1].job_id if runs else None
+    return analyze_runs(runs, job_prompt(job_id or job))
