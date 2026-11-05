@@ -34,14 +34,17 @@ def _stats(runs: list[history.Run]) -> dict[str, Optional[float]]:
 
 
 SKIPPED = "(skipped: no change)"
+NO_AI = "(no AI)"
 
 
 def _skipped_runs(meta: dict[str, Any], job_name: str) -> list[history.Run]:
-    """Runs where the data hadn't changed, so the AI never started: they cost nothing."""
-    return [history.Run(execution_id=f"skip-{ts}", job_id=None, job_name=job_name, session_id=None,
+    """Runs the AI never took part in, so they cost nothing: the data hadn't
+    changed, or the job runs with no AI."""
+    return [history.Run(execution_id=f"free-{ts}", job_id=None, job_name=job_name, session_id=None,
                         scheduled=True, started_ts=ts, outcome="completed", cost_usd=0.0,
-                        api_calls=0, duration_s=None, model=SKIPPED)
-            for ts in meta.get("skips") or []]
+                        api_calls=0, duration_s=None, model=label)
+            for key, label in (("skips", SKIPPED), ("no_ai_runs", NO_AI))
+            for ts in meta.get(key) or []]
 
 
 def _live_runs(name: str, meta: dict[str, Any]) -> list[history.Run]:
@@ -63,6 +66,7 @@ def _timeline(before: list[history.Run], after: list[history.Run], limit: int = 
         "cost_usd": r.cost_usd,
         "after": is_after,
         "skipped": r.model == SKIPPED,
+        "no_ai": r.model == NO_AI,
         "ts": r.started_ts,
         "seconds": r.duration_s,
         "tool_calls": len(r.steps),

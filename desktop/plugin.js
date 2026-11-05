@@ -202,13 +202,13 @@ function Bars({ timeline }) {
         style: { display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 2 },
         children: [
           jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: when(t.ts) }),
-          jsx('span', { style: { fontSize: '0.625rem', color: t.after ? C.green : C.muted }, children: t.skipped ? 'Skipped: no change' : t.after ? 'Routine' : 'Full run' })
+          jsx('span', { style: { fontSize: '0.625rem', color: t.after ? C.green : C.muted }, children: t.skipped ? 'Skipped: no change' : t.no_ai ? 'No AI' : t.after ? 'Routine' : 'Full run' })
         ]
       }),
       jsx('div', { style: { fontSize: '0.8125rem', color: C.text, fontVariantNumeric: 'tabular-nums' }, children: money(t.cost_usd) }),
       jsx('div', {
         style: { fontSize: '0.625rem', color: C.soft, fontVariantNumeric: 'tabular-nums' },
-        children: t.skipped ? 'The AI never started' : [secs(t.seconds), `${t.tool_calls} tool call${t.tool_calls === 1 ? '' : 's'}`,
+        children: t.skipped || t.no_ai ? 'The AI never started' : [secs(t.seconds), `${t.tool_calls} tool call${t.tool_calls === 1 ? '' : 's'}`,
           t.ai_calls != null ? `${t.ai_calls} AI call${t.ai_calls === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')
       })
     ]

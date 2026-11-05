@@ -237,11 +237,13 @@ def fingerprint(text: str) -> str:
 
 # ---------------------------------------------------------------- the pre-run
 
-def _record_skip(routine: dict) -> None:
+def _record_skip(routine: dict, key: str = "skips") -> None:
+    """Note a run the AI never took part in. `skips`: nothing changed;
+    `no_ai_runs`: the routine's output was the result."""
     meta = dict(routine.get("meta") or {})
-    skips = list(meta.get("skips") or [])[-199:]
-    skips.append(time.time())
-    meta["skips"] = skips
+    stamps = list(meta.get(key) or [])[-199:]
+    stamps.append(time.time())
+    meta[key] = stamps
     store.update_routine(routine["id"], meta=meta)
 
 
@@ -279,6 +281,7 @@ def run(routine_id: str, dispatch: runner.Dispatch) -> tuple[str, int]:
     meta["last_data_chars"] = len(data)
     store.update_routine(routine_id, meta=meta)
     if no_ai:
+        _record_skip(store.get_routine(routine_id) or routine, "no_ai_runs")
         return data, 0
     return (f"Collected by Crystallize routine {routine_id} at {time.strftime('%Y-%m-%d %H:%M')} "
             f"in {time.time() - t0:.1f}s. Current and complete.\n\n{data}"), 0

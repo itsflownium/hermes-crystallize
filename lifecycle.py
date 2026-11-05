@@ -246,7 +246,7 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     # if the routine was promoted before (re-promoted, or moved to a new mode).
     meta.setdefault("first_promoted_at", meta.get("promoted_at") or now)
     meta.update({"original_prompt": original, "promoted_at": now, "failures": 0, "live_runs": 0,
-                 "baseline_cost": baseline, "mode": mode, "skips": [], "last_fingerprint": None,
+                 "baseline_cost": baseline, "mode": mode, "skips": [], "no_ai_runs": [], "last_fingerprint": None,
                  "skip_unchanged": meta.get("skip_unchanged", True)})
     store.update_routine(routine_id, status="live", meta=meta)
     return store.get_routine(routine_id)
