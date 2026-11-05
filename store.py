@@ -204,6 +204,14 @@ def update_routine(routine_id: str, *, status: Optional[str] = None,
         conn.commit()
 
 
+def set_routine_job(routine_id: str, job_id: str) -> None:
+    """Point a routine at a re-created cron job (same name, new id)."""
+    with _lock:
+        conn = _db()
+        conn.execute("UPDATE routines SET source_ref = ?, updated_at = ? WHERE id = ?", (job_id, time.time(), routine_id))
+        conn.commit()
+
+
 def routine_for_job(job_id: str) -> Optional[dict[str, Any]]:
     with _lock:
         r = _db().execute(

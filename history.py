@@ -210,11 +210,14 @@ def _avg(values: list[Optional[float]]) -> Optional[float]:
 
 def job_summaries() -> list[dict[str, Any]]:
     """One line per cron job: how many runs we can learn from and what they cost."""
+    # Grouped by job NAME: a cron job that was re-created (same name, new id)
+    # keeps its earlier runs, so before-and-after numbers stay together.
     by_job: dict[str, list[Run]] = {}
     for run in load_runs():
-        by_job.setdefault(run.job_id or "?", []).append(run)
+        by_job.setdefault(run.job_name or run.job_id or "?", []).append(run)
     out = []
-    for job_id, runs in by_job.items():
+    for _, runs in by_job.items():
+        job_id = runs[-1].job_id or "?"
         usable = [r for r in runs if r.usable]
         out.append({
             "job_id": job_id,

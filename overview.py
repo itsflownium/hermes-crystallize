@@ -47,7 +47,7 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
 
     for summary in history.job_summaries():
         job_id = summary["job_id"]
-        runs = history.load_runs(job_id, only_usable=True)
+        runs = history.load_runs(summary["job_name"] or job_id, only_usable=True)
         a = analyze.analyze_runs(runs, analyze.job_prompt(job_id))
         per_week = _runs_per_week(runs)
         per_run_saving = None
