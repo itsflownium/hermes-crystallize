@@ -5,7 +5,7 @@ from __future__ import annotations
 import statistics
 from typing import Any, Optional
 
-from . import analyze, history, store
+from . import analyze, chat, history, store
 
 WEEK_S = 7 * 24 * 3600
 
@@ -73,6 +73,7 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
 
     return {
         "session_id": session_id,
+        "chat": chat.analyse(session_id),
         "chat_spent_usd": _chat_spent(session_id),
         "score": score,
         "saved_usd": saved,
