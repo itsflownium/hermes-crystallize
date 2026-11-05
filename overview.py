@@ -36,7 +36,11 @@ def _chat_spent(session_id: Optional[str]) -> Optional[float]:
 
 
 def build(session_id: Optional[str] = None) -> dict[str, Any]:
-    routines = {r["source_ref"]: r for r in store.list_routines() if r["source"] == "cron"}
+    routines: dict[str, Any] = {}
+    for r in store.list_routines():
+        if r["source"] == "cron":
+            routines[r["source_ref"]] = r
+            routines.setdefault(f"name:{r['name']}", r)  # a re-created job keeps its routine
     spotted, testing, live, watching = [], [], [], []
     could_save_week = 0.0
     saved = 0.0
@@ -66,7 +70,7 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
             "reason": a.reason,
         }
 
-        routine = routines.get(job_id)
+        routine = routines.get(job_id) or routines.get(f"name:{summary['job_name']}")
         meta = (routine or {}).get("meta") or {}
         weight = a.avg_cost_usd or 0.0
         week_saving = per_run_saving * per_week if per_run_saving is not None and per_week is not None else 0.0

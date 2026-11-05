@@ -86,11 +86,12 @@ def _print_analysis(job: str, as_json: bool) -> None:
 
 
 def _routine_for(job: str):
-    from . import history, store
+    from . import store
 
-    runs = history.load_runs(job)
-    job_id = runs[-1].job_id if runs else job
-    return store.routine_for_job(job_id or job)
+    for r in store.list_routines():
+        if r["source"] == "cron" and job in (r["name"], r["source_ref"], r["id"]):
+            return store.get_routine(r["id"])
+    return None
 
 
 def _print_routine(r: dict) -> None:
