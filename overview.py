@@ -48,7 +48,7 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
     for summary in history.job_summaries():
         job_id = summary["job_id"]
         runs = history.load_runs(job_id, only_usable=True)
-        a = analyze.analyze_runs(runs)
+        a = analyze.analyze_runs(runs, analyze.job_prompt(job_id))
         per_week = _runs_per_week(runs)
         per_run_saving = None
         if a.avg_cost_usd is not None and a.est_cost_after_usd is not None:
