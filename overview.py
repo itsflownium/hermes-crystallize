@@ -40,8 +40,14 @@ def _before_after(runs: list[history.Run], promoted_at: Optional[float]) -> dict
 
 
 def _timeline(runs: list[history.Run], promoted_at: Optional[float], limit: int = 16) -> list[dict[str, Any]]:
-    return [{"cost_usd": r.cost_usd, "after": bool(promoted_at and r.started_ts >= promoted_at)}
-            for r in runs[-limit:]]
+    return [{
+        "cost_usd": r.cost_usd,
+        "after": bool(promoted_at and r.started_ts >= promoted_at),
+        "ts": r.started_ts,
+        "seconds": r.duration_s,
+        "tool_calls": len(r.steps),
+        "ai_calls": r.api_calls,
+    } for r in runs[-limit:]]
 
 
 def _saved_since(runs: list[history.Run], promoted_at: Optional[float],

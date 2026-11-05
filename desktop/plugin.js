@@ -34,7 +34,7 @@ const diag = (event, detail) => {
 
 function money(v) {
   if (v === null || v === undefined) return '—'
-  if (v > 0 && v < 0.01) return `$${v.toFixed(4)}`
+  if (v > 0 && v < 1) return `$${v.toFixed(4)}`
   return `$${v.toFixed(2)}`
 }
 
@@ -176,21 +176,66 @@ function secs(v) {
 const perWeek = v => (v ? `${money(v)}/wk` : '—')
 const perMonth = v => (v ? `≈ ${money(v * 4.33)} a month` : '')
 
+function when(ts) {
+  if (!ts) return ''
+  const d = new Date(ts * 1000)
+  const sameDay = d.toDateString() === new Date().toDateString()
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  return sameDay ? `Today ${time}` : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`
+}
+
+// Cost of each recent run. Hover (or tap) a bar for that run's details.
 function Bars({ timeline }) {
+  const [hover, setHover] = useState(null)
   if (!timeline || timeline.length < 2) return null
   const max = Math.max(...timeline.map(t => t.cost_usd || 0), 1e-9)
-  return jsx('div', {
-    title: 'Cost of each recent run. Green runs used the routine.',
-    style: { display: 'flex', alignItems: 'flex-end', gap: 2, height: 28, marginTop: 2 },
-    children: timeline.map((t, i) =>
-      jsx('span', {
-        key: i,
-        style: {
-          flex: 1, borderRadius: 2, minHeight: 2,
-          height: `${Math.max(8, Math.round(((t.cost_usd || 0) / max) * 100))}%`,
-          background: t.after ? C.green : C.stroke
-        }
-      }))
+  const t = hover === null ? null : timeline[hover]
+  const tip = t && jsxs('div', {
+    style: {
+      position: 'absolute', bottom: 'calc(100% + 6px)', zIndex: 3, pointerEvents: 'none',
+      left: `${Math.min(70, Math.max(0, (hover / timeline.length) * 100 - 15))}%`,
+      background: 'var(--ui-bg-elevated, var(--ui-bg-tertiary))', border: `0.5px solid ${C.stroke}`,
+      borderRadius: 8, padding: '6px 8px', minWidth: 132, boxShadow: '0 4px 14px rgba(0,0,0,0.25)'
+    },
+    children: [
+      jsxs('div', {
+        style: { display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 2 },
+        children: [
+          jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: when(t.ts) }),
+          jsx('span', { style: { fontSize: '0.625rem', color: t.after ? C.green : C.muted }, children: t.after ? 'Routine' : 'Full run' })
+        ]
+      }),
+      jsx('div', { style: { fontSize: '0.8125rem', color: C.text, fontVariantNumeric: 'tabular-nums' }, children: money(t.cost_usd) }),
+      jsx('div', {
+        style: { fontSize: '0.625rem', color: C.soft, fontVariantNumeric: 'tabular-nums' },
+        children: [secs(t.seconds), `${t.tool_calls} tool call${t.tool_calls === 1 ? '' : 's'}`,
+          t.ai_calls != null ? `${t.ai_calls} AI call${t.ai_calls === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')
+      })
+    ]
+  })
+  return jsxs('div', {
+    style: { position: 'relative', marginTop: 2 },
+    onMouseLeave: () => setHover(null),
+    children: [
+      tip,
+      jsx('div', {
+        style: { display: 'flex', alignItems: 'flex-end', gap: 2, height: 32 },
+        children: timeline.map((r, i) =>
+          jsx('span', {
+            key: i,
+            onMouseEnter: () => setHover(i),
+            onClick: () => setHover(h => (h === i ? null : i)),
+            style: {
+              flex: 1, borderRadius: 2, minHeight: 2, cursor: 'pointer',
+              height: `${Math.max(8, Math.round(((r.cost_usd || 0) / max) * 100))}%`,
+              background: r.after ? C.green : C.stroke,
+              opacity: hover === null || hover === i ? 1 : 0.45,
+              outline: hover === i ? `1px solid ${C.text}` : 'none',
+              transition: 'opacity 120ms'
+            }
+          }))
+      })
+    ]
   })
 }
 
