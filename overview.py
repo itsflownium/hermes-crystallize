@@ -40,6 +40,10 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
     spotted, testing, live, watching = [], [], [], []
     could_save_week = 0.0
     saved = 0.0
+    # Score: how much of the repeatable work is already handled by routines,
+    # weighted by what each job costs. Live counts fully, testing by progress.
+    score_weight = 0.0
+    score_done = 0.0
 
     for summary in history.job_summaries():
         job_id = summary["job_id"]
@@ -64,28 +68,35 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
 
         routine = routines.get(job_id)
         meta = (routine or {}).get("meta") or {}
+        weight = a.avg_cost_usd or 0.0
+        week_saving = per_run_saving * per_week if per_run_saving is not None and per_week is not None else 0.0
+        card["saving_per_week"] = week_saving
+        card["runs_per_week"] = per_week
         if routine and routine["status"] == "live":
+            score_weight += weight
+            score_done += weight
             job_saved = _saved_since(runs, meta.get("promoted_at"), (meta.get("baseline_cost")
                                                                    or a.avg_cost_usd))
             saved += job_saved
             live.append({**card, "routine_id": routine["id"], "saved_usd": job_saved,
                          "live_runs": meta.get("live_runs", 0), "failures": meta.get("failures", 0)})
         elif routine and routine["status"] == "testing":
+            needed = meta.get("needed", 3) or 3
+            score_weight += weight
+            score_done += weight * 0.5 * min(1.0, meta.get("matches", 0) / needed)
+            could_save_week += week_saving
             tests = meta.get("tests") or []
             testing.append({**card, "routine_id": routine["id"], "matches": meta.get("matches", 0),
                             "needed": meta.get("needed", 3), "ready": bool(meta.get("ready")),
                             "last_test": tests[-1] if tests else None})
         elif a.ready:
             spotted.append(card)
-            if per_run_saving is not None and per_week is not None:
-                could_save_week += per_run_saving * per_week
+            score_weight += weight
+            could_save_week += week_saving
         else:
             watching.append(card)
 
-    score = None
-    if spotted or testing or live:
-        total = saved + could_save_week
-        score = round(100 * saved / total) if total > 0 else 0
+    score = round(100 * score_done / score_weight) if score_weight > 0 else None
 
     return {
         "session_id": session_id,

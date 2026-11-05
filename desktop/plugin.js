@@ -81,98 +81,96 @@ const row = (left, right) =>
   })
 
 
-// ---------------------------------------------------------------- chat view
+// ---------------------------------------------------------------- pieces
 
-function ChatSection({ chat }) {
-  if (!chat) {
-    return jsxs('div', {
-      style: { display: 'flex', flexDirection: 'column', gap: 6 },
-      children: [
-        label('This chat'),
-        box([
-          jsx('div', { key: 't', style: { fontSize: '0.75rem', color: C.text }, children: 'Open a chat to analyse it' }),
-          small('Crystallize looks at what Hermes did in the chat and points out steps it keeps repeating.', null)
-        ])
-      ]
-    })
-  }
-
-  const items = []
-  for (const [i, r] of (chat.repeats || []).entries()) {
-    items.push(box([
-      row(`${r.steps.map(s => s.tool).join(' → ')}`, jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: `${r.times}×` })),
-      small(r.steps[0].args),
-      small(r.has_side_effects
-        ? 'Sends or changes something, so Hermes keeps doing this part itself.'
-        : `Saving this as one routine would skip ${r.calls_saved} tool calls.`, r.has_side_effects ? C.soft : C.green)
-    ], null, `r${i}`))
-  }
-  for (const [i, p] of (chat.patterns || []).entries()) {
-    const what = p.kind === 'streak' ? `${p.tools[0]} ${p.times}× in a row` : `${p.tools.join(' → ')} ${p.times}×`
-    items.push(box([
-      row(what, jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: 'pattern' })),
-      p.example ? small(p.example) : null,
-      small('Same kind of step with different inputs each time. Worth watching if this task comes up again.')
-    ], C.stroke, `p${i}`))
-  }
-
-  return jsxs('div', {
-    style: { display: 'flex', flexDirection: 'column', gap: 6 },
-    children: [
-      label('This chat'),
-      jsxs('div', {
-        style: { display: 'flex', gap: 6 },
-        children: [
-          jsx(Tile, { title: 'Spent', value: money(chat.spent_usd) }),
-          jsx(Tile, { title: 'Tool calls', value: String(chat.tool_calls) }),
-          jsx(Tile, { title: 'Could skip', value: `${chat.calls_saveable} calls`, color: chat.calls_saveable ? C.green : undefined })
-        ]
-      }),
-      ...(items.length
-        ? items
-        : [small(chat.tool_calls ? 'No repeated steps in this chat.' : 'No tool calls in this chat yet.')])
-    ]
+const pill = (text, onClick, tone) =>
+  jsx('button', {
+    type: 'button',
+    onClick,
+    style: {
+      flexShrink: 0,
+      padding: '1px 8px',
+      borderRadius: 5,
+      border: `0.5px solid ${tone || C.accent}`,
+      background: 'none',
+      color: tone || C.accent,
+      fontSize: '0.6875rem',
+      lineHeight: 1.6,
+      cursor: 'pointer'
+    },
+    children: text
   })
-}
 
-// ---------------------------------------------------------------- jobs view
+const iconButton = (name, title, onClick, active) =>
+  jsx('button', {
+    type: 'button',
+    title,
+    'aria-label': title,
+    onClick,
+    style: {
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      width: 22, height: 22, borderRadius: 5, border: 'none', cursor: 'pointer',
+      background: active ? C.tile : 'none', color: active ? C.text : C.muted
+    },
+    children: jsx(Codicon, { name, size: '0.8125rem' })
+  })
 
 function Progress({ value, total }) {
   return jsx('div', {
-    style: { display: 'flex', gap: 2, marginTop: 2 },
+    style: { display: 'flex', gap: 3, marginTop: 4 },
     children: Array.from({ length: total }, (_, i) =>
       jsx('span', { key: i, style: { flex: 1, height: 3, borderRadius: 2, background: i < value ? C.green : C.stroke } }))
   })
 }
 
-function JobsSection({ data, act }) {
-  const card = (item, border, right, extra, key) => {
-    const saving = item.cost_now != null && item.cost_after != null
-      ? `${money(item.cost_now)} → ${money(item.cost_after)} a run`
-      : `${item.runs} runs`
-    return box([
-      row(item.name, right),
-      small(`${item.scriptable_steps} of ${item.steps} steps without AI · ${saving}`),
-      ...(extra || [])
-    ], border, key)
-  }
-  const group = (title, items, render) =>
-    items && items.length ? [label(`${title} · ${items.length}`), ...items.map(render)] : []
+function Card({ item, border, action, children }) {
+  const saving = item.cost_now != null && item.cost_after != null
+    ? `${money(item.cost_now)} → ${money(item.cost_after)} a run`
+    : `${item.runs} runs`
+  return box([
+    row(item.name, action),
+    small(`${item.scriptable_steps} of ${item.steps} steps without AI · ${saving}`),
+    ...(children || [])
+  ], border, item.job_id)
+}
 
+function Column({ title, items, empty, render }) {
   return jsxs('div', {
     style: { display: 'flex', flexDirection: 'column', gap: 6 },
     children: [
+      label(`${title} · ${items.length}`),
+      ...(items.length ? items.map(render) : [small(empty)])
+    ]
+  })
+}
+
+// ---------------------------------------------------------------- sections
+
+function Hero({ data }) {
+  const live = data.live.length
+  const testing = data.testing.length
+  const status = live || testing
+    ? [live && `${live} live`, testing && `${testing} testing`].filter(Boolean).join(' · ')
+    : data.spotted.length ? `${data.spotted.length} ready to try` : 'Watching for repeated work'
+  return jsxs('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: 8 },
+    children: [
       jsxs('div', {
-        style: { display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 4 },
+        style: { display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' },
         children: [
-          label('Scheduled jobs'),
           jsxs('div', {
-            style: { fontSize: '1.125rem', color: C.text, fontVariantNumeric: 'tabular-nums' },
             children: [
-              data.score === null ? '—' : data.score,
-              jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: '/100 score' })
+              label('Savings score'),
+              jsxs('div', {
+                style: { fontSize: '2rem', lineHeight: 1.1, color: C.text, fontVariantNumeric: 'tabular-nums' },
+                children: [
+                  data.score === null ? '—' : data.score,
+                  jsx('span', { style: { fontSize: '0.75rem', color: C.muted, marginLeft: 2 }, children: '/100' })
+                ]
+              })
             ]
-          })
+          }),
+          jsx('div', { style: { fontSize: '0.6875rem', color: C.muted, textAlign: 'right', paddingBottom: 4 }, children: status })
         ]
       }),
       jsxs('div', {
@@ -181,26 +179,116 @@ function JobsSection({ data, act }) {
           jsx(Tile, { title: 'Saved', value: money(data.saved_usd), color: C.green }),
           jsx(Tile, { title: 'Could save', value: `${money(data.could_save_usd_per_week)}/wk` })
         ]
-      }),
-      ...group('Spotted', data.spotted, it =>
-        card(it, null, linkButton('Try', () => act('/try', { job_id: it.job_id })), null, it.job_id)),
-      ...group('Testing', data.testing, it =>
-        card(it, C.yellow,
-          it.ready
-            ? linkButton('Promote', () => act('/promote', { routine_id: it.routine_id }))
-            : jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: `${it.matches} of ${it.needed}` }),
-          [
-            jsx(Progress, { key: 'p', value: it.matches, total: it.needed }),
-            it.last_test ? small(`Last test: ${it.last_test.why}`, it.last_test.ok ? C.muted : C.soft) : small('Tested after its next scheduled run.')
-          ], it.job_id)),
-      ...group('Live', data.live, it =>
-        card(it, C.green, linkButton('Undo', () => act('/undo', { routine_id: it.routine_id })),
-          [small(`Saved ${money(it.saved_usd)} over ${it.live_runs} runs${it.failures ? ` · ${it.failures} failed, falling back` : ''}`, C.green)],
-          it.job_id)),
-      ...group('Watching', data.watching, it =>
-        jsx('div', { key: it.job_id, children: small([jsx('span', { key: 'n', style: { color: C.soft }, children: it.name }), ` · ${it.reason}`]) }))
+      })
     ]
   })
+}
+
+function ChatCard({ chat }) {
+  if (!chat) {
+    return box([
+      row('This chat', null),
+      small('Open a chat to analyse it. Crystallize points out steps Hermes keeps repeating.')
+    ])
+  }
+  const lines = []
+  for (const [i, r] of (chat.repeats || []).entries()) {
+    lines.push(jsxs('div', {
+      key: `r${i}`,
+      style: { marginTop: 4 },
+      children: [
+        row(r.steps.map(x => x.tool).join(' → '), jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: `${r.times}×` })),
+        small(r.has_side_effects
+          ? 'Sends or changes something, so Hermes keeps this step.'
+          : `A routine would skip ${r.calls_saved} tool calls.`, r.has_side_effects ? C.soft : C.green)
+      ]
+    }))
+  }
+  for (const [i, p] of (chat.patterns || []).entries()) {
+    lines.push(jsxs('div', {
+      key: `p${i}`,
+      style: { marginTop: 4 },
+      children: [
+        row(p.kind === 'streak' ? `${p.tools[0]} ${p.times}× in a row` : `${p.tools.join(' → ')} ${p.times}×`,
+          jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: 'pattern' })),
+        small('Same kind of step, different inputs each time.')
+      ]
+    }))
+  }
+  return box([
+    row('This chat', jsx('span', { style: { fontSize: '0.6875rem', color: C.muted }, children: money(chat.spent_usd) })),
+    small(`${chat.tool_calls} tool calls${chat.calls_saveable ? ` · ${chat.calls_saveable} could be skipped` : ''}`),
+    ...(lines.length ? lines : [small(chat.tool_calls ? 'No repeated steps yet.' : 'No tool calls yet.')])
+  ])
+}
+
+function Jobs({ data, act }) {
+  return jsxs('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: 12 },
+    children: [
+      jsx(Column, {
+        title: 'Spotted', items: data.spotted, empty: 'Nothing new yet.',
+        render: it => jsx(Card, { item: it, action: pill('Try', () => act('/try', { job_id: it.job_id })) })
+      }),
+      jsx(Column, {
+        title: 'Testing', items: data.testing, empty: 'Nothing being tested.',
+        render: it => jsx(Card, {
+          item: it,
+          border: C.yellow,
+          action: it.ready
+            ? pill('Promote', () => act('/promote', { routine_id: it.routine_id }), C.green)
+            : jsx('span', { style: { fontSize: '0.6875rem', color: C.muted }, children: `${it.matches} of ${it.needed}` }),
+          children: [
+            jsx(Progress, { key: 'p', value: Math.min(it.matches, it.needed), total: it.needed }),
+            small(it.ready ? 'Matched every test. Ready to promote.'
+              : it.last_test ? `Last test: ${it.last_test.why}` : 'Tested after its next scheduled run.',
+              it.ready ? C.green : C.muted)
+          ]
+        })
+      }),
+      jsx(Column, {
+        title: 'Live', items: data.live, empty: 'Nothing live yet.',
+        render: it => jsx(Card, {
+          item: it,
+          border: C.green,
+          action: pill('Undo', () => act('/undo', { routine_id: it.routine_id }), C.muted),
+          children: [small(`Saved ${money(it.saved_usd)} over ${it.live_runs} runs${it.failures ? ` · ${it.failures} failed, fell back` : ''}`, C.green)]
+        })
+      })
+    ]
+  })
+}
+
+function Watching({ items }) {
+  if (!items.length) return null
+  return jsxs('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: 4 },
+    children: [
+      label(`Watching · ${items.length}`),
+      ...items.map(it => jsx('div', {
+        key: it.job_id,
+        children: small([jsx('span', { key: 'n', style: { color: C.soft }, children: it.name }), ` · ${it.reason}`])
+      }))
+    ]
+  })
+}
+
+function Settings({ prefs, setPref }) {
+  const opt = (key, text) =>
+    jsxs('label', {
+      key,
+      style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.6875rem', color: C.soft, cursor: 'pointer' },
+      children: [
+        jsx('input', { type: 'checkbox', checked: prefs[key], onChange: e => setPref(key, e.target.checked) }),
+        text
+      ]
+    })
+  return box([
+    label('Show'),
+    opt('chat', 'This chat'),
+    opt('jobs', 'Spotted, Testing and Live'),
+    opt('watching', 'Watching')
+  ])
 }
 
 // ---------------------------------------------------------------- panel
@@ -242,14 +330,48 @@ function Panel({ ctx }) {
       .catch(err => host.notify({ kind: 'error', message: `Crystallize: ${String(err)}` }))
   }, [ctx, load])
 
+  const [prefs, setPrefs] = useState(() => ctx.storage.get('prefs', { chat: true, jobs: true, watching: true }))
+  const [showSettings, setShowSettings] = useState(false)
+  const setPref = (key, value) => {
+    const next = { ...prefs, [key]: value }
+    setPrefs(next)
+    ctx.storage.set('prefs', next)
+  }
+
+  const header = jsxs('div', {
+    key: 'header',
+    style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+    children: [
+      jsxs('div', {
+        style: { display: 'flex', alignItems: 'center', gap: 6 },
+        children: [
+          jsx('span', { style: { display: 'inline-flex', color: C.accent }, children: jsx(Codicon, { name: 'ruby', size: '0.875rem' }) }),
+          jsx('span', { style: { fontSize: '0.6875rem', letterSpacing: '0.1em', color: C.text }, children: 'CRYSTALLIZE' })
+        ]
+      }),
+      jsxs('div', {
+        style: { display: 'flex', gap: 2 },
+        children: [
+          iconButton('refresh', 'Refresh', load),
+          iconButton('settings', 'Choose what to show', () => setShowSettings(v => !v), showSettings)
+        ]
+      })
+    ]
+  })
+
   let body
   if (error) body = [small(error, C.soft)]
   else if (!data) body = [small('Loading…')]
-  else body = [jsx(ChatSection, { key: 'chat', chat: data.chat }), jsx(JobsSection, { key: 'jobs', data, act })]
+  else {
+    body = [jsx(Hero, { key: 'hero', data })]
+    if (prefs.chat) body.push(jsx(ChatCard, { key: 'chat', chat: data.chat }))
+    if (prefs.jobs) body.push(jsx(Jobs, { key: 'jobs', data, act }))
+    if (prefs.watching) body.push(jsx(Watching, { key: 'watching', items: data.watching }))
+  }
 
   return jsx('div', {
-    style: { display: 'flex', flexDirection: 'column', gap: 12, padding: 12, height: '100%', overflowY: 'auto' },
-    children: body
+    style: { display: 'flex', flexDirection: 'column', gap: 14, padding: 12, height: '100%', overflowY: 'auto' },
+    children: [header, showSettings && jsx(Settings, { key: 'settings', prefs, setPref }), ...body]
   })
 }
 
