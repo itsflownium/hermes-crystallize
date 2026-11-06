@@ -25,21 +25,29 @@ is shown at API prices.
 | GPT-6 Luna | Codex OAuth | 5 → 1 | 141k → 11k | 107s → 12s | $0.0073 → $0.0012 | **84%** |
 | Kimi K3 | Nous Portal | 3 → 1 | 54k → 9k | 47s → 10s | $0.0408 → $0.0118 | **71%** |
 
-Trials on more models also kept their savings, with the same job. These were judged on 2 runs without routines:
+Trials on more models also kept their savings, with the same job. These were judged on 2 or more runs without routines:
 
 | Model | Route | Cost per run | Saved |
 |---|---|---|---|
+| Claude Haiku 5.5 | Nous Portal | $0.0228 → $0.0021 | **91%** |
 | Gemini 3.8 Flash | Nous Portal | $0.0942 → $0.0150 | **84%** |
+| GPT-5 Nano | Nous Portal | $0.0043 → $0.0009 | **80%** |
 | MiniMax M3 | Nous Portal | $0.0207 → $0.0052 | **75%** |
 | Mistral Small 3.2 | Nous Portal | $0.0034 → $0.0012 | **65%** |
 | Granite 4.2 8B | Nous Portal | $0.0026 → $0.0010 | **62%** |
 | DeepSeek V4 Flash | Nous Portal | $0.0015 → $0.0006 | **58%** |
 | Gemma 4 26B | Nous Portal | $0.0035 → $0.0015 | **57%** |
+| Solar Mini 4 | Nous Portal | $0.0008 → $0.0004 | **49%** |
+| Mercury 3 | Nous Portal | $0.0015 → $0.0014 | **12%** |
 
-Qwen 3.8 Flash also passed, on tokens written (about 25% fewer), because this run was judged before API-price estimates existed.
-Llama 4 Scout and Nova Lite didn't complete their normal runs on this job (an empty answer and an HTTP 400 error), so they couldn't start a trial.
+Qwen 3.8 Flash also passed, on tokens written (about 25% fewer), because it was judged before API-price estimates existed.
+Llama 4 Scout and Nova Lite didn't complete their normal runs on this job (an empty answer and an HTTP 400 error), and
+Step 3.5 Flash was rejected by its provider, so none of the three could start a trial.
 
-Savings vary by job and model. Every other cloud provider uses the same lookups but hasn't had a real run. If a
+Two other kinds of job also passed: one that writes to a file on every run saved 63% at API prices, and one with its
+own pre-run script saved 67%.
+
+Savings vary by job and model. Cloud providers other than Nous Portal and Codex use the same lookups but haven't had a real run. If a
 job doesn't get cheaper on yours, it goes back to its old settings by itself.
 
 ## The savings ladder
