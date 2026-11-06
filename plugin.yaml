@@ -27,6 +27,9 @@ provides_hooks:
   - post_api_request
   - pre_tool_call
 
+provides_middleware:
+  - llm_request
+
 config_schema:
   capture_enabled:
     type: bool
