@@ -111,6 +111,22 @@ def make_transform_tool_result(ctx: Any) -> Callable[..., Any]:
     return transform
 
 
+def make_pre_llm_call(ctx: Any) -> Callable[..., Any]:
+    """Tell the main model it can route routine work, in chats where Crystallize Chat is on."""
+    from . import chat_savings
+
+    def pre_llm_call(**kwargs: Any) -> Any:
+        try:
+            if ctx.current_cron_execution() is not None:
+                return None
+            return chat_savings.routing_context(**kwargs)
+        except Exception:  # noqa: BLE001 — a hook must never break a turn
+            logger.debug("crystallize: routing note failed", exc_info=True)
+            return None
+
+    return pre_llm_call
+
+
 RUN_MARKER = "__run__"  # stands for a cron run that made no tool calls
 
 

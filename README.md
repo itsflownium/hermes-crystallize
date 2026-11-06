@@ -88,9 +88,9 @@ undo the switch.
 - **Jobs that act.** A routine only fetches data that comes before a job's first action. The AI still sends or changes what the job is meant to.
 - **Jobs with their own script.** Your script still runs first, can still stop the run, and its output stays in the prompt.
 
-## The Crystallize Cron panel
+## The panel
 
-A Crystallize Cron button in the top bar and the status bar opens a panel beside the chat. It updates from your real cron jobs: running jobs first, with their schedule, model,
+A Crystallize button in the top bar and the status bar opens a panel beside the chat, with Cron and Chat sections. It updates from your real cron jobs: running jobs first, with their schedule, model,
 reasoning and tools; a cost graph for each job; time ranges that appear only when they have data; and
 finished jobs collapsed with their full history. Totals keep real money and plan API prices apart.
 
@@ -124,12 +124,20 @@ hermes crystal undo morning-brief      # put the original prompt back
 
 ## Crystallize Chat
 
-For long or expensive chats, your main model keeps the thinking and a cheap model you pick reads big tool
-results first. A result is paid for again on every later message, so reading less adds up. Open **Crystallize
-Chat** in the sidebar and pick a model from a subscription you've connected to Hermes. Hermes keeps your
+| | Crystallize Cron | Crystallize Chat |
+|---|---|---|
+| **For** | Scheduled jobs | The chat you're in |
+| **Turned on** | Per job, with **Make cheaper** | Per chat, after your first prompt |
+| **How it saves** | Fewer AI calls and tools, cleaned results, lower reasoning, routines | Routine work sent to a cheap model, cleaned results, big ones condensed |
+| **Proof** | Each job's cost is measured, and changes that don't help are undone | Savings shown are estimates |
+
+For long or expensive chats, your main model keeps the thinking. For routine work, it sends an input to a cheap
+model you pick with `crystal_cheap` and gets the output straight back, deciding by itself when that's worth it.
+The cheap model also reads big tool results first. A result is paid for again on every later message, so reading less adds up. Open **Crystallize
+Chat** in the sidebar, or the **Chat** section of the panel, and pick a model from a subscription you've connected to Hermes. Hermes keeps your
 sign-ins; Crystallize never sees a key.
 
-Turn it on per chat with **◆ Crystallize Chat** in the message box, which prepares `/crystallize-chat on` for you to send.
+Turn it on per chat in the panel's **Chat** section, or with `/crystallize chat on` on platforms without the panel.
 
 **You can't start a chat with it.** Send your first prompt, then turn it on. Hermes only creates the chat when
 that prompt is sent, and savings come from tool results, which don't exist until the work starts.
@@ -139,10 +147,10 @@ that prompt is sent, and savings come from tool results, which don't exist until
 - File contents, errors and small results always stay exact.
 - Your main model isn't switched mid-chat, because that would lose its prompt cache.
 - If your picked model isn't cheaper than your main one, results are only cleaned.
-- While you're in a chat, the panel beside it shows that chat's savings. The figures are estimates.
+- The panel has two sections, Cron and Chat. Chat shows savings for the chat you're in. The figures are estimates.
 - A summary can still leave out something that matters, so it's off by default.
 
-`/crystallize-cron` shows what's been recorded for your scheduled jobs. Both commands work in any chat, including Telegram and Discord.
+`/crystallize` shows what's happening with your scheduled jobs and this chat. It works in any chat, including Telegram and Discord.
 
 ## How a routine runs
 

@@ -98,7 +98,22 @@ def crystal_full_result(args: dict[str, Any] | None = None, **_: Any) -> str:
     from . import chat_savings
 
     try:
+        question = str((args or {}).get("question") or "").strip()
+        if question and _ctx is not None:
+            return chat_savings.ask_full(_ctx, str((args or {}).get("result_id") or ""), question)
         return chat_savings.read_full(str((args or {}).get("result_id") or ""), (args or {}).get("offset") or 0)
     except Exception as exc:  # noqa: BLE001
         logger.warning("crystallize: crystal_full_result failed: %s", exc)
         return json.dumps({"error": "Couldn't read that result."})
+
+
+def crystal_cheap(args: dict[str, Any] | None = None, **kwargs: Any) -> str:
+    from . import chat_savings
+
+    try:
+        if _ctx is None:
+            return json.dumps({"error": "Crystallize isn't fully loaded yet. Do this yourself."})
+        return chat_savings.ask_cheap(_ctx, str((args or {}).get("input") or ""), str(kwargs.get("session_id") or ""))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("crystallize: crystal_cheap failed: %s", exc)
+        return json.dumps({"error": "The cheap model couldn't be reached. Do this yourself."})

@@ -225,6 +225,14 @@ async def chat_model(body: dict) -> dict[str, Any]:
         return {"ok": False, "message": str(exc)}
 
 
+@router.post("/chat-toggle")
+async def chat_toggle(body: dict) -> dict[str, Any]:
+    """Turn Crystallize Chat on or off for one chat, from the panel's Chat section."""
+    ch = _chat()
+    session_id = str((body or {}).get("session_id") or "")
+    return ch.set_enabled(session_id, bool((body or {}).get("on")))
+
+
 @router.get("/chat-state")
 async def chat_state(session_id: Optional[str] = None) -> dict[str, Any]:
     """Whether Crystallize Chat is on, or can be, for a chat (drives the message-box button)."""
