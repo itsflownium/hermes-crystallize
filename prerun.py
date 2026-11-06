@@ -673,7 +673,9 @@ def run(routine_id: str, dispatch: runner.Dispatch) -> tuple[str, int]:
     seen = set(meta.get("last_links") or [])
     meta["last_fingerprint"] = fp
     meta["last_data_chars"] = len(data)
-    meta["last_links"] = sorted(_links(data))[:MAX_LINKS]
+    links_now = _links(data)
+    if len(links_now) >= MIN_ITEMS:  # a run that came back in a link-poor format says nothing about the items
+        meta["last_links"] = sorted(links_now)[:MAX_LINKS]
     store.update_routine(routine_id, meta=meta)
     if meta.get("new_only") and not no_ai:
         recent = _recent_answers(routine["name"])
