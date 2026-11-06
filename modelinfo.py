@@ -189,27 +189,76 @@ def _token_usage(tokens: dict[str, Optional[int]]) -> Any:
                           reasoning_tokens=tokens.get("reasoning") or 0)
 
 
+def _listed_models() -> dict[str, tuple[str, str]]:
+    """Model name → where Hermes lists it with a price, from the big catalogs it already keeps."""
+    def fetch() -> dict[str, tuple[str, str]]:
+        listed: dict[str, tuple[str, str]] = {}
+        try:
+            from hermes_cli.models import provider_model_ids
+
+            for catalog in ("nous", "openrouter"):
+                for name in provider_model_ids(catalog) or []:
+                    if "/" in name and ":" not in name and not name.startswith("~"):
+                        listed.setdefault(name.split("/", 1)[1].lower(), (name, catalog))
+        except Exception:  # noqa: BLE001
+            logger.debug("crystallize: reading model catalogs failed", exc_info=True)
+        return listed
+    return _cached(("listed",), fetch)
+
+
+def _estimate(name: str, vendor: str, usage: Any) -> Optional[float]:
+    from agent.usage_pricing import estimate_usage_cost
+
+    result = estimate_usage_cost(name, usage, provider=vendor)
+    return float(result.amount_usd) if result.status == "estimated" and result.amount_usd is not None else None
+
+
+def _price_route(model: str, provider: Optional[str]) -> Optional[tuple[str, str]]:
+    """Where to find a price for this model. Its vendor's own list first ("openai-codex" is
+    priced under "openai", "vendor/model" under "vendor"), then the same model by exact name in
+    Hermes's catalogs. A similar name doesn't count: it may be a different model."""
+    from agent.usage_pricing import CanonicalUsage
+
+    probe = CanonicalUsage(input_tokens=1000, output_tokens=1000)
+    tries = [(model, (provider or "").split("-")[0])]
+    short = model
+    if "/" in model:
+        vendor, short = model.split("/", 1)
+        tries.append((short, vendor))
+    tries.append((model, provider or ""))
+    listed = _listed_models().get(short.lower())
+    if listed:
+        tries.append(listed)
+    for name, vendor in tries:
+        if vendor and _estimate(name, vendor, probe):
+            return name, vendor
+    return None
+
+
 def api_cost(model: Optional[str], provider: Optional[str], tokens: dict[str, Optional[int]]) -> Optional[float]:
-    """What a run included in a subscription would cost at the vendor's API prices, using
-    Hermes's price list: "openai-codex" looks under "openai", "vendor/model" under "vendor".
-    None if Hermes has no price for it, as with a local model."""
+    """What a run costs at listed API prices, for one Hermes has no cost for: a subscription,
+    or a route with no price. None if no list has this model."""
     if not model:
         return None
     try:
-        from agent.usage_pricing import estimate_usage_cost
-
-        usage = _token_usage(tokens)
-        names = [(model, (provider or "").split("-")[0])]  # "openai-codex" is priced under "openai"
-        if "/" in model:
-            names.append((model.split("/", 1)[1], model.split("/", 1)[0]))
-        for name, vendor in names:
-            if vendor:
-                result = estimate_usage_cost(name, usage, provider=vendor)
-                if result.status == "estimated" and result.amount_usd is not None:
-                    return float(result.amount_usd)
+        where = _cached(("price route", provider, model), lambda: _price_route(model, provider))
+        if not where:
+            return None
+        exact = _estimate(where[0], where[1], _token_usage(tokens))
+        if exact is not None:
+            return exact
+        # Hermes won't total a run when a list has no rate for one kind of token (usually
+        # cached input). token_prices fills that gap with the plain input rate, which can only
+        # overstate this part of the cost, never hide it.
+        prices = token_prices(model, provider)
+        if not prices:
+            return None
+        return ((tokens.get("input") or 0) * prices["input"] + (tokens.get("output") or 0) * prices["output"]
+                + (tokens.get("cache_read") or 0) * prices["cache_read"]
+                + (tokens.get("cache_write") or 0) * prices["cache_write"])
     except Exception:  # noqa: BLE001
         logger.debug("crystallize: API cost lookup failed", exc_info=True)
-    return None
+        return None
 
 
 def token_prices(model: Optional[str], provider: Optional[str]) -> Optional[dict[str, float]]:
@@ -221,7 +270,8 @@ def token_prices(model: Optional[str], provider: Optional[str]) -> Optional[dict
         try:
             from agent.usage_pricing import get_pricing_entry
 
-            for name, vendor in ((model, provider), (model, (provider or "").split("-")[0])):
+            where = _cached(("price route", provider, model), lambda: _price_route(model, provider))
+            for name, vendor in ((model, provider), *([where] if where else [])):
                 entry = get_pricing_entry(name, provider=vendor)
                 if entry and entry.output_cost_per_million:
                     def per(value: Any, fallback: Any = None) -> float:

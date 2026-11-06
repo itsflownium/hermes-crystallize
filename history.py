@@ -53,7 +53,7 @@ class Run:
     cache_read_tokens: Optional[int] = None
     cache_write_tokens: Optional[int] = None
     included: bool = False                 # covered by a subscription, so cost_usd is 0
-    api_cost_usd: Optional[float] = None   # for an included run: its cost at API prices
+    api_cost_usd: Optional[float] = None   # when Hermes has no cost for it: at listed API prices
     session_started: Optional[float] = None
     finished: bool = False
     api_calls: Optional[int] = None
@@ -221,7 +221,7 @@ def _apply_session(run: Run, info: Optional[dict[str, Any]]) -> None:
     run.session_started = info.get("started_at")
     run.finished = bool(info.get("ended_at"))
     run.included = info.get("cost_status") == "included"
-    if run.included:
+    if run.included or run.cost_usd is None:
         run.api_cost_usd = modelinfo.api_cost(info.get("model"), info.get("billing_provider"), {
             "input": run.input_tokens, "output": run.output_tokens, "cache_read": run.cache_read_tokens,
             "cache_write": run.cache_write_tokens, "reasoning": run.reasoning_tokens})

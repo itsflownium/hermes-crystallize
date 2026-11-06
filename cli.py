@@ -52,7 +52,7 @@ def _print_job(job: str) -> None:
     for i, run in enumerate(runs, 1):
         flag = _run_flag(run)
         tokens = "" if run.total_tokens is None else f"  {run.total_tokens:,} tokens"
-        api = "" if run.api_cost_usd is None else f" (included; {_money(run.api_cost_usd)} at API prices)"
+        api = "" if run.api_cost_usd is None else f" ({'included; ' if run.included else 'estimated: '}{_money(run.api_cost_usd)} at API prices)"
         print(f"Run {i}  {run.execution_id[:8]}  {_money(run.cost_usd)}{api}{tokens}  "
               f"{_num(run.duration_s)}s  {len(run.steps)} tool calls{flag}")
         for s in run.steps:

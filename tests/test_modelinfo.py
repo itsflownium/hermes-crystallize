@@ -102,3 +102,29 @@ def test_odd_routes_never_raise(monkeypatch, provider, model):
     assert modelinfo.api_cost(model, provider, {"input": 1}) is None or provider
     modelinfo.output_price(route)
     modelinfo.token_prices(model, provider)
+
+
+def test_price_route_finds_the_same_model_elsewhere_by_exact_name(monkeypatch):
+    pytest.importorskip("agent.usage_pricing")
+    monkeypatch.setattr(modelinfo, "_listed_models", lambda: {"some-model": ("vendor/some-model", "nous"), "known": ("v/known", "nous")})
+    priced = {("vendor/some-model", "nous")}
+    monkeypatch.setattr(modelinfo, "_estimate", lambda name, vendor, usage: 0.5 if (name, vendor) in priced else None)
+    assert modelinfo._price_route("some-model", "direct-provider") == ("vendor/some-model", "nous")
+    assert modelinfo._price_route("SOME-MODEL", "direct-provider") == ("vendor/some-model", "nous")
+    assert modelinfo._price_route("some-model-highspeed", "direct-provider") is None
+
+
+def test_own_vendor_price_comes_first(monkeypatch):
+    pytest.importorskip("agent.usage_pricing")
+    monkeypatch.setattr(modelinfo, "_listed_models", lambda: {"m": ("x/m", "nous")})
+    monkeypatch.setattr(modelinfo, "_estimate", lambda name, vendor, usage: 1.0)
+    assert modelinfo._price_route("m", "openai-codex") == ("m", "openai")
+
+
+def test_a_missing_token_rate_still_gives_an_estimate(monkeypatch):
+    monkeypatch.setattr(modelinfo, "_lookups", {("price route", "p", "m"): (float("inf"), ("m", "p"))})
+    monkeypatch.setattr(modelinfo, "_LOOKUP_TTL_S", float("inf"))
+    monkeypatch.setattr(modelinfo, "_token_usage", lambda tokens: None)
+    monkeypatch.setattr(modelinfo, "_estimate", lambda *a: None)
+    monkeypatch.setattr(modelinfo, "token_prices", lambda *a: {"input": 2.0, "output": 3.0, "cache_read": 2.0, "cache_write": 2.0})
+    assert modelinfo.api_cost("m", "p", {"input": 1, "output": 1, "cache_read": 1}) == 7.0

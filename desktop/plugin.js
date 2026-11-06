@@ -208,7 +208,7 @@ function Bars({ timeline }) {
         ]
       }),
       jsx('div', { style: { fontSize: '0.8125rem', color: C.text, fontVariantNumeric: 'tabular-nums' }, children: money(t.cost_usd) }),
-      t.api_cost_usd != null ? jsx('div', { style: { fontSize: '0.625rem', color: C.soft }, children: `Included in your plan · ${money(t.api_cost_usd)} at API prices` }) : null,
+      t.api_cost_usd != null ? jsx('div', { style: { fontSize: '0.625rem', color: C.soft }, children: t.included ? `Included in your plan · ${money(t.api_cost_usd)} at API prices` : `No price from this route · about ${money(t.api_cost_usd)} at API prices` }) : null,
       jsx('div', {
         style: { fontSize: '0.625rem', color: C.soft, fontVariantNumeric: 'tabular-nums' },
         children: t.skipped || t.no_ai ? 'The AI never started' : [secs(t.seconds), `${t.tool_calls} tool call${t.tool_calls === 1 ? '' : 's'}`,
@@ -372,7 +372,7 @@ function JobBubble({ item, status, trialRuns, act, exp }) {
     const skipped = (item.after && item.after.skipped) || 0
     sub = measured
       ? [limited ? null : perMonth(week), limited ? null : `saved ${money(total)} so far`,
-        `over ${item.after.runs} runs`, plan ? 'at API prices, included in your plan' : null,
+        `over ${item.after.runs} runs`, plan ? (plan.included ? 'at API prices, included in your plan' : 'estimated at API prices') : null,
         skipped ? `${skipped} skipped, nothing changed` : null].filter(Boolean).join(' · ')
       : 'Savings show after its first live run.'
     action = pill('Undo', () => act('/undo', { routine_id: item.routine_id }), C.muted)
@@ -639,7 +639,7 @@ function TuneRow({ tune, trialRuns, act }) {
   if (!tune) return null
   const notes = [
     tune.status_text !== 'Not tried yet' ? tune.status_text : null,
-    tune.api_cost_now != null && tune.status !== 'kept' ? `in your plan, about ${money(tune.api_cost_now)} a run at API prices` : null,
+    tune.api_cost_now != null && tune.status !== 'kept' ? `${tune.included_now ? 'in your plan, ' : ''}about ${money(tune.api_cost_now)} a run at API prices` : null,
     tune.tokens_now != null ? `${Math.round(tune.tokens_now).toLocaleString()} tokens a run` : null,
     tune.cleaned_chars != null ? `${Math.round(tune.cleaned_chars).toLocaleString()} characters cleaned from tool results` : null,
     tune.reasoning_share != null && tune.status !== 'kept' ? `reasoning is about ${Math.round(tune.reasoning_share * 100)}% of its cost` : null

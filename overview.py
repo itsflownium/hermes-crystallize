@@ -225,6 +225,7 @@ def _timeline(before: list[history.Run], after: list[history.Run], limit: int = 
         "tool_calls": len(r.steps),
         "ai_calls": r.api_calls,
         "api_cost_usd": r.api_cost_usd,
+        "included": r.included,
         "tokens": r.total_tokens,
     } for r, is_after in rows[-limit:]]
 
@@ -386,7 +387,8 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
                 saved_api += plan_saved
                 rate = max(0.0, b["api_cost_usd"] - af["api_cost_usd"]) * (per_week or 0.0)
                 api_week += rate
-                card["plan"] = {"before": b["api_cost_usd"], "after": af["api_cost_usd"], "saved": plan_saved, "per_week": rate}
+                card["plan"] = {"before": b["api_cost_usd"], "after": af["api_cost_usd"], "saved": plan_saved, "per_week": rate,
+                                "included": any(r.included for r in after or [])}
             if b and af and b.get("cost_usd") is not None and af.get("cost_usd") is not None and per_week:
                 card["saving_per_week"] = max(0.0, b["cost_usd"] - af["cost_usd"]) * per_week
             free_share = (af or {}).get("skipped", 0) / af["runs"] if af and af.get("runs") else 0.0

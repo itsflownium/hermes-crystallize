@@ -36,7 +36,7 @@ Trials on more models also kept their savings, with the same job. These were jud
 | DeepSeek V4 Flash | Nous Portal | $0.0015 → $0.0006 | **58%** |
 | Gemma 4 26B | Nous Portal | $0.0035 → $0.0015 | **57%** |
 
-Qwen 3.8 Flash also passed, but Hermes had no price for its runs, so it was compared on tokens written (about 25% fewer).
+Qwen 3.8 Flash also passed, on tokens written (about 25% fewer), because this run was judged before API-price estimates existed.
 Llama 4 Scout and Nova Lite didn't complete their normal runs on this job (an empty answer and an HTTP 400 error), so they couldn't start a trial.
 
 Savings vary by job and model. Every other cloud provider uses the same lookups but hasn't had a real run. If a
@@ -59,7 +59,7 @@ Each job uses every step it can, from the biggest saving down. The panel shows e
 
 ## How it decides
 
-1. **Measure.** Real cost per run. A subscription run costs $0, so it's compared at its API price, from its tokens and Hermes's price list.
+1. **Measure.** Real cost per run. A subscription run costs $0 and some routes have no price, so those are estimated from their tokens and the same model's listed API price. A model on no price list compares tokens, then time.
 2. **Trial.** Click **Make cheaper** (or **Make all jobs cheaper**), or run `hermes crystal tune <job>`. Earlier runs from Hermes's own records count, so a slow job doesn't wait weeks to start.
 3. **Check.** After 2 answers: did any run fail, did it stop an action it normally takes, are answers much shorter or missing items or links, and did the cost really fall? Close results get more runs.
 4. **Keep or adjust.** If answers suffer, tools and then reasoning come back a step at a time. If nothing works, or it wasn't cheaper, the old settings return. Your global settings never change.
