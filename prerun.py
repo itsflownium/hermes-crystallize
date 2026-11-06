@@ -240,6 +240,21 @@ def _clean_for_agent(text: str) -> str:
     return clean_text(s)
 
 
+_PASSING_LINE = re.compile(r"(\.\.\. ok|\bPASSED\b.*|^\s*(ok|✓|✔|PASS)\b.*)\s*$", re.IGNORECASE)
+MIN_PASSING_LINES = 20      # fewer than this isn't a long test log
+
+
+def collapse_passing(text: str) -> str:
+    """Remove the passing lines from a long test log and say how many went. Failures, errors
+    and everything else stay exactly as they were. Uses no AI."""
+    lines = text.split("\n")
+    kept = [line for line in lines if not _PASSING_LINE.search(line)]
+    removed = len(lines) - len(kept)
+    if removed < MIN_PASSING_LINES:
+        return text
+    return f"[{removed} passing test lines removed]\n" + "\n".join(kept)
+
+
 def clean_result(tool: str, result: Any) -> Optional[str]:
     """A smaller version of a tool result, in its original shape, or None to leave it.
 
@@ -268,7 +283,7 @@ def clean_result(tool: str, result: Any) -> Optional[str]:
                                 page[key], changed = _clean_for_agent(page[key]), True
                 for key in ("output", "content", "result", "text"):
                     if isinstance(data.get(key), str):
-                        data[key], changed = _clean_for_agent(data[key]), True
+                        data[key], changed = _clean_for_agent(collapse_passing(data[key])), True
                 if not changed:
                     return None
                 cleaned = json.dumps(data, ensure_ascii=False)
@@ -508,7 +523,7 @@ def clean_result(tool: str, result: Any) -> Optional[str]:
                                 page[key], changed = _clean_for_agent(page[key]), True
                 for key in ("output", "content", "result", "text"):
                     if isinstance(data.get(key), str):
-                        data[key], changed = _clean_for_agent(data[key]), True
+                        data[key], changed = _clean_for_agent(collapse_passing(data[key])), True
                 if not changed:
                     return None
                 cleaned = json.dumps(data, ensure_ascii=False)

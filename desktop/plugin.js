@@ -1,6 +1,6 @@
-// Crystallize: a top-bar button (and ⌘K command) that opens the savings panel.
+// Crystallize: Crystallize Cron (a top-bar button and panel) and Crystallize Chat (a sidebar page).
 // Plain ESM, loaded uncompiled by Hermes Desktop (no JSX, no build step).
-import { Codicon, host, useValue } from '@hermes/plugin-sdk'
+import { Codicon, ROUTES_AREA, SIDEBAR_NAV_AREA, host, useValue } from '@hermes/plugin-sdk'
 import { useCallback, useEffect, useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
@@ -464,56 +464,11 @@ function Hero({ data, act }) {
 
 function HowItWorks({ onHide }) {
   return bubble([
-    row('How Crystallize saves', pill('Got it', onHide, C.muted)),
+    row('How Crystallize Cron saves', pill('Got it', onHide, C.muted)),
     small('A cron job costs roughly its prompt size times its AI calls, plus reasoning. Crystallize shows where each job\'s money goes and works on all of it.', C.soft),
     small('Make cheaper uses fewer AI calls, keeps only the tools a job uses, cleans tool results and lowers reasoning. It stays only if the answers hold up and the job really got cheaper. Otherwise the old settings come back by themselves.', C.soft),
     small('A job that repeats the same steps can also get a routine that fetches its data before the AI starts, after matching test runs. If nothing changed, the run can skip the AI, or repeat its last answer if someone expects a message.', C.soft)
   ], 'how')
-}
-
-function ChatCard({ chat, enabled, hasSession }) {
-  if (hasSession && !enabled) {
-    return bubble([
-      row('This chat', chip('Off', C.muted)),
-      small('Click ◆ Crystallize in the message box and press Enter to analyse this chat.')
-    ], 'chat')
-  }
-  if (!chat) {
-    return bubble([row('This chat', null), small('Open a chat to analyse it.')], 'chat')
-  }
-  const lines = []
-  for (const [i, r] of (chat.repeats || []).entries()) {
-    lines.push(jsxs('div', {
-      key: `r${i}`,
-      children: [
-        row(r.steps.map(x => x.tool).join(' → '), chip(`${r.times}×`, C.accent)),
-        small(r.has_side_effects ? 'Sends or changes something, so Hermes keeps this step.'
-          : `Saving it as a routine would skip ${r.calls_saved} tool calls.`, r.has_side_effects ? C.soft : C.green)
-      ]
-    }))
-  }
-  for (const [i, p] of (chat.patterns || []).entries()) {
-    lines.push(jsxs('div', {
-      key: `p${i}`,
-      children: [
-        row(p.kind === 'streak' ? `${p.tools[0]} ${p.times}× in a row` : `${p.tools.join(' → ')} ${p.times}×`, chip('pattern', C.muted)),
-        small('Same kind of step with different inputs each time.')
-      ]
-    }))
-  }
-  return bubble([
-    row('This chat', chip('On', C.green)),
-    jsxs('div', {
-      key: 'stats',
-      style: { display: 'flex', gap: 8 },
-      children: [
-        jsxs('div', { style: { flex: 1 }, children: [small('Spent'), big(money(chat.spent_usd))] }),
-        jsxs('div', { style: { flex: 1 }, children: [small('Tool calls'), big(String(chat.tool_calls))] }),
-        jsxs('div', { style: { flex: 1 }, children: [small('Could skip'), big(String(chat.calls_saveable), chat.calls_saveable ? C.green : null)] })
-      ]
-    }),
-    ...(lines.length ? lines : [small(chat.tool_calls ? 'No repeated steps yet.' : 'No tool calls yet.')])
-  ], 'chat')
 }
 
 function Jobs({ data, act, exp }) {
@@ -764,62 +719,13 @@ function Settings({ prefs, setPref }) {
     })
   return bubble([
     label('Show'),
-    opt('explain', 'How Crystallize saves'),
-    opt('chat', 'This chat'),
+    opt('explain', 'How Crystallize Cron saves'),
     opt('jobs', 'Scheduled jobs'),
     opt('popups', 'Pop-ups when a job is ready to promote')
   ], 'settings')
 }
 
 // ---------------------------------------------------------------- message-box toggle
-
-// Puts `/crystallize on` (or `off`) into the message box. Nothing changes until
-// the user sends it, so turning Crystallize on or off is always their action.
-function ComposerToggle({ ctx }) {
-  const sessionId = useValue(host.state.focusedStoredSessionId)
-  const [enabled, setEnabled] = useState(false)
-
-  const refresh = useCallback(() => {
-    if (!sessionId) { setEnabled(false); return }
-    ctx.rest(`/chat-state?session_id=${encodeURIComponent(sessionId)}`)
-      .then(res => setEnabled(Boolean(res && res.enabled)))
-      .catch(() => {})
-  }, [ctx, sessionId])
-
-  useEffect(() => {
-    refresh()
-    return ctx.setInterval(refresh, 4000)
-  }, [ctx, refresh])
-
-  const onClick = async () => {
-    const command = enabled ? '/crystallize off' : '/crystallize on'
-    diag('composer toggle', { sessionId, command })
-    const ok = await host.composer.insertText(null, command, { mode: 'prefix' })
-    host.composer.focus(null)
-    host.notify(ok
-      ? { kind: 'info', message: `Press Enter to send ${command}.` }
-      : { kind: 'warning', message: 'Click into the message box first, then try again.' })
-  }
-
-  return jsxs('button', {
-    type: 'button',
-    title: enabled ? 'Crystallize is on for this chat. Click to prepare /crystallize off.'
-                   : 'Crystallize is off for this chat. Click to prepare /crystallize on.',
-    onClick,
-    style: {
-      display: 'inline-flex', alignItems: 'center', gap: 4, height: 24, padding: '0 7px',
-      borderRadius: 6, border: `0.5px solid ${enabled ? C.green : C.stroke}`, background: 'none',
-      color: enabled ? C.text : C.muted, fontSize: '0.6875rem', cursor: 'pointer', whiteSpace: 'nowrap'
-    },
-    children: [
-      jsx(Codicon, { name: 'ruby', size: '0.75rem' }),
-      'Crystallize',
-      jsx('span', { style: { width: 6, height: 6, borderRadius: 3, background: enabled ? C.green : C.stroke } })
-    ]
-  })
-}
-
-// ---------------------------------------------------------------- panel
 
 function Panel({ ctx }) {
   // Stored (durable) id of the chat being looked at: the id Hermes keys costs
@@ -858,6 +764,11 @@ function Panel({ ctx }) {
       .catch(err => host.notify({ kind: 'error', message: `Crystallize: ${String(err)}` }))
   }, [ctx, load])
 
+  const [section, setSection] = useState(() => ctx.storage.get('section', 'cron'))
+  const pickSection = next => {
+    setSection(next)
+    ctx.storage.set('section', next)
+  }
   const [opened, setOpened] = useState(() => ctx.storage.get('expanded_choices', {}))
   const exp = {
     open: opened,
@@ -917,7 +828,6 @@ function Panel({ ctx }) {
     const hiddenCount = [...data.testing, ...data.live, ...data.spotted, ...(data.watching || []), ...(data.finished || [])].filter(x => !seen(x)).length
     body = [jsx(Hero, { key: 'hero', data, act })]
     if (prefs.explain !== false) body.push(jsx(HowItWorks, { key: 'how', onHide: () => setPref('explain', false) }))
-    if (prefs.chat) body.push(jsx(ChatCard, { key: 'chat', chat: data.chat, enabled: data.chat_enabled, hasSession: Boolean(sessionId) }))
     if (prefs.jobs) body.push(jsx(Jobs, { key: 'jobs', data: shown, act, exp }))
     if (prefs.jobs) body.push(jsx(Finished, { key: 'finished', items: finishedShown, exp }))
     if (prefs.jobs && hiddenCount) body.push(jsx('div', { key: 'hidden', children: pill(`Show ${hiddenCount} removed job${hiddenCount === 1 ? '' : 's'}`, showHidden, C.muted) }))
@@ -925,7 +835,292 @@ function Panel({ ctx }) {
 
   return jsx('div', {
     style: { display: 'flex', flexDirection: 'column', gap: 14, padding: 12, height: '100%', overflowY: 'auto' },
-    children: [header, showSettings && jsx(Settings, { key: 'settings', prefs, setPref }), ...body]
+    children: section === 'notes'
+      ? [header, jsx(SectionTabs, { key: 'tabs', section, onPick: pickSection }), jsx(NotesSection, { key: 'notes' })]
+      : section === 'chat'
+      ? [header, jsx(SectionTabs, { key: 'tabs', section, onPick: pickSection }), jsx(ChatSection, { key: 'chat', ctx, sessionId })]
+      : [header, jsx(SectionTabs, { key: 'tabs', section, onPick: pickSection }), showSettings && jsx(Settings, { key: 'settings', prefs, setPref }), ...body]
+  })
+}
+
+// ---------------------------------------------------------------- Crystallize Chat page
+
+const CHAT_PATH = '/crystallize-chat'
+
+function ModelPicker({ ctx, picked, onPicked }) {
+  const [providers, setProviders] = useState(null)
+  const [active, setActive] = useState(null)
+  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(null)
+
+  useEffect(() => {
+    ctx.rest('/chat-models').then(res => setProviders((res && res.providers) || [])).catch(() => setProviders([]))
+  }, [ctx])
+
+  if (!providers) return bubble([label('Cheap model'), small('Loading your connected subscriptions…')], 'picker')
+  if (!providers.length) {
+    return bubble([label('Cheap model'), small('No connected subscriptions found. Connect one in Hermes first, and it will show up here.')], 'picker')
+  }
+  const slug = active || (picked && picked.provider) || providers[0].slug
+  const provider = providers.find(p => p.slug === slug) || providers[0]
+  const term = search.trim().toLowerCase()
+  const models = provider.models.filter(m => !term || m.id.toLowerCase().includes(term))
+  const choose = model => {
+    setSaving(model.id)
+    ctx.rest('/chat-model', { method: 'POST', body: { provider: provider.slug, model: model.id } })
+      .then(res => {
+        host.notify({ kind: res && res.ok ? 'success' : 'warning', message: (res && res.message) || 'Saved.' })
+        if (res && res.ok) onPicked()
+      })
+      .catch(err => host.notify({ kind: 'error', message: `Crystallize: ${String(err)}` }))
+      .finally(() => setSaving(null))
+  }
+  return bubble([
+    row('Cheap model', picked && picked.model ? chip(picked.model.split('/').pop(), C.green) : chip('None picked', C.muted)),
+    small('Your main model sends it routine work and gets the output straight back, and it reads big tool results. These come from the subscriptions connected to Hermes, which keeps your sign-ins. Models Hermes features are first, then the cheapest.', C.soft),
+    jsx('div', {
+      key: 'subs',
+      role: 'tablist',
+      style: { display: 'flex', gap: 2, flexWrap: 'wrap' },
+      children: providers.map(p => jsx('button', {
+        key: p.slug,
+        type: 'button',
+        role: 'tab',
+        'aria-selected': p.slug === provider.slug,
+        onClick: () => setActive(p.slug),
+        style: {
+          padding: '1px 7px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: '0.6875rem', lineHeight: 1.6,
+          background: p.slug === provider.slug ? C.stroke : 'none', color: p.slug === provider.slug ? C.text : C.muted
+        },
+        children: p.name
+      }))
+    }),
+    jsx('input', {
+      key: 'search',
+      type: 'search',
+      value: search,
+      placeholder: `Search ${provider.name} models`,
+      'aria-label': `Search ${provider.name} models`,
+      onChange: e => setSearch(e.target.value),
+      style: {
+        padding: '4px 8px', borderRadius: 6, border: `0.5px solid ${C.stroke}`, background: 'none',
+        color: C.text, fontSize: '0.75rem', width: '100%', boxSizing: 'border-box'
+      }
+    }),
+    jsx('div', {
+      key: 'models',
+      style: { display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 280, overflowY: 'auto' },
+      children: models.length ? models.slice(0, 60).map(m => {
+        const on = picked && picked.provider === provider.slug && picked.model === m.id
+        const price = m.output_per_million != null ? `$${m.input_per_million.toFixed(2)} in · $${m.output_per_million.toFixed(2)} out per million` : 'No listed price'
+        return jsxs('button', {
+          key: m.id,
+          type: 'button',
+          disabled: saving === m.id,
+          onClick: () => choose(m),
+          style: {
+            display: 'flex', flexDirection: 'column', gap: 1, textAlign: 'left', padding: '5px 8px', borderRadius: 6, cursor: 'pointer',
+            border: `0.5px solid ${on ? C.green : 'transparent'}`, background: on ? C.tile : 'none', color: C.text
+          },
+          children: [
+            jsx('span', { style: { fontSize: '0.75rem' }, children: `${m.id}${m.featured ? ' · featured' : ''}` }),
+            jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: price })
+          ]
+        })
+      }) : [small('No models match that search.')]
+    })
+  ], 'picker')
+}
+
+function ThisChat({ state, onToggle, heading = 'This chat' }) {
+  if (!state.session_id) return bubble([label(heading), small('Send a message in any chat, then come back here to turn it on.')], 'this')
+  const saved = state.this_chat
+  const status = state.can_start || state.enabled
+    ? pill(state.enabled ? 'Turn off' : 'Turn on', onToggle, state.enabled ? C.muted : C.accent)
+    : chip('Off', C.muted)
+  if (!state.enabled && !state.can_start) {
+    return bubble([row(heading, status), small(state.why_not, C.soft)], 'this')
+  }
+  if (!state.enabled) {
+    return bubble([row(heading, status), small('Off for this chat. Turn it on to start saving from your next tool result.', C.soft)], 'this')
+  }
+  if (!saved) {
+    return bubble([row(heading, status), small('On. Savings appear after a tool returns a big result.', C.soft)], 'this')
+  }
+  const cells = [
+    ['Removed', `${tokensText(saved.tokens_removed)} tokens`, C.green],
+    ['Results shrunk', String(saved.results)],
+    saved.cheap_cost ? ['Cheap model', money(saved.cheap_cost)] : null,
+    state.chat_spent_usd != null ? ['Chat so far', money(state.chat_spent_usd)] : null
+  ].filter(Boolean)
+  return bubble([
+    row(heading, status),
+    jsx('div', {
+      key: 'cells',
+      style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 8 },
+      children: cells.map(([title, value, color]) => jsxs('div', {
+        key: title,
+        children: [
+          jsx('div', { style: { fontSize: '0.625rem', color: C.muted }, children: title }),
+          jsx('div', { style: { fontSize: '0.8125rem', color: color || C.text, fontVariantNumeric: 'tabular-nums' }, children: value })
+        ]
+      }))
+    }),
+    saved.net_once != null ? small(`Estimated saving: about ${money(Math.max(0, saved.net_once))} on the next message alone, after the cheap model's cost. It repeats on each later message.`, C.soft) : null,
+    state.chat && state.chat.calls_saveable ? small(`Repeated steps: a saved routine could skip ${state.chat.calls_saveable} tool call${state.chat.calls_saveable === 1 ? '' : 's'} in this chat.`, C.soft) : null,
+    state.not_cheaper ? small('Your cheap model costs the same or more than your main model, so results are only cleaned. Pick a cheaper one on the Crystallize Chat page.', C.yellow) : null
+  ], 'this')
+}
+
+// The sidebar page isn't inside a chat, so it works on the chat you were last in.
+function ChatSection({ ctx, sessionId: focused }) {
+  const [remembered, setRemembered] = useState(() => ctx.storage.get('last_chat', null))
+  useEffect(() => {
+    if (focused && focused !== remembered) {
+      setRemembered(focused)
+      ctx.storage.set('last_chat', focused)
+    }
+  }, [ctx, focused, remembered])
+  const sessionId = focused || remembered
+  const [state, setState] = useState(null)
+  const [error, setError] = useState(null)
+  const load = useCallback(() => {
+    const q = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''
+    ctx.rest(`/chat-summary${q}`)
+      .then(res => { if (res && res.error) setError(res.error); else { setState(res); setError(null) } })
+      .catch(() => setError("Couldn't reach the Crystallize backend. Is the plugin enabled?"))
+  }, [ctx, sessionId])
+  useEffect(() => {
+    load()
+    return ctx.setInterval(load, REFRESH_MS)
+  }, [ctx, load])
+  const toggle = () => {
+    ctx.rest('/chat-toggle', { method: 'POST', body: { session_id: sessionId, on: !state.enabled } })
+      .then(res => {
+        if (res && !res.ok) host.notify({ kind: 'warning', message: res.message })
+        load()
+      })
+      .catch(err => host.notify({ kind: 'error', message: `Crystallize: ${String(err)}` }))
+  }
+
+  return jsxs('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: 14 },
+    children: [
+      error ? small(error, C.soft) : null,
+      !state && !error ? small('Loading…') : null,
+      state ? jsx(ThisChat, { key: 'this', state, onToggle: toggle, heading: focused ? 'This chat' : `Your last chat${state.title ? `: ${state.title}` : ''}` }) : null,
+      state ? jsx(ModelPicker, { key: 'picker', ctx, picked: state.model, onPicked: load }) : null,
+      state ? bubble([
+        label('How it saves'),
+        small('Your main model keeps the thinking. For routine work like summarizing or reformatting, it sends an input to your cheap model and gets the output straight back, deciding by itself when that\'s worth doing.', C.soft),
+        small('A big tool result is paid for again on every later message, so results are also cleaned, and big ones are condensed.', C.soft),
+        small('Your main model is never switched mid-chat, which would lose its prompt cache. File contents, errors and small results stay exact. When a result is noticeably reduced, your main model can read the original.', C.soft),
+        small(state.why_not_first, C.soft)
+      ], 'how') : null
+    ]
+  })
+}
+
+function ChatPage({ ctx }) {
+  const sessionId = useValue(host.state.focusedStoredSessionId)
+  return jsx('div', {
+    style: { height: '100%', overflowY: 'auto' },
+    children: jsx('div', {
+      style: { padding: 16, maxWidth: 640, margin: '0 auto' },
+      children: jsxs('div', {
+        style: { display: 'flex', flexDirection: 'column', gap: 14 },
+        children: [
+          jsxs('div', {
+            key: 'title',
+            style: { display: 'flex', alignItems: 'center', gap: 6, color: C.text },
+            children: [jsx(Codicon, { name: 'ruby', size: '0.875rem' }), jsx('span', { style: { fontSize: '0.8125rem', letterSpacing: '0.08em' }, children: 'CRYSTALLIZE CHAT' })]
+          }),
+          jsx(ChatSection, { key: 'section', ctx, sessionId })
+        ]
+      })
+    })
+  })
+}
+
+// Two sections, like the pages of a website: one for scheduled jobs, one for the chat you're in.
+// Plain explanations of everything on the panel.
+const NOTES = [
+  ['The difference', [
+    ['Crystallize Cron', 'Makes scheduled jobs cheaper. Each change is tested on real runs and stays only if it proves cheaper with good answers.'],
+    ['Crystallize Chat', 'Makes the chat you\'re in cheaper. You turn it on for each chat, and your main model sends routine work to a cheap model you pick.']
+  ]],
+  ['How Cron saves', [
+    ['Make cheaper', 'Starts a trial: fewer AI calls, only the tools the job uses, cleaned tool results and lower reasoning. After a few answers it stays only if the job got cheaper.'],
+    ['Routine', 'Steps a job repeats, saved so they run before the AI starts. It needs matching test runs first, and you choose when to promote it.'],
+    ['Live routine', 'The routine is in use. If it fails, the AI does the whole task, and two failures in a row switch it off.'],
+    ['Savings score', 'How much of your active scheduled work already runs on cheaper, proven settings.']
+  ]],
+  ['When nothing has changed', [
+    ['If unchanged: stay quiet', 'The job\'s data is the same as last run, so no AI runs and no message goes out. That run costs nothing.'],
+    ['If unchanged: repeat last answer', 'One short AI call repeats the last answer, so anyone expecting a message still gets one.'],
+    ['If unchanged: run the AI', 'The job runs as normal every time, even when nothing changed.'],
+    ['Run with no AI', 'For jobs that only report their data, like a status check. The routine\'s output is the result, at no cost.']
+  ]],
+  ['How Chat saves', [
+    ['Cleaned results', 'Removes markup and repeated space from tool results with no AI. File contents, errors and small results stay exact.'],
+    ['Routing', 'Your main model decides when to send routine work to your cheap model and takes the output straight back, such as summarizing or extracting data. It keeps decisions, anything that sends or changes something, and the final answer.'],
+    ['Cheap model', 'Does routed tasks and condenses big tool results. Your main model doesn\'t change. If the cheap model is slow or isn\'t worth it, results are only cleaned.'],
+    ['Full results', 'When a result is noticeably reduced, the exact original is kept for 7 days. Your main model can read it, or ask the cheap model about it.'],
+    ['Why not from the start', 'Hermes creates the chat when your first prompt is sent, and savings come from tool results, which don\'t exist until the work starts.']
+  ]],
+  ['Reading the numbers', [
+    ['Spent', 'What Hermes recorded as the real cost.'],
+    ['At API prices', 'What a run would cost at listed prices. Used when it\'s included in a plan or has no price. It\'s an estimate, not money you paid.'],
+    ['Tokens', 'The amount of text the AI read and wrote. More tokens usually cost more.'],
+    ['Free runs', 'Runs where no AI was needed.']
+  ]]
+]
+
+function NotesSection() {
+  return jsxs('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: 14 },
+    children: NOTES.map(([title, rows]) => bubble([
+      label(title),
+      ...rows.map(([term, text]) => jsxs('div', {
+        key: term,
+        style: { display: 'flex', flexDirection: 'column', gap: 1 },
+        children: [
+          jsx('div', { style: { fontSize: '0.75rem', color: C.text }, children: term }),
+          small(text, C.soft)
+        ]
+      }))
+    ], title))
+  })
+}
+
+const SECTION_NOTES = {
+  cron: 'Crystallize Cron makes scheduled jobs cheaper. It runs by itself, and each change stays only if it proves cheaper with good answers.',
+  chat: 'Crystallize Chat makes the chat you\'re in cheaper. You turn it on for each chat, and your main model sends routine work to a cheap model you pick.'
+}
+
+function SectionTabs({ section, onPick }) {
+  return jsxs('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: 6 },
+    children: [jsx(SectionButtons, { section, onPick }), SECTION_NOTES[section] ? small(SECTION_NOTES[section], C.soft) : null]
+  })
+}
+
+function SectionButtons({ section, onPick }) {
+  return jsx('div', {
+    role: 'tablist',
+    style: { display: 'flex', gap: 2, padding: 2, borderRadius: 8, background: C.tile },
+    children: [['cron', 'Cron'], ['chat', 'Chat'], ['notes', 'Notes']].map(([key, text]) => jsx('button', {
+      key,
+      type: 'button',
+      role: 'tab',
+      'aria-selected': section === key,
+      onClick: () => onPick(key),
+      style: {
+        flex: 1, padding: '4px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: '0.75rem',
+        background: section === key ? C.stroke : 'none', color: section === key ? C.text : C.muted
+      },
+      children: text
+    }))
   })
 }
 
@@ -1111,11 +1306,20 @@ export default {
         })
     })
 
+    ctx.registerMany([
+      { id: 'chat-page', area: ROUTES_AREA, data: { path: CHAT_PATH }, render: () => jsx(ChatPage, { ctx }) },
+      { id: 'chat-nav', area: SIDEBAR_NAV_AREA, data: { path: CHAT_PATH, label: 'Crystallize Chat', codicon: 'ruby' } }
+    ])
+
     ctx.register({
-      id: 'composer-toggle',
-      area: 'composer.actions',
-      order: 50,
-      render: () => jsx(ComposerToggle, { ctx })
+      id: 'open-chat-command',
+      area: PALETTE,
+      data: {
+        id: 'crystallize.openChat',
+        label: 'Crystallize Chat: Open',
+        keywords: ['crystallize', 'chat', 'cheap', 'model', 'savings'],
+        run: () => host.navigate(CHAT_PATH)
+      }
     })
 
     ctx.register({

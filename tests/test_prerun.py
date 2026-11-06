@@ -352,3 +352,18 @@ def test_a_link_poor_run_keeps_the_remembered_items(monkeypatch):
     assert "No links" in prerun.run("cr_1", dispatch)[0]
     assert len(saved["r"]["meta"]["last_links"]) == 6
     assert "Title 7" in prerun.run("cr_1", dispatch)[0]
+
+
+def test_long_test_logs_lose_only_passing_lines():
+    passing = [f"test_{i} (tests.test_a.T) ... ok" for i in range(300)]
+    failure = ["test_x (tests.test_a.T) ... FAIL", "FAIL: test_x", "AssertionError: 2 != 4", "FAILED (failures=1)"]
+    out = json.loads(prerun.clean_result("terminal", json.dumps({"output": "\n".join(passing + failure), "exit_code": 1, "error": None})))
+    assert "300 passing test lines removed" in out["output"] and "test_5 " not in out["output"]
+    for line in failure:
+        assert line in out["output"]
+    assert out["exit_code"] == 1
+
+
+def test_a_short_log_stays_whole():
+    text = "\n".join(f"test_{i} ... ok" for i in range(5))
+    assert prerun.collapse_passing(text) == text

@@ -90,8 +90,7 @@ undo the switch.
 
 ## The panel
 
-A Crystallize button in the top bar and the status bar (or ⌘K → "Crystallize: Open savings panel") opens a
-panel beside the chat. It updates from your real cron jobs: running jobs first, with their schedule, model,
+A Crystallize button in the top bar and the status bar opens a panel beside the chat, with Cron and Chat sections. It updates from your real cron jobs: running jobs first, with their schedule, model,
 reasoning and tools; a cost graph for each job; time ranges that appear only when they have data; and
 finished jobs collapsed with their full history. Totals keep real money and plan API prices apart.
 
@@ -123,11 +122,35 @@ hermes crystal skip morning-brief repeat   # when nothing changed: repeat, quiet
 hermes crystal undo morning-brief      # put the original prompt back
 ```
 
-Crystallize is **off for each chat until you turn it on.** Click **◆ Crystallize** in the message box:
-it puts `/crystallize on` in the box, and nothing changes until you press Enter. Click it again
-for `/crystallize off`. While a chat is on, its tool calls are recorded and the panel analyses it.
-Scheduled cron runs are always recorded. `/crystallize status` works in any chat, including
-Telegram and Discord. The Make cheaper, Try, Promote and Undo actions are in the panel.
+## Crystallize Chat
+
+| | Crystallize Cron | Crystallize Chat |
+|---|---|---|
+| **For** | Scheduled jobs | The chat you're in |
+| **Turned on** | Per job, with **Make cheaper** | Per chat, after your first prompt |
+| **How it saves** | Fewer AI calls and tools, cleaned results, lower reasoning, routines | Routine work sent to a cheap model, cleaned results, big ones condensed |
+| **Proof** | Each job's cost is measured, and changes that don't help are undone | Savings shown are estimates |
+
+For long or expensive chats, your main model keeps the thinking. For routine work, it sends an input to a cheap
+model you pick with `crystal_cheap` and gets the output straight back, deciding by itself when that's worth it.
+The cheap model also reads big tool results first. A result is paid for again on every later message, so reading less adds up. Open **Crystallize
+Chat** in the sidebar, or the **Chat** section of the panel, and pick a model from a subscription you've connected to Hermes. Hermes keeps your
+sign-ins; Crystallize never sees a key.
+
+Turn it on per chat in the panel's **Chat** section, or with `/crystallize chat on` on platforms without the panel.
+
+**You can't start a chat with it.** Send your first prompt, then turn it on. Hermes only creates the chat when
+that prompt is sent, and savings come from tool results, which don't exist until the work starts.
+
+- Tool results are cleaned with no AI. Big ones (8,000+ characters) are condensed if you've picked a model.
+- When a result is noticeably reduced, the exact original is kept for 7 days, and your main model can read it with `crystal_full_result`.
+- File contents, errors and small results always stay exact.
+- Your main model isn't switched mid-chat, because that would lose its prompt cache.
+- If your picked model isn't cheaper than your main one, results are only cleaned.
+- The panel has two sections, Cron and Chat. Chat shows savings for the chat you're in. The figures are estimates.
+- A summary can still leave out something that matters, so it's off by default.
+
+`/crystallize` shows what's happening with your scheduled jobs and this chat. It works in any chat, including Telegram and Discord.
 
 ## How a routine runs
 
@@ -146,6 +169,7 @@ source gets a fair share of the space, so no feed is dropped because another was
 - **Reads your Hermes history (read-only):** session costs and tool calls from
   `state.db`, run outcomes from `cron/executions.db`, and job definitions from
   `cron/jobs.json`. Nothing is modified there.
+- **Crystallize Chat sends tool results to the model you pick,** only in chats where you turned it on, and keeps originals in its data folder for 7 days.
 - **Stores its own data** in `<hermes home>/plugin-data/crystallize/`: recorded tool calls
   (inputs and the first 2,000 characters of each result, adjustable in settings),
   routines, and a Desktop diagnostics log.
