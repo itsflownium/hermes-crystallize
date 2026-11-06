@@ -455,6 +455,8 @@ function Hero({ data, act }) {
     }),
     data.saved_api_usd != null ? small(`On plans: ${money(data.saved_api_usd)} less at API prices so far` +
       (data.api_saving_usd_per_week != null ? `, ${perWeek(data.api_saving_usd_per_week)} at this rate` : ''), C.soft) : null,
+    jsx('div', { key: 'reasoning', children: pill(data.lower_reasoning ? 'Reasoning: also try lower' : 'Reasoning: keep my setting',
+      () => act('/reasoning-setting', { on: !data.lower_reasoning }), data.lower_reasoning ? C.accent : C.muted) }),
     ready > 0 ? jsx('div', { key: 'all', children: pill(`Make ${ready === 1 ? '1 job' : `all ${ready} jobs`} cheaper`, () => act('/tune-all', {}), C.accent) }) : null,
     jsx(Periods, { key: 'periods', periods: data.periods })
   ], 'hero')

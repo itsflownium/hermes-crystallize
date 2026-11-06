@@ -180,6 +180,16 @@ async def tune_all() -> dict[str, Any]:
                         else "No jobs are ready for cheaper settings yet. Each needs 2 finished runs first.") + extra}
 
 
+@router.post("/reasoning-setting")
+async def reasoning_setting(body: dict) -> dict[str, Any]:
+    """Whether Make cheaper may also try lower reasoning. Off keeps each job's own setting."""
+    _overview()
+    store = importlib.import_module(f"{_PKG}.store")
+    on = bool((body or {}).get("on"))
+    store.set_setting("lower_reasoning", on)
+    return {"ok": True, "message": "Make cheaper will also try lower reasoning." if on else "Jobs keep your reasoning setting."}
+
+
 @router.get("/chat-state")
 async def chat_state(session_id: Optional[str] = None) -> dict[str, Any]:
     """Whether Crystallize is on for a chat (drives the message-box toggle)."""

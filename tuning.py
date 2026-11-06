@@ -235,6 +235,10 @@ def _set_new_only(job_id: str, on: bool) -> bool:
     return True
 
 
+def lowers_reasoning() -> bool:
+    return bool(store.get_setting("lower_reasoning", False))
+
+
 def start(job: str, level: Optional[str] = None) -> dict[str, Any]:
     """Start a trial. With a level, reasoning tries only that one."""
     found = _job_or_error(job)
@@ -252,7 +256,8 @@ def start(job: str, level: Optional[str] = None) -> dict[str, Any]:
     if len(before) < MIN_BEFORE_RUNS:
         raise lifecycle.LifecycleError(
             f"{name} needs {MIN_BEFORE_RUNS} finished runs to compare with first (has {len(before)}).")
-    levels = [level] if level else modelinfo.levels_to_try(found)
+    # Your reasoning setting stays yours unless you asked to try lower, for all jobs or this one.
+    levels = [level] if level else modelinfo.levels_to_try(found) if lowers_reasoning() else []
     if levels and found.get("reasoning_effort") == levels[0]:
         levels = levels[1:]
     narrow, wide = _tool_choices(found, name)

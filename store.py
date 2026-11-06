@@ -53,6 +53,11 @@ CREATE TABLE IF NOT EXISTS routines (
     updated_at  REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+    key     TEXT PRIMARY KEY,
+    value   TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS cleaned (
     job_name    TEXT PRIMARY KEY,
     chars       INTEGER NOT NULL,
@@ -298,6 +303,19 @@ def get_cleaned(job_name: str) -> int:
     with _lock:
         row = _db().execute("SELECT chars FROM cleaned WHERE job_name = ?", (job_name,)).fetchone()
     return int(row[0]) if row else 0
+
+
+def get_setting(key: str, default: Any = None) -> Any:
+    with _lock:
+        row = _db().execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return json.loads(row[0]) if row else default
+
+
+def set_setting(key: str, value: Any) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, json.dumps(value)))
+        conn.commit()
 
 
 def now() -> float:

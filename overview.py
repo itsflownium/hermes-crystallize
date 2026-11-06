@@ -461,5 +461,6 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         "finished": finished,
         "quick": quick,
         "trial_runs": tuning.TRIAL_RUNS,
+        "lower_reasoning": tuning.lowers_reasoning(),
         "periods": visible_periods(total_periods(all_rows)) if all_rows else [],
     }

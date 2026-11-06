@@ -64,7 +64,7 @@ Each job uses every step it can, from the biggest saving down. The panel shows e
 | **Cleaned tool results** | Removes markup and API link fields before the AI reads them, so no later call pays for them. Uses no AI and never touches file contents or errors | Any job using web or shell tools |
 | **New items only** | Sends what changed, plus the last answer to update | Live routines |
 | **Only the tools it uses** | Starts with the toolsets its cheapest good run used, for a smaller prompt on every call | Any AI job |
-| **Lower reasoning** | The weakest level the job's model takes, as reported by Hermes | Models with reasoning settings |
+| **Lower reasoning (optional)** | Off by default, so jobs keep your setting. Turn it on and it tries the weakest level the job's model takes | Models with reasoning settings |
 
 ## How it decides
 
