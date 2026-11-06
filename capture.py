@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 # Our own tools are never part of a routine we learn from.
 _IGNORED_TOOLS = {"crystal_list", "crystal_run"}
-_MAX_ARGS_CHARS = 8000
 
 
 def _as_text(value: Any) -> str:
@@ -51,7 +50,9 @@ def make_post_tool_call(ctx: Any) -> Callable[..., None]:
 
             preview_chars = int(ctx.get_config("result_preview_chars", default=2000) or 0)
             result_text = _as_text(result)
-            args_text = _as_text(args or {})[:_MAX_ARGS_CHARS]
+            # Replay inputs are data, not a display preview. Slicing serialized JSON
+            # can both hide changed tails and make the next dispatch use wrong args.
+            args_text = _as_text(args if args is not None else {})
 
             run = ctx.current_cron_execution()
             if run is None and not store.chat_enabled(session_id):
@@ -89,13 +90,13 @@ def make_transform_tool_result(ctx: Any) -> Callable[..., Any]:
     or keeping its settings. Every later AI call re-reads it, so this saves on all of them."""
     from . import chat_savings, prerun, tuning
 
-    def transform(tool_name: str = "", result: Any = None, session_id: str = "", **_: Any) -> Any:
+    def transform(tool_name: str = "", result: Any = None, session_id: str = "", turn_id: str = "", **_: Any) -> Any:
         try:
             run = ctx.current_cron_execution()
             if run is None:
                 if not session_id or not store.chat_enabled(session_id):
                     return None
-                return chat_savings.shrink(ctx, session_id, tool_name, result)
+                return chat_savings.shrink(ctx, session_id, tool_name, result, turn_id=turn_id)
             name = getattr(run, "job_name", None) if run else None
             if not name or tool_name not in prerun.CLEANED_TOOLS or not tuning.cleans_results(name):
                 return None
@@ -175,9 +176,9 @@ def make_transform_llm_output(ctx: Any) -> Callable[..., Any]:
     """Fill in the cheap model's text, so the main model doesn't pay to retype it."""
     from . import chat_savings
 
-    def transform(response_text: str = "", **_: Any) -> Any:
+    def transform(response_text: str = "", session_id: str = "", turn_id: str = "", **_: Any) -> Any:
         try:
-            return chat_savings.fill_placeholders(response_text)
+            return chat_savings.fill_placeholders(response_text, session_id=session_id, turn_id=turn_id)
         except Exception:  # noqa: BLE001 — a hook must never break a turn
             logger.debug("crystallize: filling placeholders failed", exc_info=True)
             return None
@@ -192,7 +193,7 @@ def make_on_session_end(ctx: Any) -> Callable[..., None]:
     """After a scheduled cron run: make sure the run is on record (a live
     routine's run may make no tool calls at all), then test the job's routine
     if it's being tested."""
-    from . import lifecycle, tools, tuning
+    from . import brake, chat_savings, lifecycle, tools, tuning
 
     def on_session_end(session_id: str = "", **_: Any) -> None:
         try:
@@ -211,5 +212,16 @@ def make_on_session_end(ctx: Any) -> Callable[..., None]:
             tuning.refresh()
         except Exception:  # noqa: BLE001 — an observer must never break the run
             logger.debug("crystallize: after-run bookkeeping failed", exc_info=True)
+        finally:
+            # This hook also runs for ordinary/manual sessions and bookkeeping errors.
+            # Only this profile/session's active in-memory observations are removed.
+            try:
+                brake.forget(session_id)
+            except Exception:  # noqa: BLE001
+                logger.debug("crystallize: brake cleanup failed", exc_info=True)
+            try:
+                chat_savings.cleanup_session(session_id)
+            except Exception:  # noqa: BLE001
+                logger.debug("crystallize: chat cleanup failed", exc_info=True)
 
     return on_session_end

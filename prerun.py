@@ -5,8 +5,8 @@ When a job is promoted, Crystallize gives its cron job a small pre-run script
 `hermes crystal prerun <routine>`, which:
 
   1. runs the routine's tested steps (through Hermes's tool registry),
-  2. cleans their output: HTML and feeds become plain text, JSON loses link
-     fields nobody reads, files the steps wrote are included,
+  2. cleans their output: HTML and feeds become plain text, JSON keeps its
+     fields, and declared file artifacts are included,
   3. compares it with the data the AI saw last time. If nothing changed, the job's
      "when unchanged" choice decides (see `unchanged_action`): repeat the last answer,
      stay quiet, or run as normal. Otherwise it prints the data, which Hermes puts in
@@ -29,47 +29,31 @@ from typing import Any, Optional
 from . import history, lifecycle, runner, store
 
 MAX_STEP_CHARS = 40000      # per step, after cleaning; cut only at a line (item) boundary
-MAX_STRING_CHARS = 800      # one JSON string value (an issue body, an article)
+MAX_STRING_CHARS = 800      # retained for compatibility; semantic strings are never cut here
 MAX_FILE_BYTES = 2_000_000  # files a step wrote that we read back
 SKIP_GATE = '{"wakeAgent": false}'
 
 
 # ---------------------------------------------------------------- cleaning
 
-# API link fields. Links people actually open, such as html, download or PDF links, stay.
-_DROP_KEY = re.compile(r"(^node_id$|^gravatar_id$|^_links$|(?<!html)(?<!download)(?<!pdf)_url$)")
-
-
 def _slim_json(value: Any, max_string: int = MAX_STRING_CHARS) -> Any:
-    """Drop API link fields and cap long strings. A GitHub issue keeps its
-    title, number, labels, body and dates but loses ~20 *_url fields."""
+    """Keep every field and value; generic JSON has no disposable field names.
+
+    The historical name and argument remain for callers. Size limits belong at the
+    presentation boundary, after full semantic comparison, never inside an object.
+    """
     if isinstance(value, dict):
-        if "login" in value and "id" in value and len(value) > 4:
-            return value["login"]  # a user object: the name is what matters
-        out = {}
-        for k, v in value.items():
-            if _DROP_KEY.search(str(k)) or v is None or v == "" or v == [] or v == {}:
-                continue
-            if k == "url" and "html_url" in value:
-                continue  # the API link next to the web link
-            if k == "reactions" and isinstance(v, dict):
-                v = v.get("total_count", 0)
-                if not v:
-                    continue
-            out[k] = _slim_json(v, max_string)
-        return out
+        return {k: _slim_json(v, max_string) for k, v in value.items()}
     if isinstance(value, list):
         return [_slim_json(v, max_string) for v in value]
-    if isinstance(value, str) and len(value) > max_string:
-        return value[:max_string] + f"… ({len(value)} characters)"
     return value
 
 
 def _json_text(value: Any) -> str:
     value = _slim_json(value)
     if isinstance(value, list):
-        # One item per line, so a cut never splits an item.
-        return "\n".join(json.dumps(v, ensure_ascii=False, separators=(",", ":"), default=str) for v in value)
+        # Valid JSON, with one item per line so presentation cuts have boundaries.
+        return "[\n" + ",\n".join(json.dumps(v, ensure_ascii=False, separators=(",", ":"), default=str) for v in value) + "\n]"
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
@@ -107,8 +91,6 @@ def _feed_text(text: str) -> Optional[str]:
         link = _field(b, "link", "guid", "id")
         date = _field(b, "pubDate", "published", "updated", "dc:date")
         summary = _field(b, "description", "summary", "content")
-        if len(summary) > 400:
-            summary = summary[:400] + "…"
         out.append(" | ".join(x for x in (title, link, date) if x) + (f"\n  {summary}" if summary else ""))
     return "\n".join(out)
 
@@ -129,10 +111,10 @@ def _tidy(text: str) -> str:
 
 def clean_text(text: str) -> str:
     """Make one piece of tool output small and easy to read."""
-    s = text.strip()
+    s = text.strip("\r\n")
     if not s:
         return ""
-    if s[0] in "[{":
+    if s.lstrip()[:1] in ("[", "{"):
         try:
             return _json_text(json.loads(s))
         except ValueError:
@@ -144,7 +126,10 @@ def clean_text(text: str) -> str:
             return feed
     if "<html" in head or "<body" in head or len(_TAG.findall(s[:5000])) > 30:
         return _tidy(_strip_html(s))
-    return _tidy(s)
+    if "CDATA" in s and ("<![" in s or "<!\\[" in s):
+        return _tidy(s)
+    # Plain output may be source code, tabular data, or an exact diagnostic.
+    return _trim_lines(s)
 
 
 def _unwrap(result: str) -> tuple[str, list[tuple[str, str]]]:
@@ -156,18 +141,22 @@ def _unwrap(result: str) -> tuple[str, list[tuple[str, str]]]:
     if not isinstance(data, dict):
         return result, []
     pages = data.get("results")
-    if isinstance(pages, list) and pages and all(isinstance(p, dict) for p in pages):
+    content_keys = ("content", "text", "markdown", "raw_content", "snippet", "description")
+    if isinstance(pages, list) and pages and all(isinstance(p, dict) and any(k in p for k in content_keys) for p in pages):
         parts = []
         for p in pages:
             title = p.get("title") or p.get("url") or "page"
-            body = p.get("content") or p.get("text") or p.get("markdown") or p.get("raw_content") or ""
+            key = next((k for k in content_keys if isinstance(p.get(k), str)), None)
+            metadata = {k: v for k, v in p.items() if k != key}
+            body = (_json_text(metadata) + "\n" if metadata else "") + (p[key] if key else _json_text(p))
             if p.get("url") and p.get("url") != title:
                 title = f"{title} ({p['url']})"
             parts.append((str(title), body if isinstance(body, str) else json.dumps(body, default=str)))
-        return "", parts
+        outer = {k: v for k, v in data.items() if k != "results"}
+        return _json_text(outer) if outer else "", parts
     for key in ("output", "content", "result", "text"):
         body = data.get(key)
-        if isinstance(body, str):
+        if isinstance(body, str) and set(data) <= {key, "exit_code", "error"} and not data.get("error"):
             return body, []
     return result, []
 
@@ -198,11 +187,14 @@ def _cap(text: str, limit: int = MAX_STEP_CHARS) -> str:
     return text[:cut] + f"\n… ({len(text) - cut} more characters not shown)"
 
 
-def step_block(step: dict, output: dict) -> str:
+def step_block(step: dict, output: dict, *, limit: Optional[int] = MAX_STEP_CHARS) -> str:
     """One step's data. Every page and file gets a fair share of the space, so
     no source is ever left out because an earlier one was long."""
     main, pages = _unwrap(output.get("output") or "")
     sources = [(f"### {title}", body) for title, body in pages]
+    for artifact in output.get("artifacts") or []:
+        if isinstance(artifact, dict) and isinstance(artifact.get("content"), str):
+            sources.append((f"### File {artifact.get('name') or 'artifact'}", artifact["content"]))
     for path in written_files(output.get("args", step.get("args")), output.get("started") or 0):
         try:
             sources.append((f"### File {path.name}", path.read_text(errors="replace")))
@@ -211,10 +203,12 @@ def step_block(step: dict, output: dict) -> str:
     parts = []
     if main.strip():
         # When the step saved its data to a file, what it printed is only a preview.
-        parts.append(_cap(clean_text(main), 1500 if sources else MAX_STEP_CHARS))
-    share = MAX_STEP_CHARS // max(1, len(sources))
+        cleaned = clean_text(main)
+        parts.append(cleaned if limit is None else _cap(cleaned, min(1500, limit) if sources else limit))
+    share = limit // max(1, len(sources)) if limit is not None else None
     for heading, body in sources:
-        parts.append(f"{heading}\n{_cap(clean_text(body), share)}")
+        cleaned = clean_text(body)
+        parts.append(f"{heading}\n{cleaned if share is None else _cap(cleaned, share)}")
     return "\n\n".join(p for p in parts if p)
 
 
@@ -229,22 +223,19 @@ _FULL_TEXT = 1_000_000      # the AI asked for this result itself, so long text 
 def _trim_lines(text: str) -> str:
     """Remove trailing spaces and runs of blank lines. Indentation can carry meaning, so it stays."""
     text = _MD_SAME_LINK.sub(r"\1", text)
-    return re.sub(r"\n{3,}", "\n\n", re.sub(r"[ \t]+(?=\r?\n)", "", text)).strip()
+    return re.sub(r"\n{3,}", "\n\n", re.sub(r"[ \t]+(?=\r?\n)", "", text)).strip("\r\n")
 
 
 def _clean_for_agent(text: str, prose: bool = False) -> str:
     """Like clean_text, but never shortens the text the AI might be reading it for. Indentation
     stays, because it can carry meaning. Only prose from the web has its spacing evened out."""
-    s = text.strip()
-    if s and s[0] in "[{":
+    s = text.strip("\r\n")
+    if s.lstrip()[:1] in ("[", "{"):
         try:
             value = json.loads(s)
         except ValueError:
             return _trim_lines(s)
-        slim = _slim_json(value, _FULL_TEXT)
-        if isinstance(slim, list):
-            return "\n".join(json.dumps(v, ensure_ascii=False, separators=(",", ":")) for v in slim)
-        return json.dumps(slim, ensure_ascii=False, separators=(",", ":"))
+        return _json_text(value)
     head = s[:2000].lower()
     if "<rss" in head or "<feed" in head or "<html" in head or "<body" in head or len(_TAG.findall(s[:5000])) > 30:
         return clean_text(s)
@@ -274,7 +265,7 @@ def collapse_passing(text: str) -> str:
 def clean_result(tool: str, result: Any) -> Optional[str]:
     """A smaller version of a tool result, in its original shape, or None to leave it.
 
-    Removes markup, API link fields and repeated whitespace, which every later AI call
+    Removes markup and repeated whitespace, which every later AI call
     would otherwise pay to re-read. Uses no AI, and fails safe: anything unexpected
     leaves the result untouched.
     """
@@ -313,21 +304,21 @@ def clean_result(tool: str, result: Any) -> Optional[str]:
 
 # ---------------------------------------------------------------- change check
 
-_VOLATILE = [
-    re.compile(r"\d{4}-\d\d-\d\d[T ]\d\d:\d\d(:\d\d(\.\d+)?)?(Z|[+-]\d\d:?\d\d)?"),   # ISO times
-    re.compile(r"(?i)\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*,? \d{1,2} [a-z]{3} \d{4}[^|\n]*?(gmt|[+-]\d{4})"),
-    re.compile(r"\b\d{1,2}:\d\d(:\d\d)?\b"),                     # clock times
-    re.compile(r"\b\d+\.\d+\s*(ms|s|sec|seconds)\b"),            # timings, not prices or versions
-    re.compile(r"\b\d+\s*ms\b"),
-    re.compile(r"\b[0-9a-f]{24,}\b"),                            # request ids, hashes
-]
+_VOLATILE: list[re.Pattern[str]] = []  # fields are meaningful unless a contract explicitly says otherwise
+
+
+def _canonical_content(text: str) -> str:
+    """Normalize JSON presentation while keeping values, order and plain-text indentation."""
+    try:
+        value = json.loads(text)
+    except (ValueError, TypeError):
+        return text.replace("\r\n", "\n").strip("\r\n")
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def fingerprint(text: str) -> str:
-    """Hash of the data with timings and timestamps removed: same data, same hash."""
-    for rx in _VOLATILE:
-        text = rx.sub("#", text)
-    return hashlib.sha256(" ".join(text.split()).encode("utf-8", "replace")).hexdigest()
+    """Hash full meaningful content. Dates, timings, numbers and hashes can all matter."""
+    return hashlib.sha256(_canonical_content(text).encode("utf-8", "replace")).hexdigest()
 
 
 # ---------------------------------------------------------------- the pre-run
@@ -392,25 +383,22 @@ def unchanged_action(routine: dict[str, Any]) -> str:
 
 
 MAX_ITEMS = 300             # a longer list isn't compared item by item
-MAX_ITEM_WORDS = 80         # a longer item is compared as a whole
-_WORD = re.compile(r"[\w$%€£.,-]*\w[\w%]*")
 MAX_NEW_SHARE = 0.7         # mostly new: the AI might as well see it all
-_LINK = re.compile(r"https?://[^\s\"'<>)\]|]+")
+_LINK = re.compile(r"https?://[^\s\"'<>)\]|{}]+")
 MIN_ITEMS = 5               # fewer links than this isn't a list of items
 
 
 def _links(text: str) -> set[str]:
-    return {link.rstrip(".,;:").rstrip("/").lower() for link in _LINK.findall(text)}
+    # URL paths, queries and fragments can be case-sensitive. Do not merge distinct items.
+    return {link.rstrip(".,;:").rstrip("/") for link in _LINK.findall(text)}
 
 
 def _words(text: str) -> list[str]:
-    """What an item says, without its links or anything that changes on its own."""
-    for rx in _VOLATILE:
-        text = rx.sub(" ", text)
-    words = sorted(set(_WORD.findall(_LINK.sub(" ", text).lower())))
-    if len(words) > MAX_ITEM_WORDS:
-        return ["#" + hashlib.sha1(" ".join(words).encode()).hexdigest()[:12]]
-    return [hashlib.sha1(w.encode()).hexdigest()[:6] for w in words]
+    """Versioned digest of the complete ordered content, including negations/repetitions.
+
+    Older saved word-set signatures deliberately compare as changed once after upgrade.
+    """
+    return ["content-v2", fingerprint(text)]
 
 
 def _item_blocks(data: str) -> dict[str, tuple[int, int]]:
@@ -419,12 +407,18 @@ def _item_blocks(data: str) -> dict[str, tuple[int, int]]:
     lines = data.splitlines()
     linked = [i for i, line in enumerate(lines) if _links(line)]
     blocks: dict[str, tuple[int, int]] = {}
+    starts = []
+    for i in linked:
+        separate_link = bool(re.fullmatch(r"\s*(?:(?:Article URL|Link|URL)\s*:\s*)?https?://\S+\s*", lines[i], re.I))
+        starts.append(i - 1 if separate_link and i and lines[i - 1].strip() and i - 1 not in linked else i)
+    if starts:
+        starts[0] = 0  # preserve any heading or summary outside the individual items
     for n, i in enumerate(linked):
-        start = i - 1 if i and lines[i - 1].strip() and i - 1 not in linked else i
-        following = linked[n + 1] if n + 1 < len(linked) else len(lines) + 1
-        end = following - 1 if following - 1 > i else i + 1
+        start = starts[n]
+        end = starts[n + 1] if n + 1 < len(starts) else len(lines)
         for link in _links(lines[i]):
-            blocks.setdefault(link, (start, end))
+            # Repeated identities must include every occurrence in the comparison.
+            blocks[link] = (blocks[link][0], end) if link in blocks else (start, end)
     return blocks
 
 
@@ -438,12 +432,8 @@ def _items(data: str) -> Optional[dict[str, list[str]]]:
 
 
 def _item_changed(old: list[str], new: list[str]) -> bool:
-    """A format can add or drop a field, but a replaced word means the item really changed."""
-    if old == new:
-        return False
-    if (old and old[0].startswith("#")) or (new and new[0].startswith("#")):
-        return True
-    return not (set(old) <= set(new) or set(new) <= set(old))
+    """Any meaningful content change counts, including added or removed words/fields."""
+    return old != new
 
 
 def _new_only_text(data: str, seen: dict[str, list[str]], answer: str) -> Optional[str]:
@@ -452,6 +442,8 @@ def _new_only_text(data: str, seen: dict[str, list[str]], answer: str) -> Option
     now = _items(data)
     if not answer or now is None or len(now) < MIN_ITEMS or len(seen) < MIN_ITEMS:
         return None
+    if [link for link in now if link in seen] != [link for link in seen if link in now]:
+        return None  # ranking/order changed: the complete list carries that information
     fresh = {link for link, words in now.items() if link not in seen or _item_changed(seen[link], words)}
     gone = sorted(set(seen) - set(now))
     if len(fresh) > len(now) * MAX_NEW_SHARE or len(gone) > len(seen) * MAX_NEW_SHARE:
@@ -460,7 +452,7 @@ def _new_only_text(data: str, seen: dict[str, list[str]], answer: str) -> Option
     blocks = _item_blocks(data)
     keep_lines = sorted({i for link in fresh for i in range(*blocks[link])})
     keep = [lines[i] for i in keep_lines]
-    if not keep:
+    if not keep and not gone:
         return None  # the links match but something else changed, so send it all
     removed = ("\n\nNo longer listed, so drop these if your answer mentions them:\n" + "\n".join(gone)) if gone else ""
     return ("Crystallize: most of this job's items are the same as last run, so only the new and changed ones are below "
@@ -475,7 +467,27 @@ def _repeat_text(answer: str) -> str:
             f"the markers.\n<<<\n{answer}\n>>>")
 
 
-def run(routine_id: str, dispatch: runner.Dispatch) -> tuple[str, int]:
+def _source_schema(value: Any, depth: int = 0) -> Any:
+    """A bounded structural signature; values and list lengths remain free to change."""
+    if depth > 12:
+        return "nested"
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            return "text"
+        # A plain numeric/string result is still text, whereas structured JSON has
+        # an observable field schema that a changed endpoint can invalidate.
+        return _source_schema(parsed, depth + 1) if isinstance(parsed, (dict, list)) else "text"
+    if isinstance(value, dict):
+        return {str(key): _source_schema(child, depth + 1) for key, child in sorted(value.items(), key=lambda item: str(item[0]))}
+    if isinstance(value, list):
+        shapes = {json.dumps(_source_schema(child, depth + 1), sort_keys=True) for child in value}
+        return {"list": sorted(shapes)}
+    return "null" if value is None else "bool" if isinstance(value, bool) else "number" if isinstance(value, (float, int)) else type(value).__name__
+
+
+def _run(routine_id: str, dispatch: runner.Dispatch) -> tuple[str, int]:
     """(text to print, exit code). The text is what Hermes puts in the prompt."""
     routine = store.get_routine(routine_id)
     no_ai = bool(routine and (routine.get("meta") or {}).get("mode") == "no_ai")
@@ -483,26 +495,50 @@ def run(routine_id: str, dispatch: runner.Dispatch) -> tuple[str, int]:
         state = routine["status"] if routine else "missing"
         return (f"Crystallize: routine {routine_id} is {state}. Do the whole task yourself.",
                 1 if no_ai else 0)
+    if not lifecycle.check_drift(routine):
+        return ("Crystallize: this job's configuration changed, so the routine must be tested again. "
+                "Do the whole task yourself.", 1 if no_ai else 0)
 
     t0 = time.time()
     result = runner.run(routine["steps"], dispatch)
-    lifecycle.live_result(routine_id, bool(result.get("ok")), result.get("reason", ""))
     if not result.get("ok"):
+        lifecycle.live_result(routine_id, False, result.get("reason", ""))
         return (f"Crystallize: the routine failed at step {result.get('failed_step')} "
                 f"({result.get('tool')}): {result.get('reason')}. Do the whole task yourself.",
                 1 if no_ai else 0)
+    schemas = [_source_schema(out.get("output")) for out in result["outputs"]]
+    prior_schema = (routine.get("meta") or {}).get("source_schemas")
+    if prior_schema is not None and prior_schema != schemas:
+        lifecycle.invalidate(routine_id, "source schema changed")
+        return ("Crystallize: a source's fields or value types changed, so the routine must be tested again. "
+                "Do the whole task yourself.", 1 if no_ai else 0)
 
     steps = routine["steps"]["steps"]
-    blocks = []
+    blocks, full_blocks, semantic = [], [], []
     for step, out in zip(steps, result["outputs"]):
-        body = step_block(step, out)
-        blocks.append(body if no_ai else f"## Step {out['step']}: {step['tool']}\n{body}")
+        complete_body = step_block(step, out, limit=None)
+        full_blocks.append(complete_body if no_ai else f"## Step {out['step']}: {step['tool']}\n{complete_body}")
+        blocks.append(complete_body if no_ai else f"## Step {out['step']}: {step['tool']}\n{step_block(step, out)}")
+        semantic.append({"tool": step["tool"], "output": _canonical_content(out.get("output") or ""),
+                         "artifacts": out.get("artifacts") or []})
     data = "\n\n".join(blocks)
+    full_data = "\n\n".join(full_blocks)
+    if no_ai and routine.get("source_ref"):
+        from . import contracts
+
+        report = contracts.evaluate(contracts.get(routine["source_ref"]), answer=data, sources=result["outputs"])
+        if not report["ok"]:
+            lifecycle.invalidate(routine_id, "direct output failed its configured outcome contract")
+            return f"Crystallize: direct output failed its outcome contract: {report['why']}.", 1
+    lifecycle.live_result(routine_id, True, "")
 
     routine = store.get_routine(routine_id) or routine  # live_result updated it
     meta = dict(routine.get("meta") or {})
     # A job's own pre-run script is part of what the AI would see, so its output counts too.
-    fp = fingerprint(os.environ.get("CRYSTALLIZE_OWN_OUTPUT", "") + data)
+    own_output = os.environ.get("CRYSTALLIZE_OWN_OUTPUT", "")
+    own_digest = os.environ.get("CRYSTALLIZE_OWN_DIGEST", "")
+    fp = fingerprint(json.dumps({"own_output": own_digest or fingerprint(own_output), "steps": semantic,
+                                 "full_data": full_data}, ensure_ascii=False))
     last_failed = _last_run_failed(routine["name"])
     if meta.get("last_fingerprint") == fp and not last_failed:
         action = unchanged_action(routine)
@@ -515,20 +551,39 @@ def run(routine_id: str, dispatch: runner.Dispatch) -> tuple[str, int]:
     seen = {} if last_failed else (meta.get("last_items") or {})
     meta["last_fingerprint"] = fp
     meta["last_data_chars"] = len(data)
-    items_now = _items(data)
+    meta["source_schemas"] = schemas
+    items_now = _items(full_data)
     if items_now is None or len(items_now) >= MIN_ITEMS:  # a link-poor run says nothing about the items
         meta["last_items"] = items_now or {}
     store.update_routine(routine_id, meta=meta)
     if meta.get("new_only") and not no_ai:
         recent = _recent_answers(routine["name"])
-        shorter = _new_only_text(data, seen, recent[-1] if recent else "")
-        if shorter:
+        shorter = _new_only_text(full_data, seen, recent[-1] if recent else "")
+        # An oversized delta is passed as current data; silently cutting a delta could
+        # hide an update while instructing the model to retain the old answer.
+        if shorter and len(shorter) <= MAX_STEP_CHARS:
             return shorter, 0
     if no_ai:
         _record_skip(store.get_routine(routine_id) or routine, "no_ai_runs")
         return data, 0
     return (f"Collected by Crystallize routine {routine_id} at {time.strftime('%Y-%m-%d %H:%M')} "
-            f"in {time.time() - t0:.1f}s. Current and complete.\n\n{data}"), 0
+            f"in {time.time() - t0:.1f}s. Captured data follows; any display limits are marked.\n\n{data}"), 0
+
+
+def run(routine_id: str, dispatch: runner.Dispatch) -> tuple[str, int]:
+    """Fail back to the normal agent, or report a failure when the job has no agent."""
+    try:
+        return _run(routine_id, dispatch)
+    except Exception as exc:  # noqa: BLE001 — the script must keep its fallback contract
+        try:
+            routine = store.get_routine(routine_id)
+            no_ai = bool(routine and (routine.get("meta") or {}).get("mode") == "no_ai")
+            if routine:
+                lifecycle.live_result(routine_id, False, f"pre-run raised {type(exc).__name__}")
+        except Exception:  # noqa: BLE001
+            no_ai = False
+        return (f"Crystallize: the routine could not finish ({type(exc).__name__}). Do the whole task yourself.",
+                1 if no_ai else 0)
 
 
 # ---------------------------------------------------------------- the script file
@@ -539,10 +594,14 @@ def scripts_dir() -> Path:
 
 def script_rel(routine_id: str) -> str:
     """The job's `script` value: relative to ~/.hermes/scripts/, as Hermes requires."""
+    if not isinstance(routine_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", routine_id):
+        raise ValueError("Invalid routine id for a generated script.")
     return f"crystallize/{routine_id}.py"
 
 
-def write_script(routine_id: str, name: str, own_script: Optional[str] = None, no_ai: bool = False) -> str:
+def write_script(routine_id: str, name: str, own_script: Optional[str] = None, no_ai: bool = False,
+                 *, own_interpreter: Any = None, own_workdir: Optional[str] = None,
+                 hermes_python: Optional[str] = None) -> str:
     """Write the tiny pre-run script for a routine and return its `script` value.
 
     Hermes starts cron scripts on the Python that matches its current packages, so the
@@ -553,23 +612,40 @@ def write_script(routine_id: str, name: str, own_script: Optional[str] = None, n
     A job that already had a pre-run script keeps it: it runs first, can still stop the
     run with its own wakeAgent gate, and its output stays in the AI's prompt.
     """
+    relative = script_rel(routine_id)
     no_ai_literal = "True" if no_ai else "False"
-    body = f'''"""Crystallize pre-run for {name!r}. Created by the Crystallize plugin.
-
-Runs the routine's tested steps and prints their data for the AI.
-To stop using it: `hermes crystal undo {name}`.
-"""
+    body = f'''"""Generated Crystallize pre-run. Job metadata below is serialized as data."""
+import hashlib
 import json
 import os
+import shlex
+import shutil
 import subprocess
 import sys
 
+JOB_NAME = {name!r}
 OWN_SCRIPT = {own_script!r}
+OWN_INTERPRETER = {own_interpreter!r}
+OWN_WORKDIR = {own_workdir!r}
+HERMES_PYTHON = {hermes_python!r}
 env = dict(os.environ)
 if OWN_SCRIPT:
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), OWN_SCRIPT)
-    own_cmd = [sys.executable, path] if path.endswith(".py") else [path]
-    own = subprocess.run(own_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=os.path.dirname(path))
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    path = os.path.abspath(os.path.join(root, os.path.expanduser(OWN_SCRIPT)))
+    if OWN_INTERPRETER:
+        if isinstance(OWN_INTERPRETER, (list, tuple)):
+            interpreter = list(OWN_INTERPRETER)
+        else:
+            interpreter = [OWN_INTERPRETER] if os.path.isfile(OWN_INTERPRETER) else shlex.split(OWN_INTERPRETER)
+    else:
+        interpreter = [shutil.which("bash") or "bash"] if path.lower().endswith((".sh", ".bash")) else [sys.executable]
+    own_cmd = [*interpreter, path]
+    own_cwd = os.path.expanduser(OWN_WORKDIR) if OWN_WORKDIR else os.path.dirname(path)
+    try:
+        own = subprocess.run(own_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=own_cwd)
+    except OSError as exc:
+        sys.stderr.write("Crystallize: the original pre-run script could not start: " + str(exc) + "\\n")
+        sys.exit(1)
     if own.returncode != 0:
         sys.stdout.write(own.stdout)
         sys.stderr.write(own.stderr[-2000:])
@@ -583,10 +659,18 @@ if OWN_SCRIPT:
         pass
     if own.stdout.strip():
         sys.stdout.write(own.stdout.rstrip() + "\\n\\n")
-        env["CRYSTALLIZE_OWN_OUTPUT"] = own.stdout
+        env.pop("CRYSTALLIZE_OWN_OUTPUT", None)
+        env["CRYSTALLIZE_OWN_DIGEST"] = hashlib.sha256(own.stdout.encode("utf-8", "replace")).hexdigest()
 
-CMD = [sys.executable, "-m", "hermes_cli.main", "crystal", "prerun", {json.dumps(routine_id)}]
-proc = subprocess.run(CMD, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
+CMD = [HERMES_PYTHON or sys.executable, "-m", "hermes_cli.main", "crystal", "prerun", {json.dumps(routine_id)}]
+try:
+    proc = subprocess.run(CMD, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
+except OSError as exc:
+    sys.stderr.write("Crystallize: the routine process could not start: " + str(exc) + "\\n")
+    if {no_ai_literal}:
+        sys.exit(1)
+    print("Crystallize: the routine couldn't run. Do the whole task yourself.")
+    sys.exit(0)
 if proc.returncode != 0:
     sys.stderr.write(proc.stderr[-2000:])
     if not proc.stdout.strip() and {no_ai_literal}:
@@ -600,10 +684,11 @@ sys.exit(proc.returncode if {no_ai_literal} else 0)
     d = scripts_dir()
     d.mkdir(parents=True, exist_ok=True)
     (d / f"{routine_id}.py").write_text(body, encoding="utf-8")
-    return script_rel(routine_id)
+    return relative
 
 
 def remove_script(routine_id: str) -> None:
+    script_rel(routine_id)  # validate before constructing a filesystem path
     try:
         (scripts_dir() / f"{routine_id}.py").unlink()
     except OSError:

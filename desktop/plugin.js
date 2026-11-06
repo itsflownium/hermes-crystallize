@@ -1,7 +1,7 @@
 // Crystallize: Crystallize Cron (a top-bar button and panel) and Crystallize Chat (a sidebar page).
 // Plain ESM, loaded uncompiled by Hermes Desktop (no JSX, no build step).
 import { Codicon, ROUTES_AREA, SIDEBAR_NAV_AREA, host, useValue } from '@hermes/plugin-sdk'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 const REFRESH_MS = 10000
@@ -33,7 +33,7 @@ const diag = (event, detail) => {
 }
 
 function money(v) {
-  if (v === null || v === undefined) return '—'
+  if (typeof v !== 'number' || !Number.isFinite(v)) return 'Unknown'
   if (v < 0) return `-${money(-v)}`
   if (v > 0 && v < 1) return `$${v.toFixed(4)}`
   return `$${v.toFixed(2)}`
@@ -81,6 +81,39 @@ const row = (left, right) =>
     ]
   })
 
+
+// A request may finish after focus changes or a newer refresh completes.
+function useRequestScope(scope) {
+  const ref = useRef({ scope, version: 0 })
+  if (ref.current.scope !== scope) ref.current = { scope, version: ref.current.version + 1 }
+  useEffect(() => {
+    ref.current.scope = scope
+    return () => { ref.current.scope = null; ref.current.version += 1 }
+  }, [scope])
+  return ref
+}
+
+const fieldStyle = {
+  width: '100%', boxSizing: 'border-box', padding: '5px 7px', borderRadius: 6,
+  border: `0.5px solid ${C.stroke}`, background: 'none', color: C.text, fontSize: '0.75rem'
+}
+
+const field = (title, input) => jsxs('label', {
+  style: { display: 'flex', flexDirection: 'column', gap: 3, fontSize: '0.6875rem', color: C.soft },
+  children: [title, input]
+})
+
+const actionButton = (text, onClick, disabled = false) => jsx('button', {
+  type: 'button', onClick, disabled,
+  style: { ...fieldStyle, width: 'auto', cursor: disabled ? 'wait' : 'pointer', color: disabled ? C.muted : C.accent },
+  children: text
+})
+
+const rawDetails = (title, value) => value ? jsxs('details', {
+  style: { fontSize: '0.6875rem', color: C.soft },
+  children: [jsx('summary', { style: { cursor: 'pointer' }, children: title }),
+    jsx('pre', { style: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 260, overflowY: 'auto', fontSize: '0.625rem' }, children: JSON.stringify(value, null, 2) })]
+}) : null
 
 // ---------------------------------------------------------------- pieces
 
@@ -174,8 +207,8 @@ function secs(v) {
   return v >= 90 ? `${Math.round(v / 60)} min` : `${Math.round(v)}s`
 }
 
-const perWeek = v => (v ? `${money(v)}/wk` : '—')
-const perMonth = v => (v ? `≈ ${money(v * 4.33)} a month` : '')
+const perWeek = v => (v != null ? `${money(v)}/wk` : 'Unknown')
+const perMonth = v => (v != null ? `≈ ${money(v * 4.33)} a month` : '')
 
 function when(ts) {
   if (!ts) return ''
@@ -189,9 +222,11 @@ function when(ts) {
 function Bars({ timeline }) {
   const [hover, setHover] = useState(null)
   if (!timeline || timeline.length < 2) return null
-  // Real cost, else API price for a plan, else tokens for a local model: never a flat line.
-  const size = t => t.cost_usd || t.api_cost_usd || (timeline.some(x => x.cost_usd || x.api_cost_usd) ? 0 : t.tokens || 0)
-  const max = Math.max(...timeline.map(size), 1e-9)
+  // An unpriced run is visibly unknown; an observed zero remains a real zero.
+  const price = t => t.cost_usd ?? t.api_cost_usd
+  const priced = timeline.some(t => price(t) != null)
+  const size = t => priced ? price(t) : t.tokens
+  const max = Math.max(...timeline.map(t => size(t) ?? 0), 1e-9)
   const t = hover === null ? null : timeline[hover]
   const tip = t && jsxs('div', {
     style: {
@@ -208,7 +243,7 @@ function Bars({ timeline }) {
           jsx('span', { style: { fontSize: '0.625rem', color: t.after ? C.green : C.muted }, children: t.skipped ? 'Skipped: no change' : t.no_ai ? 'No AI' : t.after ? 'Routine' : 'Full run' })
         ]
       }),
-      jsx('div', { style: { fontSize: '0.8125rem', color: C.text, fontVariantNumeric: 'tabular-nums' }, children: money(t.cost_usd) }),
+      jsx('div', { style: { fontSize: '0.8125rem', color: C.text, fontVariantNumeric: 'tabular-nums' }, children: t.cost_usd != null ? money(t.cost_usd) : t.api_cost_usd != null ? `${money(t.api_cost_usd)} at API prices` : 'Cost unknown' }),
       t.api_cost_usd != null ? jsx('div', { style: { fontSize: '0.625rem', color: C.soft }, children: t.included ? `Included in your plan · ${money(t.api_cost_usd)} at API prices` : `No price from this route · about ${money(t.api_cost_usd)} at API prices` }) : null,
       jsx('div', {
         style: { fontSize: '0.625rem', color: C.soft, fontVariantNumeric: 'tabular-nums' },
@@ -223,18 +258,24 @@ function Bars({ timeline }) {
     onMouseLeave: () => setHover(null),
     children: [
       tip,
+      priced && timeline.some(t => price(t) == null) ? small('Striped bars: cost unknown') : !priced ? small('Bar height: tokens; costs unknown') : null,
       jsx('div', {
         style: { display: 'flex', alignItems: 'flex-end', gap: 2, height: 32 },
         children: timeline.map((r, i) =>
-          jsx('span', {
+          jsx('button', {
             key: i,
+            type: 'button',
+            'aria-label': `${when(r.ts)}: ${price(r) == null ? 'cost unknown' : money(price(r))}${r.after ? ', routine' : ', full run'}`,
+            'aria-pressed': hover === i,
+            onFocus: () => setHover(i),
+            onBlur: () => setHover(null),
             onMouseEnter: () => setHover(i),
             onClick: () => setHover(h => (h === i ? null : i)),
             style: {
-              flex: 1, borderRadius: 2, minHeight: 2, cursor: 'pointer',
-              height: `${Math.max(8, Math.round((size(r) / max) * 100))}%`,
-              background: r.skipped ? 'transparent' : r.after ? C.green : C.stroke,
-              border: r.skipped ? `1px dashed ${C.green}` : 'none', boxSizing: 'border-box',
+              flex: 1, borderRadius: 2, minWidth: 0, padding: 0, minHeight: 3, cursor: 'pointer',
+              height: size(r) == null ? '100%' : `${Math.max(8, Math.round((size(r) / max) * 100))}%`,
+              background: size(r) == null ? `repeating-linear-gradient(135deg, transparent, transparent 3px, ${C.stroke} 3px, ${C.stroke} 5px)` : r.skipped ? 'transparent' : r.after ? C.green : C.stroke,
+              border: size(r) == null ? `1px dashed ${C.muted}` : r.skipped ? `1px dashed ${C.green}` : 'none', boxSizing: 'border-box',
               opacity: hover === null || hover === i ? 1 : 0.45,
               outline: hover === i ? `1px solid ${C.text}` : 'none',
               transition: 'opacity 120ms'
@@ -259,7 +300,7 @@ function Compare({ before, after }) {
       ]
     })
   const has = after && after.runs
-  const plan = !before.cost_usd && before.api_cost_usd != null
+  const plan = before.cost_usd == null && before.api_cost_usd != null
   return jsxs('div', {
     style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 },
     children: [
@@ -358,7 +399,7 @@ function LiveOptions({ item, act }) {
   })
 }
 
-function JobBubble({ item, status, trialRuns, act, exp }) {
+function JobBubble({ item, status, trialRuns, act, exp, ctx }) {
   const tone = status === 'live' ? C.green : status === 'testing' ? C.yellow : C.accent
   let headline, sub, action
   if (status === 'live') {
@@ -411,6 +452,7 @@ function JobBubble({ item, status, trialRuns, act, exp }) {
     item.schedule_hint ? small(item.schedule_hint, C.soft) : null,
     jsx(SavingsMap, { key: 'm', item }),
     jsx(TuneRow, { key: 't', tune: item.tune, trialRuns, act }),
+    jsx(JobEvidence, { key: 'evidence', item, ctx, onChanged: () => act(null) }),
     status === 'testing' && item.last_test && !item.last_test.ok ? small(`Last test: ${item.last_test.why}`, C.soft) : null
   ], item.job_id)
 }
@@ -444,7 +486,7 @@ function Hero({ data, act }) {
     scoreBar,
     small(data.score === null
       ? 'No active scheduled jobs to score right now.'
-      : 'How much of your active scheduled work already runs on cheaper, proven settings.'),
+      : 'How much of your active scheduled work uses lower-cost settings. Review each trial and its evidence below.'),
     jsxs('div', {
       key: 'stats',
       style: { display: 'flex', gap: 8, marginTop: 4 },
@@ -498,12 +540,12 @@ function HowItWorks({ onHide }) {
   return bubble([
     row('How Crystallize Cron saves', pill('Got it', onHide, C.muted)),
     small('A cron job costs roughly its prompt size times its AI calls, plus reasoning. Crystallize shows where each job\'s money goes and works on all of it.', C.soft),
-    small('Make cheaper uses fewer AI calls, keeps only the tools a job uses, cleans tool results and lowers reasoning. It stays only if the answers hold up and the job really got cheaper. Otherwise the old settings come back by themselves.', C.soft),
+    small('Settings trials try fewer AI calls, narrower tool access and safe result cleanup. Lower reasoning is optional. A stage stays when its recorded checks pass and its measured cost falls; failed stages restore the prior settings.', C.soft),
     small('A job that repeats the same steps can also get a routine that fetches its data before the AI starts, after matching test runs. If nothing changed, the run can skip the AI, or repeat its last answer if someone expects a message.', C.soft)
   ], 'how')
 }
 
-function Jobs({ data, act, exp }) {
+function Jobs({ data, act, exp, ctx }) {
   const items = [
     ...data.testing.filter(x => x.ready).map(x => ['testing', x]),
     ...data.live.map(x => ['live', x]),
@@ -518,8 +560,8 @@ function Jobs({ data, act, exp }) {
         .map((pair, i) => ({ pair, i, rank: pair[1].cron && pair[1].cron.status === 'running' ? 0 : 1 }))
         .sort((a, b) => a.rank - b.rank || a.i - b.i)  // running jobs first
         .map(({ pair: [status, item] }) => status === 'waiting'
-          ? jsx(WaitingBubble, { key: item.job_id || item.name, item, trialRuns: data.trial_runs, act, exp })
-          : jsx(JobBubble, { key: item.job_id, item, status, trialRuns: data.trial_runs, act, exp })),
+          ? jsx(WaitingBubble, { key: item.job_id || item.name, item, trialRuns: data.trial_runs, act, exp, ctx })
+          : jsx(JobBubble, { key: item.job_id, item, status, trialRuns: data.trial_runs, act, exp, ctx })),
       ...(items.length || (data.watching || []).length ? [] : [small('No active scheduled jobs. New ones show up here as soon as they are created.')])
     ]
   })
@@ -623,26 +665,156 @@ function JobHeader({ item, open, toggle, tag, action, muted, hide }) {
   })
 }
 
+// Load evidence only when expanded. GET /compare is a read-only preview.
+function JobEvidence({ item, ctx, onChanged }) {
+  const jobId = item.job_id
+  const [open, setOpen] = useState(false)
+  const [receipt, setReceipt] = useState(null)
+  const [preview, setPreview] = useState(null)
+  const [contract, setContract] = useState('{}')
+  const [error, setError] = useState(null)
+  const [pending, setPending] = useState(null)
+  const [comparison, setComparison] = useState(null)
+  const scope = useRequestScope(jobId)
+  const running = useRef(false)
+  const load = useCallback((preserveError = false) => {
+    if (!open || !jobId) return
+    const version = ++scope.current.version
+    const active = () => scope.current.scope === jobId && scope.current.version === version
+    Promise.allSettled([
+      ctx.rest(`/receipt?job_id=${encodeURIComponent(jobId)}`),
+      ctx.rest(`/compare?job_id=${encodeURIComponent(jobId)}`),
+      ctx.rest(`/contract?job_id=${encodeURIComponent(jobId)}`)
+    ]).then(results => {
+      if (!active()) return
+      const [r, p, c] = results.map(result => result.status === 'fulfilled' ? result.value : { error: "Couldn't load this part of the job's evidence." })
+      setReceipt(r && !r.error ? r : null)
+      setPreview(p && !p.error ? p : { available: false, why: p && p.error })
+      if (c && !c.error) setContract(JSON.stringify(c.contract || {}, null, 2))
+      if (c && c.error || r && r.error) setError(c && c.error || r && r.error)
+      else if (!preserveError) setError(null)
+    }).catch(() => { if (active()) setError("Couldn't load this job's evidence.") })
+  }, [ctx, jobId, open])
+  useEffect(() => { load(); return () => { scope.current.version += 1 } }, [load])
+  const save = () => {
+    let spec
+    try { spec = JSON.parse(contract); if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new Error() }
+    catch { setError('Use a JSON object for the validation requirements.'); return }
+    if (running.current) return
+    running.current = true
+    scope.current.version += 1
+    setPending('save')
+    ctx.rest('/contract', { method: 'POST', body: { job_id: jobId, contract: Object.keys(spec).length ? spec : null } })
+      .then(res => {
+        if (scope.current.scope !== jobId) return
+        if (!res || !res.ok) setError(res && (res.message || res.error) || "Couldn't save requirements.")
+        else { setError(null); setContract(JSON.stringify(res.contract || {}, null, 2)); load(); onChanged() }
+      }).catch(() => { if (scope.current.scope === jobId) setError("Couldn't save requirements.") })
+      .finally(() => { running.current = false; if (scope.current.scope === jobId) setPending(null) })
+  }
+  const compare = () => {
+    if (running.current || !preview || !preview.available) return
+    running.current = true
+    setPending('compare')
+    setError(null)
+    ctx.rest('/compare', { method: 'POST', body: { job_id: jobId, execution_id: preview.execution_id || null, confirmed: true } })
+      .then(res => {
+        if (scope.current.scope !== jobId) return
+        if (!res || !res.ok) setError(res && (res.message || res.error) || 'Comparison could not finish.')
+        if (res && res.comparison) setComparison(res.comparison)
+        load(!res || !res.ok)
+        onChanged()
+      }).catch(() => { if (scope.current.scope === jobId) setError('Comparison failed. Its calls may still have incurred model cost; review the receipt before trying again.') })
+      .finally(() => { running.current = false; if (scope.current.scope === jobId) setPending(null) })
+  }
+  const draft = (() => { try { const value = JSON.parse(contract); return value && typeof value === 'object' && !Array.isArray(value) ? value : null } catch { return null } })()
+  const edit = patch => { if (draft) setContract(JSON.stringify({ ...draft, ...patch }, null, 2)) }
+  const lines = text => text.split('\n').map(v => v.trim()).filter(Boolean)
+  return jsxs('div', {
+    style: { display: 'flex', flexDirection: 'column', gap: 6, borderTop: `0.5px solid ${C.stroke}`, paddingTop: 5 },
+    children: [
+      jsx('button', { type: 'button', 'aria-expanded': open, onClick: () => setOpen(v => !v),
+        style: { background: 'none', border: 'none', padding: 0, textAlign: 'left', color: C.accent, cursor: 'pointer', fontSize: '0.6875rem' },
+        children: `${open ? '▾' : '▸'} Evidence and controls` }),
+      ...(open ? [
+        error ? jsx('div', { role: 'status', children: small(error, C.yellow) }) : null,
+        receipt ? jsx(ReceiptSummary, { receipt }) : small('Loading evidence…'),
+        preview ? jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 }, children: [
+          label('Same-input comparison'),
+          small(preview.cost_notice || 'Runs two answer-only model calls using the same saved input. Both routes may charge.', C.soft),
+          small('Uses frozen recorded evidence for two answers. It does not replay tools or run the scheduled job.', C.soft),
+          preview.original && preview.candidate ? small(`${preview.original.route_label || preview.original.configured_model || preview.original.model || 'Original route'} → ${preview.candidate.route_label || preview.candidate.configured_model || preview.candidate.model || 'Candidate route'}`) : null,
+          !preview.available ? small(preview.why || 'Record a complete run and choose a helper model first.', C.yellow) : null,
+          actionButton(pending === 'compare' ? 'Comparing two answers…' : 'Compare same input', compare, !!pending || !preview.available),
+          pending === 'compare' ? jsx('div', { role: 'status', 'aria-live': 'polite', children: small('Two model calls are in progress. Their cost is included in the receipt; the job settings stay as they are.', C.soft) }) : null,
+          rawDetails('Comparison scope and routes', preview),
+          rawDetails('Comparison result, checks and answer diff', comparison)
+        ] }) : null,
+        jsxs('details', { children: [
+          jsx('summary', { style: { color: C.soft, fontSize: '0.6875rem', cursor: 'pointer' }, children: 'Validation requirements' }),
+          jsx('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }, children: [
+            small('Choose what every answer must contain. Changing requirements needs new trial evidence. Structural checks do not prove answer quality.', C.soft),
+            draft ? field('Required URLs (one per line)', jsx('textarea', { rows: 2, style: fieldStyle, value: (Array.isArray(draft.required_urls) ? draft.required_urls : []).join('\n'), onChange: e => edit({ required_urls: lines(e.target.value) }) })) : null,
+            draft ? field('Required JSON fields (one path per line)', jsx('textarea', { rows: 2, style: fieldStyle, value: (Array.isArray(draft.required_fields) ? draft.required_fields : []).join('\n'), onChange: e => edit({ required_fields: lines(e.target.value) }), placeholder: 'items.0.title' })) : null,
+            draft ? field('Minimum items', jsx('input', { type: 'number', min: 0, max: 100000, style: fieldStyle, value: draft.minimum_items || 0, onChange: e => edit({ minimum_items: Number(e.target.value) }) })) : null,
+            jsxs('details', { children: [jsx('summary', { style: { fontSize: '0.6875rem', color: C.muted, cursor: 'pointer' }, children: 'Advanced sources, actions and status rules' }),
+              field('Validation contract (JSON)', jsx('textarea', { rows: 7, value: contract, onChange: e => setContract(e.target.value), style: { ...fieldStyle, fontFamily: 'monospace', marginTop: 5 }, maxLength: 32000 }))] }),
+            actionButton(pending === 'save' ? 'Saving…' : 'Save requirements', save, !!pending)
+          ] })
+        ] }),
+        rawDetails('Full receipt and cost provenance', receipt)
+      ] : [])
+    ]
+  })
+}
+
+function ReceiptSummary({ receipt }) {
+  const basis = receipt.preferred_basis
+  const costs = basis && receipt.cost_bases && receipt.cost_bases[basis]
+  const net = receipt.net_payback_usd
+  return jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 3 }, children: [
+    label('Receipt'),
+    small(`${receipt.sample_count || 0} recorded runs · ${receipt.comparison_call_count || 0} comparison calls · ${receipt.helper_call_count || 0} helper calls`, C.soft),
+    jsx('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 5 }, children: [
+      jsx(Tile, { title: 'Gross reduction', value: money(costs && costs.historical_savings_usd) }),
+      jsx(Tile, { title: 'Trial/helper cost', value: money(costs && costs.overhead_usd) }),
+      jsx(Tile, { title: 'Net payback', value: money(net), color: net == null ? C.soft : net >= 0 ? C.green : C.yellow })
+    ] }),
+    small(basis === 'actual' ? 'Uses recorded actual costs.' : basis === 'estimated' ? 'Uses estimated costs at listed prices.' : 'Net payback is unknown until comparable costs are recorded.'),
+    receipt.estimated_break_even_remaining_runs != null ? small(`About ${receipt.estimated_break_even_remaining_runs} more comparable runs to repay measured overhead.`) : null,
+    Array.isArray(receipt.uncertainty) && receipt.uncertainty.length ? small(receipt.uncertainty.join(' '), C.yellow) : null
+  ] })
+}
+
 // Cheaper settings for any AI job, routine or not.
 function TuneRow({ tune, trialRuns, act }) {
   if (!tune) return null
+  const trial = ['trial', 'trying', 'testing', 'running'].includes(tune.status)
+  const kept = tune.status === 'kept'
   const notes = [
     tune.status_text !== 'Not tried yet' ? tune.status_text : null,
-    tune.api_cost_now != null && tune.status !== 'kept' ? `${tune.included_now ? 'in your plan, ' : ''}about ${money(tune.api_cost_now)} a run at API prices` : null,
+    tune.api_cost_now != null && !kept ? `${tune.included_now ? 'in your plan, ' : ''}about ${money(tune.api_cost_now)} a run at API prices` : null,
     tune.tokens_now != null ? `${Math.round(tune.tokens_now).toLocaleString()} tokens a run` : null,
-    tune.cleaned_chars != null ? `${Math.round(tune.cleaned_chars).toLocaleString()} characters cleaned from tool results` : null,
-    tune.reasoning_share != null && tune.status !== 'kept' ? `reasoning is about ${Math.round(tune.reasoning_share * 100)}% of its cost` : null
+    tune.reasoning_share != null && !kept ? `reasoning is about ${Math.round(tune.reasoning_share * 100)}% of its cost` : null
   ].filter(Boolean)
+  const job = tune.job_id || tune.name
   return jsxs('div', {
     key: 'tune',
     style: { display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2 },
     children: [
-      notes.length ? small(notes.join(' · '), tune.status === 'kept' ? C.green : C.soft) : null,
+      row('Settings', jsxs('div', {
+        style: { display: 'flex', gap: 6, alignItems: 'center' },
+        children: [
+          kept ? chip('Kept', C.green) : trial ? chip('Trial', C.yellow) : tune.status === 'revalidation' ? chip('Needs new evidence', C.yellow) : null,
+          tune.can_undo ? pill('Undo settings', () => act('/tune', { job, undo: true }), C.muted) : null
+        ]
+      })),
+      notes.length ? small(notes.join(' · '), kept ? C.green : C.soft) : null,
       tune.can_try ? jsxs('div', {
         style: { display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start' },
         children: [
-          pill('Make cheaper', () => act('/tune', { job: tune.name }), C.accent),
-          small(`Uses fewer tools and AI calls, cleans tool results and reasons less. After ${trialRuns} answers it stays only if they hold up and it got cheaper.`, C.muted)
+          pill('Try cheaper settings', () => act('/tune', { job }), C.accent),
+          small(`Tests fewer tools and AI calls, with lower reasoning only when allowed. After ${trialRuns} answers it keeps a stage only when the recorded checks pass and its cost falls.`)
         ]
       }) : null
     ]
@@ -692,7 +864,7 @@ function tunedHeadline(item) {
 }
 
 // An active cron job with no routine yet: what it's doing, and what it can do.
-function WaitingBubble({ item, trialRuns, act, exp }) {
+function WaitingBubble({ item, trialRuns, act, exp, ctx }) {
   const cron = item.cron || {}
   const id = item.job_id || item.name
   const open = isOpen(exp, id, cron)
@@ -708,6 +880,7 @@ function WaitingBubble({ item, trialRuns, act, exp }) {
     jsx(Periods, { key: 'p', periods: item.periods, timeline: item.timeline }),
     jsx(SavingsMap, { key: 'm', item }),
     jsx(TuneRow, { key: 't', tune: item.tune, trialRuns, act }),
+    jsx(JobEvidence, { key: 'evidence', item, ctx, onChanged: () => act(null) }),
     small(item.reason, C.muted)
   ], id)
 }
@@ -765,17 +938,22 @@ function Panel({ ctx }) {
   const sessionId = useValue(host.state.focusedStoredSessionId)
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
+  const requests = useRequestScope(sessionId)
 
   useEffect(() => diag('panel mounted', { sessionId }), [])
 
   const load = useCallback(() => {
     const q = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''
+    const version = ++requests.current.version
+    const active = () => requests.current.scope === sessionId && requests.current.version === version
     ctx.rest(`/summary${q}`)
       .then(res => {
+        if (!active()) return
         if (res && res.error) setError(res.error)
         else { setError(null); setData(res) }
       })
       .catch(err => {
+        if (!active()) return
         diag('summary failed', String(err))
         setError("Couldn't reach the Crystallize backend. Is the plugin enabled?")
       })
@@ -787,8 +965,9 @@ function Panel({ ctx }) {
   }, [ctx, load])
 
   const act = useCallback((path, body) => {
+    if (!path) { load(); return }
     diag('action', { path, body })
-    ctx.rest(path, { method: 'POST', body })
+    return ctx.rest(path, { method: 'POST', body })
       .then(res => {
         host.notify({ kind: res && res.ok ? 'success' : 'warning', message: (res && res.message) || 'Done.' })
         load()
@@ -860,7 +1039,7 @@ function Panel({ ctx }) {
     const hiddenCount = [...data.testing, ...data.live, ...data.spotted, ...(data.watching || []), ...(data.finished || [])].filter(x => !seen(x)).length
     body = [jsx(Hero, { key: 'hero', data, act }), jsx(RunawayBrake, { key: 'brake', ctx, act, refresh: data })]
     if (prefs.explain !== false) body.push(jsx(HowItWorks, { key: 'how', onHide: () => setPref('explain', false) }))
-    if (prefs.jobs) body.push(jsx(Jobs, { key: 'jobs', data: shown, act, exp }))
+    if (prefs.jobs) body.push(jsx(Jobs, { key: 'jobs', data: shown, act, exp, ctx }))
     if (prefs.jobs) body.push(jsx(Finished, { key: 'finished', items: finishedShown, exp }))
     if (prefs.jobs && hiddenCount) body.push(jsx('div', { key: 'hidden', children: pill(`Show ${hiddenCount} removed job${hiddenCount === 1 ? '' : 's'}`, showHidden, C.muted) }))
   }
@@ -884,10 +1063,23 @@ function ModelPicker({ ctx, picked, onPicked }) {
   const [active, setActive] = useState(null)
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(null)
+  const [error, setError] = useState(null)
+  const [open, setOpen] = useState(!picked || !picked.model)
+  const [retry, setRetry] = useState(0)
 
   useEffect(() => {
-    ctx.rest('/chat-models').then(res => setProviders((res && res.providers) || [])).catch(() => setProviders([]))
-  }, [ctx])
+    let active = true
+    setError(null)
+    ctx.rest('/chat-models').then(res => {
+      if (!active) return
+      if (!res || res.error) { setError(res && res.error || "Couldn't read connected subscriptions."); return }
+      setProviders(res.providers || [])
+    }).catch(() => { if (active) setError("Couldn't read connected subscriptions.") })
+    return () => { active = false }
+  }, [ctx, retry])
+
+  if (error) return bubble([label('Helper model'), small(error, C.yellow), actionButton('Retry model discovery', () => setRetry(v => v + 1))], 'picker')
+  if (!open) return bubble([row('Helper model', actionButton('Change', () => setOpen(true))), small(picked && picked.model || 'None picked', C.soft)], 'picker')
 
   if (!providers) return bubble([label('Cheap model'), small('Loading your connected subscriptions…')], 'picker')
   if (!providers.length) {
@@ -908,8 +1100,9 @@ function ModelPicker({ ctx, picked, onPicked }) {
       .finally(() => setSaving(null))
   }
   return bubble([
-    row('Cheap model', picked && picked.model ? chip(picked.model.split('/').pop(), C.green) : chip('None picked', C.muted)),
-    small('Your main model sends it routine work and gets the output straight back, and it reads big tool results. These come from the subscriptions connected to Hermes, which keeps your sign-ins. Models Hermes features are first, then the cheapest.', C.soft),
+    row('Helper model', actionButton('Close model picker', () => setOpen(false))),
+    picked && picked.model ? small(`Selected: ${picked.model}`, C.soft) : small('None picked'),
+    small('Used for explicit routed tasks and permitted summaries. Models come from the routes connected to Hermes; prices may be unknown for some routes.', C.soft),
     jsx('div', {
       key: 'subs',
       role: 'tablist',
@@ -944,7 +1137,7 @@ function ModelPicker({ ctx, picked, onPicked }) {
       style: { display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 280, overflowY: 'auto' },
       children: models.length ? models.slice(0, 60).map(m => {
         const on = picked && picked.provider === provider.slug && picked.model === m.id
-        const price = m.output_per_million != null ? `$${m.input_per_million.toFixed(2)} in · $${m.output_per_million.toFixed(2)} out per million` : 'No listed price'
+        const price = m.output_per_million != null && m.input_per_million != null ? `$${m.input_per_million.toFixed(2)} in · $${m.output_per_million.toFixed(2)} out per million` : 'No listed price'
         return jsxs('button', {
           key: m.id,
           type: 'button',
@@ -964,32 +1157,30 @@ function ModelPicker({ ctx, picked, onPicked }) {
   ], 'picker')
 }
 
-function ThisChat({ state, onToggle, heading = 'This chat' }) {
+function ThisChat({ state, onToggle, heading = 'This chat', pending = false }) {
   if (!state.session_id) return bubble([label(heading), small('Send a message in any chat, then come back here to turn it on.')], 'this')
   const saved = state.this_chat
   const status = state.can_start || state.enabled
-    ? pill(state.enabled ? 'Turn off' : 'Turn on', onToggle, state.enabled ? C.muted : C.accent)
+    ? actionButton(pending ? 'Saving…' : state.enabled ? 'Turn off' : 'Turn on', onToggle, pending)
     : chip('Off', C.muted)
-  if (!state.enabled && !state.can_start) {
-    return bubble([row(heading, status), small(state.why_not, C.soft)], 'this')
-  }
-  if (!state.enabled) {
-    return bubble([row(heading, status), small('Off for this chat. Turn it on to start saving from your next tool result.', C.soft)], 'this')
-  }
-  if (!saved) {
-    return bubble([row(heading, status), small('On. Savings appear after a tool returns a big result.', C.soft)], 'this')
-  }
-  const cells = [
-    ['Removed', `${tokensText(saved.tokens_removed)} tokens`, C.green],
-    ['Results shrunk', String(saved.results)],
-    saved.cheap_cost ? ['Cheap model', money(saved.cheap_cost)] : null,
-    state.chat_spent_usd != null ? ['Chat so far', money(state.chat_spent_usd)] : null
-  ].filter(Boolean)
+  const cells = saved ? [
+    ['Input removed', `${tokensText(saved.tokens_removed || 0)} tokens`, C.green],
+    ['Avoided input, one read', money(saved.once_at_main_price)],
+    ['Generation avoided', money(saved.estimated_output_avoided_usd)],
+    ['Delegated output read', money(saved.estimated_helper_read_usd)],
+    ['Helper cost estimate', money(saved.cheap_cost)],
+    ['Estimated net, one read', money(saved.net_once), saved.net_once == null ? C.soft : saved.net_once >= 0 ? C.green : C.yellow],
+    ['Helper calls', String(saved.helper_calls || 0)],
+    state.chat_spent_usd != null ? ['Chat spend recorded', money(state.chat_spent_usd)] : null
+  ].filter(Boolean) : []
+  const turns = (state.turns || []).slice(-8)
   return bubble([
     row(heading, status),
-    jsx('div', {
+    !state.enabled ? small(state.can_start ? 'Off for this chat. Controls apply after you turn it on.' : state.why_not, C.soft)
+      : small('On for future tool results. Your main model stays the same.', C.soft),
+    saved ? jsx('div', {
       key: 'cells',
-      style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 8 },
+      style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: 8 },
       children: cells.map(([title, value, color]) => jsxs('div', {
         key: title,
         children: [
@@ -997,32 +1188,92 @@ function ThisChat({ state, onToggle, heading = 'This chat' }) {
           jsx('div', { style: { fontSize: '0.8125rem', color: color || C.text, fontVariantNumeric: 'tabular-nums' }, children: value })
         ]
       }))
-    }),
-    saved.net_once != null ? small(`Estimated saving: about ${money(Math.max(0, saved.net_once))} on the next message alone, after the cheap model's cost. It repeats on each later message.`, C.soft) : null,
-    state.chat && state.chat.calls_saveable ? small(`Repeated steps: a saved routine could skip ${state.chat.calls_saveable} tool call${state.chat.calls_saveable === 1 ? '' : 's'} in this chat.`, C.soft) : null,
-    state.not_cheaper ? small('Your cheap model costs the same or more than your main model, so results are only cleaned. Pick a cheaper one on the Crystallize Chat page.', C.yellow) : null
-  ], 'this')
+    }) : small('Estimates appear after a tool result is reduced or a helper is used.'),
+    saved ? small('Estimates combine one avoided input read and generation actually delegated, less delegated output reads and all helper spend. They are not a bill or guaranteed savings. Context Rent below accounts for later reads.', C.soft) : null,
+    saved && saved.unknown_cost_calls ? small(`${saved.unknown_cost_calls} helper call${saved.unknown_cost_calls === 1 ? ' has' : 's have'} unknown cost. Net savings are unknown.`, C.yellow) : null,
+    saved && (saved.failed_calls || saved.rejected_calls) ? small(`${saved.failed_calls || 0} failed and ${saved.rejected_calls || 0} rejected helper calls are included in cost estimates.`) : null,
+    turns.length || (state.breakdown || []).length ? jsxs('details', { key: 'turns', children: [
+      jsx('summary', { style: { color: C.soft, cursor: 'pointer', fontSize: '0.6875rem' }, children: 'Per-turn and helper breakdown' }),
+      ...turns.map((t, i) => jsx('div', { key: t.turn_id || i, style: { marginTop: 5 }, children: small(
+        `Turn ${String(t.turn_id || i + 1)}: ${tokensText(t.tokens_removed || 0)} input tokens removed · helper ${money(t.cheap_cost)} · one-read net ${money(t.net_once)}`, C.soft) })),
+      ...(state.breakdown || []).map((part, i) => small(`${part.kind || part.name || i}: ${part.helper_calls || 0} helper calls · ${money(part.cheap_cost)} helper cost · ${tokensText(part.tokens_removed || 0)} tokens removed`))
+    ] }) : null,
+    state.not_cheaper ? small('The selected helper is not cheaper than your main model. Choose a lower-cost route to allow automatic helper work.', C.yellow) : null
+  ].filter(Boolean), 'this')
+}
+
+function ChatControls({ ctx, sessionId, policy, observedTools = [], onSaved }) {
+  const [focus, setFocus] = useState(policy.focus || '')
+  const [tool, setTool] = useState('')
+  const [mode, setMode] = useState('clean')
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState(null)
+  const scope = useRequestScope(sessionId)
+  const saving = useRef(false)
+  useEffect(() => { setFocus(policy.focus || ''); setError(null) }, [sessionId, policy.focus])
+  const save = (name, value, includeFocus = false) => {
+    if (saving.current) return
+    saving.current = true
+    setPending(true)
+    const body = { session_id: sessionId, tool: name, mode: value, ...(includeFocus ? { focus } : {}) }
+    ctx.rest('/chat-policy', { method: 'POST', body }).then(res => {
+      if (scope.current.scope !== sessionId) return
+      if (!res || !res.ok) setError(res && (res.message || res.error) || "Couldn't save these controls.")
+      else { setError(null); setTool(''); onSaved(res.policy) }
+    }).catch(() => { if (scope.current.scope === sessionId) setError("Couldn't save these controls.") })
+      .finally(() => { saving.current = false; if (scope.current.scope === sessionId) setPending(false) })
+  }
+  const selectMode = (value, onChange, name) => jsx('select', {
+    value, onChange: e => onChange(e.target.value), disabled: pending, 'aria-label': name, style: { ...fieldStyle, width: 'auto' },
+    children: [['exact', 'Exact'], ['clean', 'Clean'], ['summary', 'Summary']].map(([value, title]) => jsx('option', { key: value, value, children: title }))
+  })
+  const tools = [...new Set([...Object.keys(policy.tools || {}), ...observedTools])].sort()
+  return bubble([
+    row('Tool-result controls', selectMode(policy.default_mode || 'clean', value => save('*', value), 'Default tool-result mode')),
+    small('Exact keeps a result unchanged. Clean uses safe cleanup. Summary allows a helper call when its estimate pays back. Files and failed results stay exact.', C.soft),
+    field('Task focus (optional)', jsx('textarea', { value: focus, rows: 2, maxLength: 2000, onChange: e => setFocus(e.target.value), style: fieldStyle, placeholder: 'What information matters for this task?' })),
+    actionButton(pending ? 'Saving…' : 'Save task focus', () => save('*', policy.default_mode || 'clean', true), pending),
+    jsxs('details', { key: 'tools', children: [
+      jsx('summary', { style: { color: C.soft, cursor: 'pointer', fontSize: '0.6875rem' }, children: `Per-tool overrides${tools.length ? ` · ${tools.length}` : ''}` }),
+      ...tools.map(name => jsx('div', { key: name, style: { marginTop: 5 }, children: row(name, selectMode(policy.tools[name] || policy.default_mode || 'clean', value => save(name, value), `Mode for ${name}`)) })),
+      jsx('div', { style: { display: 'flex', flexDirection: 'column', gap: 5, marginTop: 6 }, children: [
+        field('Tool name', jsx('input', { value: tool, maxLength: 128, onChange: e => setTool(e.target.value), style: fieldStyle, placeholder: 'Name shown on a tool result' })),
+        row('New override', selectMode(mode, setMode, 'New tool-result mode')),
+        actionButton('Save tool override', () => save(tool.trim(), mode), pending || !tool.trim())
+      ] })
+    ] }),
+    error ? jsx('div', { role: 'status', children: small(error, C.yellow) }) : null,
+    small('These settings apply only to this chat after you enable it. Saved full-result links expire after seven days.')
+  ].filter(Boolean), 'controls')
 }
 
 // Context Rent: a map of what the chat re-reads on every AI call, and a way to stop paying for a result.
-function ContextRent({ ctx, sessionId, refresh }) {
+function ContextRent({ ctx, sessionId, refresh, onTools }) {
   const [data, setData] = useState(null)
   const [picked, setPicked] = useState(null)
+  const requests = useRequestScope(sessionId)
   const load = useCallback(() => {
     if (!sessionId) return
+    const version = ++requests.current.version
+    const active = () => requests.current.scope === sessionId && requests.current.version === version
     ctx.rest(`/chat-rent?session_id=${encodeURIComponent(sessionId)}`)
-      .then(res => setData(res && !res.error ? res : null))
-      .catch(() => setData(null))
-  }, [ctx, sessionId])
-  useEffect(load, [load, refresh])
-  if (!data || !data.calls) return null
+      .then(res => {
+        if (!active()) return
+        setData(res && !res.error ? { ...res, session_id: sessionId } : null)
+        if (onTools && res && !res.error) onTools([...new Set((res.items || []).map(item => item.tool).filter(name => typeof name === 'string'))])
+      })
+      .catch(() => { if (active()) setData(null) })
+  }, [ctx, sessionId, onTools])
+  useEffect(() => { load(); return () => { requests.current.version += 1 } }, [load, refresh])
+  if (!data || data.session_id !== sessionId || !data.calls) return null
   const act = (path, id) => {
     ctx.rest(path, { method: 'POST', body: { session_id: sessionId, id } })
       .then(res => {
+        if (requests.current.scope !== sessionId) return
         host.notify({ kind: res && res.ok ? 'success' : 'warning', message: (res && res.message) || 'Done.' })
         load()
       })
-      .catch(err => host.notify({ kind: 'error', message: `Crystallize: ${String(err)}` }))
+      .catch(err => { if (requests.current.scope === sessionId) host.notify({ kind: 'error', message: `Crystallize: ${String(err)}` }) })
   }
   const results = data.items.filter(i => !i.removed)
   const tiles = [
@@ -1079,7 +1330,7 @@ function ContextRent({ ctx, sessionId, refresh }) {
   ].filter(Boolean), 'rent')
 }
 
-// The sidebar page isn't inside a chat, so it works on the chat you were last in.
+// The sidebar page works on the chat you were last in.
 function ChatSection({ ctx, sessionId: focused }) {
   const [remembered, setRemembered] = useState(() => ctx.storage.get('last_chat', null))
   useEffect(() => {
@@ -1089,42 +1340,61 @@ function ChatSection({ ctx, sessionId: focused }) {
     }
   }, [ctx, focused, remembered])
   const sessionId = focused || remembered
+  return jsx(ChatSession, { key: sessionId || 'no-chat', ctx, sessionId, focused })
+}
+
+function ChatSession({ ctx, sessionId, focused }) {
   const [state, setState] = useState(null)
+  const [observedTools, setObservedTools] = useState([])
+  useEffect(() => setObservedTools([]), [sessionId])
   const [error, setError] = useState(null)
+  const [pending, setPending] = useState(false)
+  const requests = useRequestScope(sessionId)
+  const toggling = useRef(false)
   const load = useCallback(() => {
+    const version = ++requests.current.version
+    const active = () => requests.current.scope === sessionId && requests.current.version === version
     const q = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''
-    ctx.rest(`/chat-summary${q}`)
-      .then(res => { if (res && res.error) setError(res.error); else { setState(res); setError(null) } })
-      .catch(() => setError("Couldn't reach the Crystallize backend. Is the plugin enabled?"))
+    ctx.rest(`/chat-summary${q}`).then(res => {
+      if (!active()) return
+      if (!res || res.error) setError(res && res.error || "Couldn't read this chat.")
+      else if ((res.session_id || null) !== (sessionId || null)) setError('Chat focus changed. Refresh to load its controls.')
+      else { setState(res); setError(null) }
+    }).catch(() => { if (active()) setError("Couldn't reach the Crystallize backend. Is the plugin enabled?") })
   }, [ctx, sessionId])
   useEffect(() => {
     load()
-    return ctx.setInterval(load, REFRESH_MS)
+    const dispose = ctx.setInterval(load, REFRESH_MS)
+    return () => { requests.current.version += 1; dispose() }
   }, [ctx, load])
   const toggle = () => {
-    ctx.rest('/chat-toggle', { method: 'POST', body: { session_id: sessionId, on: !state.enabled } })
+    if (!state || state.session_id !== sessionId || toggling.current) return
+    toggling.current = true
+    setPending(true)
+    ctx.rest('/chat-toggle', { method: 'POST', body: { session_id: state.session_id, on: !state.enabled } })
       .then(res => {
+        if (requests.current.scope !== sessionId) return
         if (res && !res.ok) host.notify({ kind: 'warning', message: res.message })
         load()
-      })
-      .catch(err => host.notify({ kind: 'error', message: `Crystallize: ${String(err)}` }))
+      }).catch(err => { if (requests.current.scope === sessionId) host.notify({ kind: 'error', message: `Crystallize: ${String(err)}` }) })
+      .finally(() => { toggling.current = false; if (requests.current.scope === sessionId) setPending(false) })
   }
-
+  const current = state && state.session_id === sessionId ? state : null
   return jsxs('div', {
     style: { display: 'flex', flexDirection: 'column', gap: 14 },
     children: [
-      error ? small(error, C.soft) : null,
-      !state && !error ? small('Loading…') : null,
-      state ? jsx(ThisChat, { key: 'this', state, onToggle: toggle, heading: focused ? 'This chat' : `Your last chat${state.title ? `: ${state.title}` : ''}` }) : null,
-      state && sessionId ? jsx(ContextRent, { key: 'rent', ctx, sessionId, refresh: state }) : null,
-      state ? jsx(ModelPicker, { key: 'picker', ctx, picked: state.model, onPicked: load }) : null,
-      state ? bubble([
-        label('How it saves'),
-        small('Your main model keeps the thinking. For routine work like summarizing or reformatting, it sends an input to your cheap model and gets the output straight back, deciding by itself when that\'s worth doing.', C.soft),
-        small('A big tool result is paid for again on every later message, so results are also cleaned, and big ones are condensed.', C.soft),
-        small('Your main model is never switched mid-chat, which would lose its prompt cache. File contents, errors and small results stay exact. When a result is noticeably reduced, your main model can read the original.', C.soft),
-        small(state.why_not_first, C.soft)
-      ], 'how') : null
+      error ? jsx('div', { role: 'status', children: small(error, C.soft) }) : null,
+      !current && !error ? small('Loading…') : null,
+      current ? jsx(ThisChat, { key: 'this', state: current, onToggle: toggle, pending, heading: focused ? 'This chat' : `Your last chat${current.title ? `: ${current.title}` : ''}` }) : null,
+      current && sessionId ? jsx(ChatControls, { key: `controls:${sessionId}`, ctx, sessionId, policy: current.policy || { default_mode: 'clean', focus: '', tools: {} }, observedTools: current.tool_names || observedTools, onSaved: policy => { requests.current.version += 1; setState(old => old && old.session_id === sessionId ? { ...old, policy } : old) } }) : null,
+      current && sessionId ? jsx(ContextRent, { key: `rent:${sessionId}`, ctx, sessionId, refresh: current, onTools: setObservedTools }) : null,
+      current ? jsx(ModelPicker, { key: 'picker', ctx, picked: current.model, onPicked: load }) : null,
+      current ? jsxs('details', { key: 'how', children: [
+        jsx('summary', { style: { color: C.soft, cursor: 'pointer', fontSize: '0.6875rem' }, children: 'How Chat saves' }),
+        small('Your main model can route explicit routine tasks to the selected helper. Tool-result controls determine which results may be cleaned or summarized. Files and failed results stay exact.', C.soft),
+        small('Context Rent shows what old results cost to read again and the cache payback before removing one. Tokens and prices are estimates.', C.soft),
+        small(current.why_not_first, C.soft)
+      ] }) : null
     ]
   })
 }
@@ -1154,14 +1424,14 @@ function ChatPage({ ctx }) {
 // Plain explanations of everything on the panel.
 const NOTES = [
   ['The difference', [
-    ['Crystallize Cron', 'Makes scheduled jobs cheaper. Each change is tested on real runs and stays only if it proves cheaper with good answers.'],
+    ['Crystallize Cron', 'Tests cheaper settings for scheduled jobs using recorded cost and outcome checks. Task-specific requirements make the checks more useful.'],
     ['Crystallize Chat', 'Makes the chat you\'re in cheaper. You turn it on for each chat, and your main model sends routine work to a cheap model you pick.']
   ]],
   ['How Cron saves', [
-    ['Make cheaper', 'Starts a trial: fewer AI calls, only the tools the job uses, cleaned tool results and lower reasoning. After a few answers it stays only if the job got cheaper.'],
+    ['Make cheaper', 'Starts a measured trial of fewer AI calls, narrower tools and safe cleanup. Lower reasoning is tried only when allowed. Each stage needs fresh checks and lower cost before it stays.'],
     ['Routine', 'Steps a job repeats, saved so they run before the AI starts. It needs matching test runs first, and you choose when to promote it.'],
     ['Live routine', 'The routine is in use. If it fails, the AI does the whole task, and two failures in a row switch it off.'],
-    ['Savings score', 'How much of your active scheduled work already runs on cheaper, proven settings.'],
+    ['Savings score', 'How much of your active scheduled work uses lower-cost settings. Review each trial and its evidence below.'],
     ['Runaway Brake', 'Off until you turn it on. Each job gets a token limit from its own recent runs: at least 3 times a normal run and 1.5 times its largest. A run past that limit is told to stop using tools and answer with what it has, and to say it stopped early. Jobs that send or change things are never stopped, and jobs with fewer than 5 finished runs have no limit yet.']
   ]],
   ['When nothing has changed', [
@@ -1171,9 +1441,9 @@ const NOTES = [
     ['Run with no AI', 'For jobs that only report their data, like a status check. The routine\'s output is the result, at no cost.']
   ]],
   ['How Chat saves', [
-    ['Cleaned results', 'Removes markup and repeated space from tool results with no AI. File contents, errors and small results stay exact.'],
+    ['Cleaned results', 'Uses safe cleanup without an AI call when Clean is selected. Exact leaves a result unchanged; Summary permits a helper call. File contents and failed results stay exact.'],
     ['Routing', 'Your main model decides when to send routine work to your cheap model and takes the output straight back, such as summarizing or extracting data. It keeps decisions, anything that sends or changes something, and the final answer.'],
-    ['Cheap model', 'Does routed tasks and condenses big tool results. Your main model doesn\'t change. If the cheap model is slow or isn\'t worth it, results are only cleaned.'],
+    ['Helper model', 'Handles explicit routed tasks and summaries permitted by this chat’s controls. Your main model stays the same. Unknown costs remain unknown in the breakdown.'],
     ['Full results', 'When a result is noticeably reduced, the exact original is kept for 7 days. Your main model can read it, or ask the cheap model about it.'],
     ['Context Rent', 'Every AI call re-reads the whole chat, so each old tool result costs a little on every call after it. This shows what each one costs. Remove leaves a result out of what is sent to the AI, while your chat stays the same and the AI can still read the original. It works without turning on Crystallize Chat. Removing can reset the provider\'s cache once, so each result shows how many calls that takes to pay back.'],
     ['Why not from the start', 'Hermes creates the chat when your first prompt is sent, and savings come from tool results, which don\'t exist until the work starts.']
@@ -1204,7 +1474,7 @@ function NotesSection() {
 }
 
 const SECTION_NOTES = {
-  cron: 'Crystallize Cron makes scheduled jobs cheaper. It runs by itself, and each change stays only if it proves cheaper with good answers.',
+  cron: 'Crystallize Cron tests cheaper settings for scheduled jobs. Review each trial, its checks and the cost receipt.',
   chat: 'Crystallize Chat makes the chat you\'re in cheaper. You turn it on for each chat, and your main model sends routine work to a cheap model you pick.'
 }
 

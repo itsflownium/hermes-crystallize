@@ -21,9 +21,13 @@ OVER_NORMAL = 3         # the limit is at least this many times a normal run
 OVER_LARGEST = 1.5      # and always well above the largest recent run
 
 _lock = threading.Lock()
-_used: dict[str, int] = {}
-_limits: dict[str, Optional[dict[str, Any]]] = {}
-_MAX_TRACKED = 200
+_used: dict[tuple[str, str], int] = {}
+_limits: dict[tuple[str, str], Optional[dict[str, Any]]] = {}
+
+
+def _key(session_id: str) -> tuple[str, str]:
+    """A shared gateway can host the same session identifier in different profiles."""
+    return str(history._hermes_home().resolve()), session_id
 
 
 def enabled() -> bool:
@@ -32,8 +36,6 @@ def enabled() -> bool:
 
 def set_enabled(on: bool) -> dict[str, Any]:
     store.set_setting(SETTING, bool(on))
-    with _lock:
-        _limits.clear()
     return {"ok": True, "message": "Runaway Brake is on." if on else "Runaway Brake is off."}
 
 
@@ -58,14 +60,13 @@ def plan(job_name: str) -> dict[str, Any]:
 
 def _plan_for_run(job_name: str, session_id: str) -> Optional[dict[str, Any]]:
     """Worked out once per run, because this is checked before every tool."""
+    key = _key(session_id)
     with _lock:
-        if session_id in _limits:
-            return _limits[session_id]
+        if key in _limits:
+            return _limits[key]
     found = plan(job_name)
     with _lock:
-        if len(_limits) >= _MAX_TRACKED:
-            _limits.clear()
-        _limits[session_id] = found
+        _limits[key] = found
     return found
 
 
@@ -73,19 +74,29 @@ def note_usage(session_id: str, usage: Optional[dict[str, Any]]) -> None:
     """Add one AI call's tokens to this run's total."""
     if not session_id or not usage:
         return
-    total = usage.get("total_tokens") or (usage.get("prompt_tokens") or 0) + (usage.get("output_tokens") or 0)
+    if not isinstance(usage, dict):
+        return
+    total = usage.get("total_tokens")
+    if total is None:
+        total = (usage.get("prompt_tokens") or usage.get("input_tokens") or 0) + (usage.get("completion_tokens") or usage.get("output_tokens") or 0)
+    try:
+        total = max(0, int(total or 0))
+    except (TypeError, ValueError, OverflowError):
+        return
+    key = _key(session_id)
     with _lock:
-        if len(_used) >= _MAX_TRACKED and session_id not in _used:
-            _used.clear()
-        _used[session_id] = _used.get(session_id, 0) + int(total or 0)
+        # Never evict an active run to make room for another run. Session finalization
+        # removes its own entry; reaching a process-wide count cannot reset a runaway.
+        _used[key] = _used.get(key, 0) + total
 
 
 def check(job_name: str, session_id: str) -> Optional[dict[str, str]]:
     """A block for the next tool if this run has passed its limit, otherwise None."""
     if not job_name or not session_id or not enabled():
         return None
+    key = _key(session_id)
     with _lock:
-        used = _used.get(session_id, 0)
+        used = _used.get(key, 0)
     if not used:
         return None
     found = _plan_for_run(job_name, session_id)
@@ -100,9 +111,10 @@ def check(job_name: str, session_id: str) -> Optional[dict[str, str]]:
 
 
 def forget(session_id: str) -> None:
+    key = _key(session_id)
     with _lock:
-        _used.pop(session_id, None)
-        _limits.pop(session_id, None)
+        _used.pop(key, None)
+        _limits.pop(key, None)
 
 
 def summary(jobs: list[dict[str, Any]]) -> dict[str, Any]:

@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -59,6 +60,9 @@ class Run:
     api_calls: Optional[int] = None
     duration_s: Optional[float] = None
     model: Optional[str] = None
+    cost_provenance: str = "unknown"
+    api_cost_provenance: str = "unknown"
+    pricing_uncertain: bool = False
 
     @property
     def total_tokens(self) -> Optional[int]:
@@ -225,9 +229,12 @@ def _apply_session(run: Run, info: Optional[dict[str, Any]]) -> None:
     """Fill in a run's cost, tokens and timing from its Hermes session."""
     if not info:
         return
-    run.cost_usd = info.get("actual_cost_usd") or info.get("estimated_cost_usd")
-    if info.get("cost_status") == "unknown":
+    actual, estimated = info.get("actual_cost_usd"), info.get("estimated_cost_usd")
+    run.cost_usd = actual if actual is not None else estimated
+    run.cost_provenance = "actual" if actual is not None else "estimated" if estimated is not None else "unknown"
+    if info.get("cost_status") == "unknown" and actual is None:
         run.cost_usd = None  # Hermes has no price for it. That isn't the same as free.
+        run.cost_provenance = "unknown"
     run.input_tokens = info.get("input_tokens")
     run.output_tokens = info.get("output_tokens")
     run.reasoning_tokens = info.get("reasoning_tokens")
@@ -236,11 +243,17 @@ def _apply_session(run: Run, info: Optional[dict[str, Any]]) -> None:
     run.session_started = info.get("started_at")
     run.finished = bool(info.get("ended_at"))
     run.included = info.get("cost_status") == "included"
+    run.api_calls = info.get("api_call_count")
+    if run.included and actual is None:
+        run.cost_usd, run.cost_provenance = 0.0, "included"
     if run.included or run.cost_usd is None:
         run.api_cost_usd = modelinfo.api_cost(info.get("model"), info.get("billing_provider"), {
             "input": run.input_tokens, "output": run.output_tokens, "cache_read": run.cache_read_tokens,
             "cache_write": run.cache_write_tokens, "reasoning": run.reasoning_tokens})
-    run.api_calls = info.get("api_call_count")
+        run.api_cost_provenance = "aggregate_usage_estimate" if run.api_cost_usd is not None else "unknown"
+        # Context tiers and request fees are per request. Summed session buckets
+        # cannot establish those prices; do not use them as automatic cost proof.
+        run.pricing_uncertain = run.api_calls != 1
     run.model = info.get("model")
     if info.get("started_at") and info.get("ended_at"):
         run.duration_s = float(info["ended_at"]) - float(info["started_at"])
@@ -309,9 +322,7 @@ def ledger_runs(job_id: Optional[str], limit: int = 20) -> list[Run]:
                 end = datetime.fromisoformat(row["finished_at"]).timestamp()
             except (TypeError, ValueError):
                 continue
-            match = state.execute("SELECT id FROM sessions WHERE source = 'cron' AND started_at BETWEEN ? AND ? "
-                                  "AND api_call_count > 0 ORDER BY ABS(ended_at - ?) LIMIT 1",
-                                  (start - 5, end + 5, end)).fetchone()
+            match = _ledger_session(state, str(job_id), str(row["id"]), start, end)
             if not match or match["id"] in used:
                 continue
             used.add(match["id"])
@@ -327,6 +338,30 @@ def ledger_runs(job_id: Optional[str], limit: int = 20) -> list[Run]:
     finally:
         conn.close()
         state.close()
+
+
+def _ledger_session(state: sqlite3.Connection, job_id: str, execution_id: str,
+                    start: float, end: float) -> Optional[sqlite3.Row]:
+    """Use durable scheduler identity; a nearby timestamp is never identity."""
+    have = _columns(state, "session_admissions")
+    if {"target_session_id", "principal_id", "request_id"} <= have:
+        matches = state.execute(
+            "SELECT DISTINCT s.id FROM session_admissions a JOIN sessions s ON s.id = a.target_session_id "
+            "WHERE a.principal_id = 'cron-owner' AND a.request_id = ? AND s.source = 'cron'",
+            (f"cron:{job_id}:{execution_id}",)).fetchall()
+        if len(matches) == 1:
+            return matches[0]
+        if matches:
+            return None
+    # Old Hermes minted cron_<exact job id>_YYYYmmdd_HHMMSS session IDs.
+    # Restrict both the identity and the time window, and reject ambiguity.
+    prefix = f"cron_{job_id}_"
+    matches = state.execute(
+        "SELECT id FROM sessions WHERE source = 'cron' AND substr(id, 1, ?) = ? "
+        "AND started_at BETWEEN ? AND ? AND api_call_count > 0",
+        (len(prefix), prefix, start - 5, end + 5)).fetchall()
+    matches = [row for row in matches if re.fullmatch(r"\d{8}_\d{6}", row["id"][len(prefix):])]
+    return matches[0] if len(matches) == 1 else None
 
 
 def _avg(values: list[Optional[float]]) -> Optional[float]:

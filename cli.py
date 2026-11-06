@@ -185,12 +185,19 @@ def _lifecycle_action(sub: str, job: str, args: Any = None) -> None:
 def _prerun(routine_id: str) -> None:
     import sys
 
-    from . import prerun, tools
+    from . import lifecycle, prerun, store, tools
 
     try:
         text, code = prerun.run(routine_id, tools.dispatch)
     except Exception as exc:  # noqa: BLE001 — the AI must still get to do the job
-        text, code = f"Crystallize: the routine couldn't run ({type(exc).__name__}: {exc}). Do the whole task yourself.", 0
+        code = 1
+        try:
+            row = store.get_routine(routine_id)
+            code = int(bool(row and (row.get("meta") or {}).get("mode") == "no_ai"))
+            lifecycle.live_result(routine_id, False, f"{type(exc).__name__}: {exc}")
+        except Exception:
+            pass
+        text = f"Crystallize: the routine couldn't run ({type(exc).__name__}: {exc}). Do the whole task yourself."
     sys.stdout.write(text + "\n")
     sys.stdout.flush()
     if code:
@@ -240,8 +247,6 @@ def _tune(args: Any) -> None:
     if getattr(args, "all", False):
         result = tuning.start_all()
         print(f"Started on: {', '.join(result['started']) or 'nothing'}")
-        if result["routines"]:
-            print(f"Testing routines for: {', '.join(result['routines'])}. Promoting one stays your choice.")
         for name, why in result["skipped"].items():
             print(f"  {name}: {why}")
         return
@@ -266,6 +271,9 @@ def _tune(args: Any) -> None:
 
 def _handle(args: Any) -> None:
     sub = getattr(args, "crystal_command", None)
+    if sub in ("contract", "compare", "receipt", "recipe", "cache", "chat-policy"):
+        _improvement_action(sub, args)
+        return
     if sub == "prerun":
         _prerun(args.routine_id)
         return
@@ -282,6 +290,54 @@ def _handle(args: Any) -> None:
         _print_analysis(args.job, getattr(args, "json", False))
     else:
         print("Usage: hermes crystal history [job] | analyze <job> [--json] | try|test|promote|undo|show <job> | mode <job> ai|no-ai | skip <job> auto|repeat|quiet|off | tune [job] [--level L] [--undo]")
+
+
+def _read_json(path: str) -> Any:
+    import json
+    from pathlib import Path
+    source = Path(path)
+    if source.stat().st_size > 500_000:
+        raise ValueError("The JSON file exceeds 500 KB.")
+    return json.loads(source.read_text(encoding="utf-8"))
+
+
+def _improvement_action(sub: str, args: Any) -> None:
+    import json
+    from . import chat_policy, contracts, experiments, fetch_cache, lifecycle, receipts, recipes, store
+
+    try:
+        if sub == "chat-policy":
+            if args.mode is not None or args.focus is not None:
+                mode = args.mode or chat_policy.policy_for(args.session_id, args.tool)["mode"]
+                result = chat_policy.set_policy(args.session_id, args.tool, mode, args.focus)
+            else:
+                result = chat_policy.summary(args.session_id)
+        elif sub == "cache" and args.clear:
+            result = {"cleared_entries": fetch_cache.clear()}
+        else:
+            job = lifecycle.cron_job(args.job)
+            if not job:
+                raise ValueError("No such cron job.")
+            job_id = job["id"]
+            if sub == "contract":
+                result = contracts.set(job_id, None if args.clear else _read_json(args.file)) if args.clear or args.file else contracts.get(job_id)
+                lifecycle.refresh_drift()
+            elif sub == "recipe":
+                result = recipes.install(job_id, _read_json(args.file))
+            elif sub == "receipt":
+                result = receipts.receipt(job_id)
+            elif sub == "compare":
+                # The command itself is an explicit user action. A preview remains free.
+                result = experiments.preview(job_id) if args.preview else experiments.compare(
+                    job_id, execution_id=args.execution, sample_count=args.samples,
+                    candidate=_read_json(args.candidate) if args.candidate else None, confirmed=True)
+            elif sub == "cache":
+                result = (fetch_cache.configure(job_id, args.seconds, args.namespace)
+                          if args.seconds is not None else fetch_cache.validate(store.get_setting('fetch_cache:' + job_id)))
+                lifecycle.refresh_drift()
+        print(json.dumps(result, indent=2, default=str))
+    except (ValueError, OSError, lifecycle.LifecycleError, experiments.ComparisonError) as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _setup(subparser: Any) -> None:
@@ -317,6 +373,32 @@ def _setup(subparser: Any) -> None:
     tn.add_argument("--status", action="store_true", help="Show the result, with an answer from before and after")
     pr = subs.add_parser("prerun", help="(used by a promoted job's pre-run script) run a routine and print its data")
     pr.add_argument("routine_id")
+    ct = subs.add_parser("contract", help="Show or set a job's explicit outcome checks")
+    ct.add_argument("job")
+    files = ct.add_mutually_exclusive_group()
+    files.add_argument("--file", help="JSON outcome contract")
+    files.add_argument("--clear", action="store_true")
+    cp = subs.add_parser("compare", help="Compare two answer configurations on identical recorded reads (uses the selected models)")
+    cp.add_argument("job")
+    cp.add_argument("--preview", action="store_true", help="Inspect available input and model-call count without calling a model")
+    cp.add_argument("--execution", help="Use a particular recorded execution")
+    cp.add_argument("--samples", type=int, default=1, help="Recorded inputs to compare; each makes two bounded model calls")
+    cp.add_argument("--candidate", help="Optional JSON candidate prompt/model configuration")
+    rc = subs.add_parser("receipt", help="Export a job's proof, overhead and payback receipt without making model calls")
+    rc.add_argument("job")
+    rp = subs.add_parser("recipe", help="Import an explicit parameterized read recipe and begin testing")
+    rp.add_argument("job")
+    rp.add_argument("file", help="Version 2 JSON recipe")
+    ca = subs.add_parser("cache", help="Configure opt-in read caching or clear this profile's fetch cache")
+    ca.add_argument("job", nargs="?")
+    ca.add_argument("--seconds", type=int, help="TTL from 0 (off) to 3600")
+    ca.add_argument("--namespace", default="", help="Explicit shared namespace; default isolates by job ID")
+    ca.add_argument("--clear", action="store_true")
+    ch = subs.add_parser("chat-policy", help="Show or set result handling and focus for a chat")
+    ch.add_argument("session_id")
+    ch.add_argument("--tool", default="*", help="Tool name, or * for this chat's default")
+    ch.add_argument("--mode", choices=("exact", "clean", "summary"))
+    ch.add_argument("--focus", help="User-provided facts this chat's summaries must preserve")
     subparser.set_defaults(func=_handle)
 
 

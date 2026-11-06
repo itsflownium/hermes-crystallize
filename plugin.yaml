@@ -1,5 +1,5 @@
 name: crystallize
-version: 0.2.0
+version: 0.3.0
 manifest_version: 2
 api_version: 1
 description: >-
@@ -29,6 +29,7 @@ provides_hooks:
 
 provides_middleware:
   - llm_request
+  - tool_execution
 
 config_schema:
   capture_enabled:

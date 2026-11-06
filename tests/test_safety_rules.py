@@ -87,9 +87,10 @@ def test_a_deleted_item_is_reported():
     assert "Item 9" in text and "No longer listed" in text and "https://e.com/8" in text
 
 
-def test_only_deletions_or_a_changed_format_send_everything():
+def test_only_deletions_are_explicit_and_a_changed_format_sends_everything():
     seen = prerun._items(_list(*ITEMS))
-    assert prerun._new_only_text(_list(*ITEMS[:-1]), seen, "Old answer") is None
+    delta = prerun._new_only_text(_list(*ITEMS[:-1]), seen, "Old answer")
+    assert "No longer listed" in delta and "https://e.com/8" in delta and "Old answer" in delta
     other = "\n".join(f"{t} ({p}) in stock https://e.com/{k}" for k, t, p in ITEMS)
     assert prerun._new_only_text(other, seen, "Old answer") is None
 
@@ -173,8 +174,16 @@ def job(monkeypatch):
     monkeypatch.setattr(tuning, "_tool_choices", lambda f, n: (["web"], None))
     monkeypatch.setattr(tuning, "lowers_reasoning", lambda: False)
     monkeypatch.setattr(tuning, "_set_new_only", lambda job_id, on: False)
-    monkeypatch.setattr(lifecycle, "_edit_job", lambda job_id, *flags: calls.append(("edit", flags)))
-    monkeypatch.setattr(lifecycle, "set_toolsets", lambda job_id, tools: calls.append(("tools", tools)))
+    def edit(job_id, *flags):
+        calls.append(("edit", flags))
+        for flag, key in (("--prompt", "prompt"), ("--reasoning-effort", "reasoning_effort")):
+            if flag in flags:
+                found[key] = flags[flags.index(flag) + 1]
+    def toolsets(job_id, tools):
+        calls.append(("tools", tools))
+        found["enabled_toolsets"] = tools
+    monkeypatch.setattr(lifecycle, "_edit_job", edit)
+    monkeypatch.setattr(lifecycle, "set_toolsets", toolsets)
     return calls, saved, found
 
 
@@ -201,10 +210,12 @@ def test_a_partial_failure_puts_everything_back(job, monkeypatch):
 
 
 def test_a_restore_that_fails_is_tried_again_and_undo_still_works(job, monkeypatch):
-    calls, saved, _ = job
+    calls, saved, found = job
     healthy = lifecycle.set_toolsets
 
     def broken(job_id, tools):
+        if tools == ["web"]:
+            found["enabled_toolsets"] = tools  # apply succeeded before the host failed
         raise lifecycle.LifecycleError("still down")
 
     monkeypatch.setattr(lifecycle, "set_toolsets", broken)
@@ -225,11 +236,13 @@ def test_a_stage_that_gives_all_tools_back_really_does(job):
 
 def test_a_crashed_promote_is_put_back(monkeypatch):
     routine = {"id": "cr_1", "name": "job", "status": "testing", "source_ref": "j1",
-               "meta": {"promoting": {"job_id": "j1", "original_prompt": "Do it", "own_script": None, "at": 1.0}}}
+               "meta": {"promoting": {"job_id": "j1", "original_prompt": "Do it", "own_script": None,
+                                      "mode": "no_ai", "installed_script": "crystallize/cr_1.py", "at": 1.0}}}
     edits, updates = [], []
     monkeypatch.setattr(store, "list_routines", lambda: [routine])
     monkeypatch.setattr(store, "update_routine", lambda rid, **kw: updates.append(kw))
-    monkeypatch.setattr(lifecycle, "cron_job", lambda ref: {"id": "j1", "prompt": f"{lifecycle.MARKER} new prompt"})
+    monkeypatch.setattr(lifecycle, "cron_job", lambda ref: {"id": "j1", "prompt": lifecycle.prerun_prompt("cr_1", "Do it"),
+                                                         "script": "crystallize/cr_1.py", "no_agent": True})
     monkeypatch.setattr(lifecycle, "_edit_job", lambda job_id, *flags: edits.append(flags))
     monkeypatch.setattr(prerun, "remove_script", lambda rid: None)
     lifecycle.recover_promotions()

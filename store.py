@@ -7,12 +7,14 @@ so it survives plugin updates and follows the active profile.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 import time
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 PLUGIN_NAME = "crystallize"
+logger = logging.getLogger(__name__)
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS traces (
@@ -62,6 +64,30 @@ CREATE TABLE IF NOT EXISTS chat_savings (
     updated_at  REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS chat_saving_events (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id      TEXT NOT NULL,
+    turn_id         TEXT NOT NULL DEFAULT '',
+    kind            TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    chars           INTEGER NOT NULL DEFAULT 0,
+    output_chars    INTEGER NOT NULL DEFAULT 0,
+    added_input_chars INTEGER NOT NULL DEFAULT 0,
+    results         INTEGER NOT NULL DEFAULT 0,
+    helper_call     INTEGER NOT NULL DEFAULT 0,
+    cheap_tokens    INTEGER NOT NULL DEFAULT 0,
+    cheap_cost      REAL,
+    input_tokens    INTEGER,
+    output_tokens   INTEGER,
+    duration_ms     REAL,
+    model           TEXT,
+    provider        TEXT,
+    cost_source     TEXT,
+    ts              REAL NOT NULL,
+    updated_at      REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chat_events_session ON chat_saving_events(session_id, ts);
+
 CREATE TABLE IF NOT EXISTS brake_stops (
     session_id  TEXT PRIMARY KEY,
     job_name    TEXT NOT NULL,
@@ -98,13 +124,23 @@ CREATE TABLE IF NOT EXISTS tuning (
 """
 
 _conn: Optional[sqlite3.Connection] = None
+_connections: dict[str, sqlite3.Connection] = {}
 _lock = threading.Lock()
 
 
 def _db() -> sqlite3.Connection:
-    """Open the database once per process and make sure the tables exist."""
+    """Open one database per active profile, without leaking another profile's state.
+
+    An explicitly injected connection remains supported for offline integrations/tests.
+    Normal connections are keyed by the ContextVar-aware Hermes home, not process env.
+    """
     global _conn
-    if _conn is None:
+    if _conn is not None and not any(_conn is c for c in _connections.values()):
+        return _conn
+    from . import history
+
+    home = str(history._hermes_home().resolve())
+    if home not in _connections:
         from plugins.plugin_storage import plugin_db
 
         conn = plugin_db(PLUGIN_NAME)
@@ -112,9 +148,35 @@ def _db() -> sqlite3.Connection:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(routines)")}
         if "meta_json" not in cols:
             conn.execute("ALTER TABLE routines ADD COLUMN meta_json TEXT")
+        _migrate_chat_savings(conn)
         conn.commit()
-        _conn = conn
+        _connections[home] = conn
+    _conn = _connections[home]
     return _conn
+
+
+def _migrate_chat_savings(conn: sqlite3.Connection) -> None:
+    """Keep historical totals; a historical zero with helper tokens is unpriced.
+
+    The old writer substituted zero for unknown prices. It is impossible to recover
+    that distinction, so migration must not present those calls as known free calls.
+    """
+    columns = {r[1] for r in conn.execute("PRAGMA table_info(chat_saving_events)")}
+    for column in ("output_chars", "added_input_chars"):
+        if column not in columns:
+            conn.execute(f"ALTER TABLE chat_saving_events ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0")
+    marker = "chat_saving_events_v1"
+    if conn.execute("SELECT 1 FROM settings WHERE key = ?", (marker,)).fetchone():
+        return
+    conn.execute(
+        """INSERT INTO chat_saving_events
+           (session_id, turn_id, kind, status, chars, results, helper_call, cheap_tokens,
+            cheap_cost, cost_source, ts, updated_at)
+           SELECT session_id, '', 'legacy', 'legacy', chars, results,
+                  CASE WHEN cheap_tokens > 0 THEN 1 ELSE 0 END, cheap_tokens,
+                  CASE WHEN cheap_tokens > 0 AND cheap_cost = 0 THEN NULL ELSE cheap_cost END,
+                  'legacy_estimate', updated_at, updated_at FROM chat_savings""")
+    conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (marker, "true"))
 
 
 def add_trace(row: dict[str, Any]) -> None:
@@ -331,24 +393,135 @@ def get_cleaned(job_name: str) -> int:
     return int(row[0]) if row else 0
 
 
-def add_chat_saving(session_id: str, chars: int, cheap_tokens: int, cheap_cost: float) -> None:
+def add_chat_event(session_id: str, *, turn_id: str = "", kind: str = "clean", status: str = "accepted",
+                   chars: int = 0, output_chars: int = 0, added_input_chars: int = 0,
+                   results: Optional[int] = None, helper_call: bool = False,
+                   cheap_tokens: int = 0, cheap_cost: Optional[float] = 0.0,
+                   input_tokens: Optional[int] = None, output_tokens: Optional[int] = None,
+                   duration_ms: Optional[float] = None, model: Optional[str] = None,
+                   provider: Optional[str] = None, cost_source: Optional[str] = None) -> int:
+    """Record transformations and helper attempts separately, including unsuccessful calls.
+
+    ``cheap_cost=None`` means unknown, never zero. Saving events use helper_call=False;
+    a helper attempt has exactly one row that is updated as its outcome becomes known.
+    """
+    if not session_id:
+        raise ValueError("Chat accounting requires a session.")
+    ts = time.time()
     with _lock:
         conn = _db()
-        conn.execute(
-            "INSERT INTO chat_savings (session_id, chars, results, cheap_tokens, cheap_cost, updated_at) "
-            "VALUES (?, ?, 1, ?, ?, ?) ON CONFLICT(session_id) DO UPDATE SET chars = chars + excluded.chars, "
-            "results = results + 1, cheap_tokens = cheap_tokens + excluded.cheap_tokens, "
-            "cheap_cost = cheap_cost + excluded.cheap_cost, updated_at = excluded.updated_at",
-            (session_id, chars, cheap_tokens, cheap_cost, time.time()))
+        cur = conn.execute(
+            """INSERT INTO chat_saving_events
+               (session_id, turn_id, kind, status, chars, output_chars, added_input_chars, results, helper_call, cheap_tokens,
+                cheap_cost, input_tokens, output_tokens, duration_ms, model, provider, cost_source, ts, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (session_id, str(turn_id or ""), kind, status, max(0, chars), max(0, output_chars), max(0, added_input_chars),
+             int(chars > 0) if results is None else max(0, results), int(helper_call),
+             max(0, cheap_tokens), cheap_cost, input_tokens, output_tokens, duration_ms,
+             model, provider, cost_source, ts, ts))
+        conn.commit()
+        return int(cur.lastrowid)
+
+
+def update_chat_event(event_id: int, *, _connection: Optional[sqlite3.Connection] = None, **fields: Any) -> None:
+    allowed = {"status", "cheap_tokens", "cheap_cost", "input_tokens", "output_tokens",
+               "duration_ms", "model", "provider", "cost_source"}
+    if not fields or not set(fields) <= allowed:
+        raise ValueError("Invalid chat accounting fields.")
+    with _lock:
+        conn = _connection if _connection is not None else _db()
+        assignments = ", ".join(f"{key} = ?" for key in fields)
+        conn.execute(f"UPDATE chat_saving_events SET {assignments}, updated_at = ? WHERE id = ?",
+                     (*fields.values(), time.time(), event_id))
         conn.commit()
 
 
-def list_chat_savings() -> list[dict[str, Any]]:
+def chat_event_updater(event_id: int) -> Callable[..., None]:
+    """Pin late helper accounting to the connection that owns the event.
+
+    A helper may finish after its caller times out or a test/host shuts down. It
+    must never resolve a newer profile's global connection and update a reused id.
+    Connection closing, like writing, must be protected by ``_lock``.
+    """
     with _lock:
-        rows = _db().execute("SELECT session_id, chars, results, cheap_tokens, cheap_cost, updated_at "
-                             "FROM chat_savings ORDER BY updated_at DESC LIMIT 50").fetchall()
-    keys = ("session_id", "chars", "results", "cheap_tokens", "cheap_cost", "updated_at")
-    return [dict(zip(keys, tuple(r))) for r in rows]
+        connection = _db()
+
+    def update(**fields: Any) -> None:
+        try:
+            update_chat_event(event_id, _connection=connection, **fields)
+        except sqlite3.ProgrammingError as exc:
+            if "closed" not in str(exc).lower():
+                raise
+            # An orderly shutdown can close the original connection. Its pending
+            # cost remains unknown, which is more honest than retargeting a write.
+            logger.debug("crystallize: helper accounting completed after its store closed", exc_info=True)
+
+    return update
+
+
+def add_chat_saving(session_id: str, chars: int, cheap_tokens: int, cheap_cost: Optional[float]) -> None:
+    """Compatibility writer for integrations predating the per-attempt ledger."""
+    add_chat_event(session_id, kind="legacy", chars=chars, cheap_tokens=cheap_tokens,
+                   cheap_cost=cheap_cost, helper_call=cheap_tokens > 0,
+                   cost_source="legacy_estimate")
+
+
+def chat_events(session_id: Optional[str] = None, limit: int = 500) -> list[dict[str, Any]]:
+    query = "SELECT * FROM chat_saving_events"
+    params: list[Any] = []
+    if session_id is not None:
+        query += " WHERE session_id = ?"
+        params.append(session_id)
+    query += " ORDER BY ts DESC, id DESC LIMIT ?"
+    params.append(min(5000, max(1, int(limit))))
+    with _lock:
+        cur = _db().execute(query, params)
+        keys = [c[0] for c in cur.description]
+        rows = cur.fetchall()
+    return [dict(zip(keys, row)) for row in rows]
+
+
+_CHAT_TOTALS = """SUM(chars) AS chars, SUM(output_chars) AS output_chars, SUM(added_input_chars) AS added_input_chars,
+    SUM(results) AS results,
+    SUM(cheap_tokens) AS cheap_tokens, SUM(COALESCE(cheap_cost, 0)) AS known_cheap_cost,
+    SUM(CASE WHEN helper_call = 1 AND cheap_cost IS NULL THEN 1 ELSE 0 END) AS unknown_cost_calls,
+    SUM(helper_call) AS helper_calls,
+    SUM(CASE WHEN helper_call = 1 AND status IN ('failed', 'timeout', 'timeout_finished') THEN 1 ELSE 0 END) AS failed_calls,
+    SUM(CASE WHEN helper_call = 1 AND status = 'rejected' THEN 1 ELSE 0 END) AS rejected_calls,
+    AVG(CASE WHEN helper_call = 1 THEN duration_ms END) AS helper_latency_ms,
+    MAX(updated_at) AS updated_at"""
+
+
+def _chat_totals(group: str, session_id: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
+    if group not in {"session_id", "turn_id", "kind"}:
+        raise ValueError("Unknown accounting grouping.")
+    query = f"SELECT {group}, {_CHAT_TOTALS} FROM chat_saving_events"
+    params: list[Any] = []
+    if session_id is not None:
+        query += " WHERE session_id = ?"
+        params.append(session_id)
+    query += f" GROUP BY {group} ORDER BY updated_at DESC LIMIT ?"
+    params.append(limit)
+    with _lock:
+        cur = _db().execute(query, params)
+        keys = [c[0] for c in cur.description]
+        rows = cur.fetchall()
+    out = [dict(zip(keys, row)) for row in rows]
+    for row in out:
+        row["cheap_cost"] = None if row["unknown_cost_calls"] else row["known_cheap_cost"]
+    return out
+
+
+def list_chat_savings(session_id: Optional[str] = None) -> list[dict[str, Any]]:
+    return _chat_totals("session_id", session_id)
+
+
+def chat_turn_savings(session_id: str) -> list[dict[str, Any]]:
+    return _chat_totals("turn_id", session_id, 100)
+
+
+def chat_savings_breakdown(session_id: str) -> list[dict[str, Any]]:
+    return _chat_totals("kind", session_id)
 
 
 def add_brake_stop(session_id: str, job_name: str, used: int, limit_tokens: int, normal: int) -> None:

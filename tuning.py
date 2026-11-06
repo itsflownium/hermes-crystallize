@@ -31,7 +31,7 @@ import statistics
 import time
 from typing import Any, Optional
 
-from . import analyze, history, lifecycle, modelinfo, store
+from . import analyze, contracts, history, lifecycle, modelinfo, store
 
 logger = logging.getLogger(__name__)
 
@@ -78,9 +78,13 @@ def _measure(before: list[history.Run], trial: list[history.Run]) -> tuple[str, 
     fields = (("cost", lambda r: r.cost_usd), ("api cost", lambda r: r.api_cost_usd),
               ("tokens", lambda r: r.total_tokens), ("seconds", lambda r: r.duration_s))
     for name, field in fields:
-        old = _mid([field(r) for r in before if field(r)])
-        new = _mid([field(r) for r in trial if field(r)])
-        if old and new:
+        if name == "api cost" and any(getattr(r, "pricing_uncertain", False) for r in before + trial):
+            continue  # aggregate session totals cannot establish request-tier savings
+        if name in ("cost", "api cost") and any(field(r) is None for r in before + trial):
+            continue  # an unpriced run must not disappear from a monetary comparison
+        old = _mid([field(r) for r in before if field(r) is not None])
+        new = _mid([field(r) for r in trial if field(r) is not None])
+        if old is not None and old > 0 and new is not None:
             return name, old, new
     return "nothing", None, None
 
@@ -92,7 +96,8 @@ def _amount(metric: Optional[str], value: Optional[float]) -> str:
 
 
 def evaluate(before: list[history.Run], trial: list[history.Run],
-             answers: dict[str, str], required: Optional[list[str]] = None) -> dict[str, Any]:
+             answers: dict[str, str], required: Optional[list[str]] = None,
+             contract: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """Do the trial runs' answers hold up against earlier runs, and did the cost fall?"""
     def texts(runs):
         return [answers.get(r.session_id or "", "").strip() for r in runs]
@@ -103,15 +108,27 @@ def evaluate(before: list[history.Run], trial: list[history.Run],
         "ok": False, "metric": metric, "before": old_value, "after": new_value,
         "reasoning_before": _mid([r.reasoning_tokens for r in before if r.reasoning_tokens is not None]),
         "reasoning_after": _mid([r.reasoning_tokens for r in trial if r.reasoning_tokens is not None]),
+        "limitations": ["Length, item and configured outcome checks do not prove factual correctness or semantic equivalence."],
+        "quality": {"contract_configured": contract is not None, "semantic_equivalence_proven": False},
     }
 
     def fail(why: str, kind: str = "quality") -> dict[str, Any]:
-        return {**result, "why": why, "kind": kind}
+        return {**result, "why": why, "kind": kind,
+                "quality": {**result["quality"], "ok": kind != "quality", "why": why if kind == "quality" else "structural checks passed"}}
 
     if any(r.outcome not in (None, "completed") for r in trial):
         return fail("a run with these settings failed")
     if any(not t or t.startswith(_FAILURE) for t in new):
         return fail("a run with these settings gave no usable answer")
+    if contract is not None:
+        reports = [{"execution_id": r.execution_id,
+                    **contracts.evaluate(contract, answer=answers.get(r.session_id or ""), sources=r.steps,
+                                         actions=r.steps)} for r in trial]
+        result["contract_checks"] = reports
+        result["quality"]["contract_checks"] = reports
+        failed = next((r for r in reports if not r["ok"]), None)
+        if failed:
+            return fail("outcome contract: " + failed["why"])
     # What the job did before any trial stays required, even if a later baseline lost it.
     lost = {t for t in analyze.regular_actions(before) | set(required or []) if not all(t in analyze.run_actions(r) for r in trial)}
     if lost:
@@ -130,7 +147,8 @@ def evaluate(before: list[history.Run], trial: list[history.Run],
         return fail("there were no numbers to compare", "saving")
     if new_value > old_value * (1 - MIN_COST_DROP):
         return fail(f"it wasn't cheaper ({_amount(metric, new_value)} vs {_amount(metric, old_value)} a run)", "saving")
-    return {**result, "ok": True, "why": "answers held up and it got cheaper"}
+    return {**result, "ok": True, "why": "structural checks passed and it got cheaper",
+            "quality": {**result["quality"], "ok": True, "why": "structural checks passed"}}
 
 
 # ---------------------------------------------------------------- runs
@@ -165,7 +183,24 @@ def _job_or_error(job: str) -> dict[str, Any]:
 # ---------------------------------------------------------------- actions
 
 def status(name: str) -> Optional[dict[str, Any]]:
-    return store.get_tuning(name)
+    found = lifecycle.cron_job(name)
+    if found:
+        return lifecycle._tuning_for_job(found)
+    # A deleted job's saved record can still be inspected by ID, but a new job
+    # reusing its name must never inherit the attachment.
+    return next((t for t in store.list_tuning() if t.get("job_id") == name), None) or store.get_tuning(name)
+
+
+def _snapshot(found: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    return lifecycle.configuration_fingerprint(found, store.routine_for_job(found["id"]), data)
+
+
+def _save(name: str, data: dict[str, Any]) -> None:
+    """Keep immutable campaign boundaries when the mutable control row changes."""
+    from . import receipts
+
+    store.save_tuning(name, data)
+    receipts.snapshot_tuning(data)
 
 
 def _score(run: history.Run) -> float:
@@ -251,12 +286,18 @@ def start(job: str, level: Optional[str] = None) -> dict[str, Any]:
         raise lifecycle.LifecycleError(f"{name} runs with no AI, so it's already free.")
     if found.get("state") == "completed":
         raise lifecycle.LifecycleError(f"{name} has finished.")
-    current = store.get_tuning(name)
+    current = lifecycle._tuning_for_job(found)
+    if current:
+        from . import receipts
+
+        receipts.snapshot_tuning(current)
     upgrade = bool(current and current["status"] == "kept" and not current.get("clean"))
-    if current and current["status"] in ("trial", "kept") and not upgrade:
+    if current and (current.get("needs_restore") or current["status"] in ("starting", "trial", "kept")) and not upgrade:
         raise lifecycle.LifecycleError(f"{name} already has cheaper settings ({status_text(current)}).")
     now = time.time()
-    before, _ = _split(name, now)
+    before, _ = _split(found["id"], now)
+    if current and current.get("status") == "revalidation":
+        before = [r for r in before if (r.session_started or r.started_ts) >= current.get("revalidation_at", now)]
     if len(before) < MIN_BEFORE_RUNS:
         raise lifecycle.LifecycleError(
             f"{name} needs {MIN_BEFORE_RUNS} finished runs to compare with first (has {len(before)}).")
@@ -264,26 +305,29 @@ def start(job: str, level: Optional[str] = None) -> dict[str, Any]:
     levels = [level] if level else modelinfo.levels_to_try(found) if lowers_reasoning() else []
     if levels and found.get("reasoning_effort") == levels[0]:
         levels = levels[1:]
-    narrow, wide = _tool_choices(found, name)
+    narrow, wide = _tool_choices(found, found["id"])
     stages = plan_stages(levels, narrow, wide)
     if upgrade:  # kept settings from before these savings existed: keep them unless narrower is known
         stages = [{"level": stage["level"] or current.get("level"),
                    "toolsets": stage["toolsets"] if stage["toolsets"] is not None else current.get("toolsets")}
                   for stage in stages]
     # What the job did before any trial stays required through every later trial.
-    original = _split(name, current.get("first_started_at") or current["started_at"])[0] if upgrade else before
+    original = _split(found["id"], current.get("first_started_at") or current["started_at"])[0] if upgrade else before
     required = sorted(analyze.regular_actions(original) | set((current or {}).get("required_actions") or []))
     # Saved first, so a change that fails or a crash can always be undone.
     data = {"job_name": name, "job_id": found["id"], "status": "starting", **stages[0], "stages": stages[1:],
             "required_actions": required, "tools_changed": stages[0]["toolsets"] is not None,
             "previous": found.get("reasoning_effort"), "started_at": now, "first_started_at": now, "baseline_until": now,
             "previous_toolsets": found.get("enabled_toolsets"), "clean": True, "hint": True,
-            "new_only": True}
+            "hint_added": EFFICIENCY_HINT not in (found.get("prompt") or ""), "new_only": True,
+            "baseline_run_ids": [r.execution_id for r in before]}
     if upgrade:
         # Judged against its kept settings, and put back to them if it doesn't help.
         data.update({"baseline_from": current.get("first_started_at") or current["started_at"],
                      "first_started_at": current.get("first_started_at") or current["started_at"]})
-    store.save_tuning(name, data)
+    data["config_snapshot"] = _snapshot(found, data)
+    data["configuration_id"] = data["config_snapshot"]["fingerprint"]
+    _save(name, data)
     try:
         _apply_stage(found["id"], stages[0])
         prompt = found.get("prompt") or ""
@@ -294,7 +338,7 @@ def start(job: str, level: Optional[str] = None) -> dict[str, Any]:
         _roll_back(name, data, current if upgrade else None)
         raise lifecycle.LifecycleError(f"Couldn't change {name}, so its old settings are back: {exc}") from exc
     data["status"] = "trial"
-    store.save_tuning(name, data)
+    _save(name, data)
     return data
 
 
@@ -305,9 +349,9 @@ def _roll_back(name: str, data: dict[str, Any], kept: Optional[dict[str, Any]]) 
     except Exception:  # noqa: BLE001
         logger.warning("crystallize: couldn't restore %s yet", name, exc_info=True)
         data["needs_restore"] = True
-        store.save_tuning(name, data)
+        _save(name, data)
         return
-    store.save_tuning(name, kept or {**data, "status": "reverted", "finished_at": time.time(),
+    _save(name, kept or {**data, "status": "reverted", "finished_at": time.time(),
                                      "result": {"ok": False, "why": "its settings couldn't be changed"}})
 
 
@@ -317,7 +361,7 @@ def start_all() -> dict[str, Any]:
     for job in _all_jobs():
         name = job.get("name") or job.get("id")
         try:
-            start(name)
+            start(job["id"])
             started.append(name)
         except lifecycle.LifecycleError as exc:
             skipped[name] = str(exc)
@@ -325,21 +369,21 @@ def start_all() -> dict[str, Any]:
 
 
 def cleans_results(name: str) -> bool:
-    t = store.get_tuning(name)
+    t = status(name)
     return bool(t and t.get("clean") and t["status"] in ("trial", "kept"))
 
 
 def _restore(t: dict[str, Any]) -> None:
-    found = lifecycle.cron_job(t["job_name"])
+    found = lifecycle._bound_job(t["job_id"]) if t.get("job_id") else None
     if not found:  # a job that has finished for good has nothing to restore
         return
     # Every part is tried, so one failure doesn't leave the others changed. Each is safe to repeat.
     parts = []
-    if t.get("level"):
+    if t.get("level") and lifecycle._same_level(found.get("reasoning_effort"), t["level"]):
         parts.append(lambda: lifecycle._edit_job(found["id"], "--reasoning-effort", t.get("previous") or ""))
-    if t.get("toolsets") is not None or t.get("tools_changed"):
+    if (t.get("toolsets") is not None or t.get("tools_changed")) and lifecycle._same_tools(found.get("enabled_toolsets"), t.get("toolsets")):
         parts.append(lambda: lifecycle.set_toolsets(found["id"], t.get("previous_toolsets")))
-    if t.get("hint") and EFFICIENCY_HINT in (found.get("prompt") or ""):
+    if t.get("hint") and t.get("hint_added", True) and EFFICIENCY_HINT in (found.get("prompt") or ""):
         parts.append(lambda: lifecycle._edit_job(found["id"], "--prompt", found["prompt"].replace(EFFICIENCY_HINT, "")))
     if t.get("new_only"):
         parts.append(lambda: _set_new_only(found["id"], False))
@@ -356,12 +400,16 @@ def _restore(t: dict[str, Any]) -> None:
 def undo(job: str) -> dict[str, Any]:
     found = lifecycle.cron_job(job)
     name = (found or {}).get("name") or job
-    t = store.get_tuning(name)
+    t = status(job)
     if not t or t["status"] not in ("starting", "trial", "kept"):
         raise lifecycle.LifecycleError(f"{name} has no cheaper settings to undo.")
     _restore(t)
-    t.update({"status": "undone", "finished_at": time.time()})
-    store.save_tuning(name, t)
+    now = time.time()
+    if t.get("status") == "kept":
+        t.setdefault("kept_at", t.get("finished_at"))
+        t.setdefault("trial_finished_at", t.get("finished_at"))
+    t.update({"status": "undone", "undone_at": now, "finished_at": now})
+    _save(t["job_name"], t)
     return t
 
 
@@ -375,16 +423,19 @@ def _finish_restore(t: dict[str, Any]) -> None:
     t.pop("needs_restore", None)
     t.update({"status": "reverted", "finished_at": time.time(),
               "result": {**(t.get("result") or {}), "ok": False, "why": "its settings couldn't be changed"}})
-    store.save_tuning(t["job_name"], t)
+    _save(t["job_name"], t)
 
 
 def refresh() -> None:
     """Decide any trial that has enough runs. Never raises: the panel calls this on every load."""
     try:
         lifecycle.recover_promotions()
+        lifecycle.refresh_drift()
         for t in store.list_tuning():
             if t.get("needs_restore") or (t["status"] == "starting" and time.time() - t["started_at"] > STALE_START):
                 _finish_restore(t)
+            elif t["status"] in ("trial", "kept") and _configuration_drift(t):
+                continue
             elif t["status"] == "trial":
                 _decide(t)
             elif t["status"] == "kept":
@@ -393,21 +444,67 @@ def refresh() -> None:
         logger.warning("crystallize: checking reasoning trials failed", exc_info=True)
 
 
+def _configuration_drift(t: dict[str, Any]) -> bool:
+    """Invalidate a campaign rather than judging it against an obsolete task."""
+    found = lifecycle._bound_job(t["job_id"]) if t.get("job_id") else None
+    if not found:
+        return False
+    current = _snapshot(found, t)
+    saved = t.get("config_snapshot")
+    if not saved:
+        t["config_snapshot"] = current
+        _save(t["job_name"], t)
+        return False
+    if saved.get("fingerprint") == current["fingerprint"]:
+        return False
+    changed = sorted(k for k, v in current["configuration"].items() if (saved.get("configuration") or {}).get(k) != v)
+    _restore(t)
+    now = time.time()
+    if t.get("status") == "kept":
+        t.setdefault("kept_at", t.get("finished_at"))
+        t.setdefault("trial_finished_at", t.get("finished_at"))
+    t.update({"status": "revalidation", "revalidation_at": now, "reverted_at": now, "finished_at": now,
+              "result": {**(t.get("result") or {}), "ok": False, "kind": "drift",
+                         "why": "configuration changed: " + ", ".join(changed),
+                         "quality": {"ok": False, "stale": True, "why": "configuration drift requires fresh checks"}},
+              "config_snapshot": current})
+    _save(t["job_name"], t)
+    return True
+
+
 def _guard_kept(t: dict[str, Any]) -> None:
     """Models and jobs change after a trial. Settings that keep failing stop being kept."""
-    recent = _finished_scheduled(t["job_name"])[-STALE_FAILURES:]
-    since = t.get("finished_at") or 0
-    if len(recent) < STALE_FAILURES or any((r.session_started or 0) < since or r.outcome != "failed" for r in recent):
-        return
+    recent = _finished_scheduled(t.get("job_id") or t["job_name"])
+    since = t.get("kept_at") or t.get("finished_at") or 0
+    recent = [r for r in recent if (r.session_started or 0) >= since]
+    spec = contracts.get(t["job_id"]) if t.get("job_id") else None
+    failure = None
+    if spec is not None and recent:
+        answers = history.final_answers([r.session_id for r in recent if r.session_id])
+        for run in recent:
+            report = contracts.evaluate(spec, answer=answers.get(run.session_id or ""), sources=run.steps,
+                                        actions=run.steps)
+            if not report["ok"]:
+                failure = {"ok": False, "kind": "quality", "why": "outcome contract: " + report["why"],
+                           "contract_checks": [{"execution_id": run.execution_id, **report}],
+                           "quality": {"ok": False, "contract_checks": [report], "semantic_equivalence_proven": False}}
+                break
+    tail = recent[-STALE_FAILURES:]
+    if failure is None:
+        if len(tail) < STALE_FAILURES or any(r.outcome != "failed" for r in tail):
+            return
+        failure = {"ok": False, "why": f"it failed {STALE_FAILURES} runs in a row after being kept",
+                   "quality": {"ok": False, "why": "scheduled runs failed"}}
     try:
         _restore(t)
     except lifecycle.LifecycleError:
         logger.warning("crystallize: couldn't restore %s", t["job_name"], exc_info=True)
         return
-    t.update({"status": "reverted", "finished_at": time.time(),
-              "result": {**(t.get("result") or {}), "ok": False,
-                         "why": f"it failed {STALE_FAILURES} runs in a row after being kept"}})
-    store.save_tuning(t["job_name"], t)
+    t.setdefault("kept_at", t.get("finished_at"))
+    t.setdefault("trial_finished_at", t.get("finished_at"))
+    t.update({"status": "reverted", "reverted_at": time.time(), "finished_at": time.time(),
+              "result": {**(t.get("result") or {}), **failure}})
+    _save(t["job_name"], t)
 
 
 def _is_close(result: dict[str, Any]) -> bool:
@@ -418,7 +515,7 @@ def _is_close(result: dict[str, Any]) -> bool:
 def _trial_runs(t: dict[str, Any]) -> tuple[list[history.Run], list[history.Run]]:
     """Runs from before this trial, and from its current stage. Earlier stages already had
     cheaper settings, so they never count as "before"."""
-    before, trial = _split(t["job_name"], t["started_at"])
+    before, trial = _split(t.get("job_id") or t["job_name"], t["started_at"])
     until = t.get("baseline_until") or (None if t.get("baseline_from") else t.get("first_started_at"))
     if until:
         before = [r for r in before if (r.session_started or 0) < until]
@@ -431,9 +528,20 @@ def _decide(t: dict[str, Any]) -> None:
     before, trial = _trial_runs(t)
     answers = history.final_answers([r.session_id for r in before + trial if r.session_id])
     counted = counted_runs(before, trial, answers)
-    alive = lifecycle.cron_job(t["job_name"]) is not None and lifecycle.cron_job(t["job_name"]).get("state") != "completed"
-    if len(counted) >= TRIAL_RUNS:
-        result = evaluate(before, counted, answers, t.get("required_actions"))
+    job = lifecycle._bound_job(t["job_id"]) if t.get("job_id") else lifecycle.cron_job(t["job_name"])
+    alive = job is not None and job.get("state") != "completed"
+    spec = contracts.get(t["job_id"]) if t.get("job_id") else None
+    # Silence does not waive an explicit per-run requirement. A pair of good
+    # answers must not hide a missing source/action on an intervening quiet run.
+    all_checks = [{"execution_id": r.execution_id,
+                   **contracts.evaluate(spec, answer=answers.get(r.session_id or ""), sources=r.steps, actions=r.steps)}
+                  for r in trial] if spec is not None else []
+    failed = next((report for report in all_checks if not report["ok"]), None)
+    if failed:
+        result = {"ok": False, "kind": "quality", "why": "outcome contract: " + failed["why"],
+                  "contract_checks": all_checks, "quality": {"ok": False, "contract_checks": all_checks}}
+    elif len(counted) >= TRIAL_RUNS:
+        result = evaluate(before, counted, answers, t.get("required_actions"), spec)
         if _is_close(result) and alive and len(counted) < MAX_TRIAL_RUNS:
             return  # one odd run can decide a close call, so it gets more runs
     elif len(trial) >= MAX_TRIAL_RUNS:
@@ -448,13 +556,13 @@ def _decide(t: dict[str, Any]) -> None:
         # Saved first, so a change that fails or a crash can always be undone.
         t.update({**stage, "stages": rest, "started_at": time.time(), "last_setback": result["why"],
                   "tools_changed": t.get("tools_changed") or stage.get("toolsets") is not None})
-        store.save_tuning(t["job_name"], t)
+        _save(t["job_name"], t)
         try:
             _apply_stage(t["job_id"], stage, t)
         except lifecycle.LifecycleError:
             logger.warning("crystallize: couldn't change %s", t["job_name"], exc_info=True)
             t["needs_restore"] = True
-            store.save_tuning(t["job_name"], t)
+            _save(t["job_name"], t)
         return
     if not result["ok"]:
         try:
@@ -462,8 +570,14 @@ def _decide(t: dict[str, Any]) -> None:
         except lifecycle.LifecycleError:
             logger.warning("crystallize: couldn't restore %s", t["job_name"], exc_info=True)
             return  # still in trial, so it's tried again next time
-    t.update({"status": "kept" if result["ok"] else "reverted", "result": result, "finished_at": time.time()})
-    store.save_tuning(t["job_name"], t)
+    now = time.time()
+    t.update({"status": "kept" if result["ok"] else "reverted", "result": result,
+              "finished_at": now, "trial_finished_at": now})
+    if result["ok"]:
+        t["kept_at"] = now
+    else:
+        t["reverted_at"] = now
+    _save(t["job_name"], t)
 
 
 # ---------------------------------------------------------------- what to show
@@ -512,6 +626,8 @@ def status_text(t: Optional[dict[str, Any]]) -> str:
         return f"Kept {_settings(t)}: {_amount(metric, res.get('before', res.get('cost_before')))} → {_amount(metric, res.get('after', res.get('cost_after')))} a run{where}"
     if t["status"] == "reverted":
         return f"Went back to the old setting: {res.get('why', 'the check failed')}"
+    if t["status"] == "revalidation":
+        return f"Revalidating after a change: {res.get('why', 'fresh scheduled runs are needed')}"
     return "You put the old setting back"
 
 
@@ -541,8 +657,8 @@ def cards() -> list[dict[str, Any]]:
         if job.get("no_agent"):
             continue
         name = job.get("name") or job.get("id")
-        t = store.get_tuning(name)
-        runs = all_runs.get(name, [])
+        t = lifecycle._tuning_for_job(job)
+        runs = all_runs.get(job["id"], [])
         out.append({
             "name": name,
             "job_id": job.get("id"),
@@ -556,7 +672,9 @@ def cards() -> list[dict[str, Any]]:
             "reasoning_share": _reasoning_share(runs[-BEFORE_WINDOW:], job),
             "status": t["status"] if t else None,
             "status_text": status_text(t),
-            "can_try": (not t or t["status"] in ("reverted", "undone") or (t["status"] == "kept" and not t.get("clean"))) and len(_split(name, time.time())[0]) >= MIN_BEFORE_RUNS,
+            "can_try": (not t or t["status"] in ("reverted", "undone", "revalidation") or (t["status"] == "kept" and not t.get("clean"))) and len(
+                [r for r in _split(job["id"], time.time())[0] if not t or t.get("status") != "revalidation" or
+                 (r.session_started or r.started_ts) >= t.get("revalidation_at", 0)]) >= MIN_BEFORE_RUNS,
             "cleaned_chars": store.get_cleaned(name) or None,
             "can_undo": bool(t and t["status"] in ("starting", "trial", "kept")),
         })
@@ -568,7 +686,7 @@ def _finished_scheduled_all() -> dict[str, list[history.Run]]:
     grouped: dict[str, list[history.Run]] = {}
     for r in history.load_runs():
         if r.scheduled and r.finished:
-            grouped.setdefault(r.job_name or r.job_id or "?", []).append(r)
+            grouped.setdefault(r.job_id or r.job_name or "?", []).append(r)
     return grouped
 
 

@@ -26,7 +26,9 @@ def test_needs_three_runs():
 
 
 def test_classifies_each_kind():
-    runs = [_brief(1, "a()"), _brief(2, "b()"), _brief(3, "c()")]
+    runs = [_brief(i, "print(1)") for i in range(1, 4)]
+    for i, run in enumerate(runs):
+        run.steps[-1] = Step("web_search", {"query": f"daily item {i}"}, None, None, None, "ok", 10)
     a = analyze.analyze_runs(runs)
     kinds = [p.kind for p in a.steps]
     assert kinds == ["setup", "fill-in", "fixed", "varies"]

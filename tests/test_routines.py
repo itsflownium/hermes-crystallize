@@ -50,8 +50,8 @@ def test_step_failure_detects_errors_and_short_output():
 def test_runner_stops_at_first_failing_step(monkeypatch):
     monkeypatch.setattr(runner, "RETRY_WAIT_S", 0)
     routine = {"steps": [
-        {"tool": "terminal", "args": {"command": "a"}, "fill_ins": [], "check": {"min_len": 1}},
-        {"tool": "terminal", "args": {"command": "b"}, "fill_ins": [], "check": {"min_len": 1}},
+        {"tool": "terminal", "args": {"command": "curl https://example.com/a"}, "fill_ins": [], "check": {"min_len": 1}},
+        {"tool": "terminal", "args": {"command": "curl https://example.com/b"}, "fill_ins": [], "check": {"min_len": 1}},
     ]}
     calls = []
 
@@ -60,7 +60,7 @@ def test_runner_stops_at_first_failing_step(monkeypatch):
         return json.dumps({"output": "", "exit_code": 2, "error": None})
 
     out = runner.run(routine, dispatch)
-    assert not out["ok"] and out["failed_step"] == 1 and calls == ["a", "a"]
+    assert not out["ok"] and out["failed_step"] == 1 and calls == ["curl https://example.com/a", "curl https://example.com/a"]
 
 
 def test_runner_retries_a_step_once(monkeypatch):
@@ -79,7 +79,7 @@ def test_runner_retries_a_step_once(monkeypatch):
 
 def test_runner_retries_after_an_exception(monkeypatch):
     monkeypatch.setattr(runner, "RETRY_WAIT_S", 0)
-    routine = {"steps": [{"tool": "terminal", "args": {"command": "a"}, "fill_ins": [], "check": {"min_len": 1}}]}
+    routine = {"steps": [{"tool": "terminal", "args": {"command": "curl https://example.com/a"}, "fill_ins": [], "check": {"min_len": 1}}]}
     calls = []
 
     def dispatch(name, args):
