@@ -930,20 +930,20 @@ function ModelPicker({ ctx, picked, onPicked }) {
   ], 'picker')
 }
 
-function ThisChat({ state, onToggle }) {
-  if (!state.session_id) return bubble([label('This chat'), small('Open a chat to use Crystallize Chat.')], 'this')
+function ThisChat({ state, onToggle, heading = 'This chat' }) {
+  if (!state.session_id) return bubble([label(heading), small('Send a message in any chat, then come back here to turn it on.')], 'this')
   const saved = state.this_chat
   const status = state.can_start || state.enabled
     ? pill(state.enabled ? 'Turn off' : 'Turn on', onToggle, state.enabled ? C.muted : C.accent)
     : chip('Off', C.muted)
   if (!state.enabled && !state.can_start) {
-    return bubble([row('This chat', status), small(state.why_not, C.soft)], 'this')
+    return bubble([row(heading, status), small(state.why_not, C.soft)], 'this')
   }
   if (!state.enabled) {
-    return bubble([row('This chat', status), small('Off for this chat. Turn it on to start saving from your next tool result.', C.soft)], 'this')
+    return bubble([row(heading, status), small('Off for this chat. Turn it on to start saving from your next tool result.', C.soft)], 'this')
   }
   if (!saved) {
-    return bubble([row('This chat', status), small('On. Savings appear after a tool returns a big result.', C.soft)], 'this')
+    return bubble([row(heading, status), small('On. Savings appear after a tool returns a big result.', C.soft)], 'this')
   }
   const cells = [
     ['Removed', `${tokensText(saved.tokens_removed)} tokens`, C.green],
@@ -952,7 +952,7 @@ function ThisChat({ state, onToggle }) {
     state.chat_spent_usd != null ? ['Chat so far', money(state.chat_spent_usd)] : null
   ].filter(Boolean)
   return bubble([
-    row('This chat', status),
+    row(heading, status),
     jsx('div', {
       key: 'cells',
       style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 8 },
@@ -970,7 +970,16 @@ function ThisChat({ state, onToggle }) {
   ], 'this')
 }
 
-function ChatSection({ ctx, sessionId }) {
+// The sidebar page isn't inside a chat, so it works on the chat you were last in.
+function ChatSection({ ctx, sessionId: focused }) {
+  const [remembered, setRemembered] = useState(() => ctx.storage.get('last_chat', null))
+  useEffect(() => {
+    if (focused && focused !== remembered) {
+      setRemembered(focused)
+      ctx.storage.set('last_chat', focused)
+    }
+  }, [ctx, focused, remembered])
+  const sessionId = focused || remembered
   const [state, setState] = useState(null)
   const [error, setError] = useState(null)
   const load = useCallback(() => {
@@ -997,7 +1006,7 @@ function ChatSection({ ctx, sessionId }) {
     children: [
       error ? small(error, C.soft) : null,
       !state && !error ? small('Loading…') : null,
-      state ? jsx(ThisChat, { key: 'this', state, onToggle: toggle }) : null,
+      state ? jsx(ThisChat, { key: 'this', state, onToggle: toggle, heading: focused ? 'This chat' : `Your last chat${state.title ? `: ${state.title}` : ''}` }) : null,
       state ? jsx(ModelPicker, { key: 'picker', ctx, picked: state.model, onPicked: load }) : null,
       state ? bubble([
         label('How it saves'),
@@ -1016,7 +1025,17 @@ function ChatPage({ ctx }) {
     style: { height: '100%', overflowY: 'auto' },
     children: jsx('div', {
       style: { padding: 16, maxWidth: 640, margin: '0 auto' },
-      children: jsx(ChatSection, { ctx, sessionId })
+      children: jsxs('div', {
+        style: { display: 'flex', flexDirection: 'column', gap: 14 },
+        children: [
+          jsxs('div', {
+            key: 'title',
+            style: { display: 'flex', alignItems: 'center', gap: 6, color: C.text },
+            children: [jsx(Codicon, { name: 'ruby', size: '0.875rem' }), jsx('span', { style: { fontSize: '0.8125rem', letterSpacing: '0.08em' }, children: 'CRYSTALLIZE CHAT' })]
+          }),
+          jsx(ChatSection, { key: 'section', ctx, sessionId })
+        ]
+      })
     })
   })
 }

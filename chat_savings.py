@@ -83,6 +83,21 @@ def prompts_sent(session_id: Optional[str]) -> int:
         conn.close()
 
 
+def _chat_title(session_id: Optional[str]) -> Optional[str]:
+    if not session_id:
+        return None
+    conn = history._open_readonly(history._hermes_home() / "state.db")
+    if conn is None:
+        return None
+    try:
+        row = conn.execute("SELECT title FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        return row["title"] if row else None
+    except Exception:  # noqa: BLE001
+        return None
+    finally:
+        conn.close()
+
+
 def set_enabled(session_id: str, on: bool) -> dict[str, Any]:
     """Turn it on or off for one chat. A chat with no prompt yet can't turn it on."""
     if not session_id:
@@ -410,6 +425,7 @@ def summary(session_id: Optional[str]) -> dict[str, Any]:
 
     current = status_for(session_id)
     return {
+        "title": _chat_title(session_id),
         **current, "model": picked, "main_model": main.get("model"), "main_provider": main.get("provider"),
         "chat": chat.analyse(session_id) if current["enabled"] else None,
         "chat_spent_usd": overview._chat_spent(session_id),
