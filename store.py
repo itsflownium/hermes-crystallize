@@ -60,6 +60,10 @@ CREATE TABLE IF NOT EXISTS chat_savings (
     cheap_tokens INTEGER NOT NULL,
     cheap_cost  REAL NOT NULL,
     updated_at  REAL NOT NULL
+
+CREATE TABLE IF NOT EXISTS settings (
+    key     TEXT PRIMARY KEY,
+    value   TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS cleaned (
@@ -327,6 +331,19 @@ def list_chat_savings() -> list[dict[str, Any]]:
                              "FROM chat_savings ORDER BY updated_at DESC LIMIT 50").fetchall()
     keys = ("session_id", "chars", "results", "cheap_tokens", "cheap_cost", "updated_at")
     return [dict(zip(keys, tuple(r))) for r in rows]
+
+
+def get_setting(key: str, default: Any = None) -> Any:
+    with _lock:
+        row = _db().execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return json.loads(row[0]) if row else default
+
+
+def set_setting(key: str, value: Any) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, json.dumps(value)))
+        conn.commit()
 
 
 def now() -> float:

@@ -205,3 +205,11 @@ def test_one_good_run_keeps_the_settings(monkeypatch):
 
 def test_the_instruction_protects_actions_and_details():
     assert "every action" in tuning.EFFICIENCY_HINT and "links" in tuning.EFFICIENCY_HINT
+
+
+def test_reasoning_stays_yours_unless_you_opt_in(monkeypatch):
+    settings = {}
+    monkeypatch.setattr(tuning.store, "get_setting", lambda key, default=None: settings.get(key, default))
+    assert tuning.lowers_reasoning() is False
+    settings["lower_reasoning"] = True
+    assert tuning.lowers_reasoning() is True

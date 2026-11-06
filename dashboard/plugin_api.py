@@ -180,6 +180,7 @@ async def tune_all() -> dict[str, Any]:
                         else "No jobs are ready for cheaper settings yet. Each needs 2 finished runs first.") + extra}
 
 
+<<<<<<< HEAD
 def _chat():
     _overview()
     return importlib.import_module(f"{_PKG}.chat_savings")
@@ -231,6 +232,16 @@ async def chat_toggle(body: dict) -> dict[str, Any]:
     ch = _chat()
     session_id = str((body or {}).get("session_id") or "")
     return ch.set_enabled(session_id, bool((body or {}).get("on")))
+=======
+@router.post("/reasoning-setting")
+async def reasoning_setting(body: dict) -> dict[str, Any]:
+    """Whether Make cheaper may also try lower reasoning. Off keeps each job's own setting."""
+    _overview()
+    store = importlib.import_module(f"{_PKG}.store")
+    on = bool((body or {}).get("on"))
+    store.set_setting("lower_reasoning", on)
+    return {"ok": True, "message": "Make cheaper will also try lower reasoning." if on else "Jobs keep your reasoning setting."}
+>>>>>>> cron-improvements
 
 
 @router.get("/chat-state")

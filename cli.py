@@ -231,6 +231,12 @@ def _tune(args: Any) -> None:
     from . import lifecycle, tuning
 
     job = getattr(args, "job", None)
+    if getattr(args, "reasoning", None):
+        from . import store
+
+        store.set_setting("lower_reasoning", args.reasoning == "lower")
+        print("Make cheaper will also try lower reasoning." if args.reasoning == "lower" else "Jobs keep your reasoning setting.")
+        return
     if getattr(args, "all", False):
         result = tuning.start_all()
         print(f"Started on: {', '.join(result['started']) or 'nothing'}")
@@ -305,6 +311,7 @@ def _setup(subparser: Any) -> None:
     tn = subs.add_parser("tune", help="Trim a job's tools and reasoning, and keep that only if its answers hold up and it costs less")
     tn.add_argument("job", nargs="?", help="Job name or id. Leave out to list every job")
     tn.add_argument("--level", help="Try only this level (default: the levels the job's model takes, weakest first)")
+    tn.add_argument("--reasoning", choices=("keep", "lower"), help="For all jobs: keep your reasoning setting (default), or also try lower")
     tn.add_argument("--all", action="store_true", help="Start on every job that can have it")
     tn.add_argument("--undo", action="store_true", help="Put the job's previous setting back")
     tn.add_argument("--status", action="store_true", help="Show the result, with an answer from before and after")
