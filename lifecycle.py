@@ -285,6 +285,12 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     meta.setdefault("first_promoted_at", meta.get("promoted_at") or now)
     meta.update({"original_prompt": original, "promoted_at": now, "failures": 0, "live_runs": 0,
                  "baseline_cost": baseline, "mode": mode, "own_script": own_script, "skips": [], "no_ai_runs": [], "last_fingerprint": None})
+    # A job with cheaper settings already on gets new-items-only too, unless it acts on its data.
+    tune = store.get_tuning(routine["name"])
+    if tune and tune.get("status") in ("trial", "kept") and mode == "prerun" and not acts:
+        meta["new_only"] = True
+        tune["new_only"] = True
+        store.save_tuning(routine["name"], tune)
     store.update_routine(routine_id, status="live", meta=meta)
     return store.get_routine(routine_id)
 

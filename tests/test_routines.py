@@ -137,3 +137,19 @@ def test_an_action_first_leaves_nothing_to_fetch():
     a.ready = True
     with pytest.raises(steplist.NotCrystallizable):
         steplist.build(a)
+
+
+def test_promote_turns_on_new_items_only_after_cheaper_settings(monkeypatch):
+    saved = {}
+    routine = {"id": "cr_1", "name": "job", "status": "testing", "source_ref": "j1", "steps": {"steps": []},
+               "meta": {"ready": True}}
+    monkeypatch.setattr(lifecycle.store, "get_routine", lambda rid: routine)
+    monkeypatch.setattr(lifecycle.store, "update_routine", lambda rid, **kw: saved.update(kw))
+    monkeypatch.setattr(lifecycle.store, "get_tuning", lambda name: {"status": "kept"})
+    monkeypatch.setattr(lifecycle.store, "save_tuning", lambda name, data: saved.update(tune=data))
+    monkeypatch.setattr(lifecycle, "cron_job", lambda ref: {"id": "j1", "prompt": "task"})
+    monkeypatch.setattr(lifecycle, "_edit_job", lambda *a: None)
+    from crystallize import prerun
+    monkeypatch.setattr(prerun, "write_script", lambda *a: "script.py")
+    lifecycle.promote("cr_1")
+    assert saved["meta"]["new_only"] and saved["tune"]["new_only"]
