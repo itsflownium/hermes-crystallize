@@ -73,3 +73,32 @@ def test_api_cost_uses_hermes_prices_for_a_subscription_model():
     assert cost and cost > 0
     assert modelinfo.api_cost("a-model-nobody-prices", "local-thing", tokens) is None
     assert modelinfo.api_cost(None, "openai-codex", tokens) is None
+
+
+@pytest.mark.parametrize("declared,want", [
+    ((), []),                                  # the provider says: no reasoning settings at all
+    (("high", "low"), ["low", "high"]),        # its own list, weakest first
+    (("none", "bespoke-tier"), []),            # nothing Crystallize can safely aim for
+    (None, ["low", "medium", "high"]),         # it doesn't say: the widely accepted levels
+])
+def test_any_provider_profile_answer_is_handled(monkeypatch, declared, want):
+    monkeypatch.setattr(modelinfo, "_catalog_caps", lambda r: None)
+    monkeypatch.setattr(modelinfo, "_profile_levels", lambda r: declared)
+    monkeypatch.setattr(modelinfo, "_models_dev_says_no_reasoning", lambda r: False)
+    assert modelinfo.reasoning_levels({"provider": "some-provider", "model": "m"}) == want
+
+
+def test_a_model_known_to_have_no_reasoning_is_skipped(monkeypatch):
+    monkeypatch.setattr(modelinfo, "_catalog_caps", lambda r: None)
+    monkeypatch.setattr(modelinfo, "_profile_levels", lambda r: None)
+    monkeypatch.setattr(modelinfo, "_models_dev_says_no_reasoning", lambda r: True)
+    assert modelinfo.reasoning_levels({"provider": "some-provider", "model": "m"}) == []
+
+
+@pytest.mark.parametrize("provider,model", [(None, None), ("", ""), ("auto", "x"), ("not-a-provider", "a/b/c")])
+def test_odd_routes_never_raise(monkeypatch, provider, model):
+    route = {"provider": provider, "model": model, "base_url": None, "api_mode": None}
+    assert isinstance(modelinfo.reasoning_levels(route), list)
+    assert modelinfo.api_cost(model, provider, {"input": 1}) is None or provider
+    modelinfo.output_price(route)
+    modelinfo.token_prices(model, provider)

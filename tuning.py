@@ -70,10 +70,11 @@ def counted_runs(before: list[history.Run], trial: list[history.Run], answers: d
 
 def _measure(before: list[history.Run], trial: list[history.Run]) -> tuple[str, Optional[float], Optional[float]]:
     """What to compare: real cost if both sides have one. A subscription run costs $0, so
-    it compares its cost at API prices. A local model or an unknown price has neither, so
-    those compare tokens written, then time."""
+    it compares its cost at API prices. A model with no known price has neither, so it
+    compares all the tokens it used, since prompt tokens are usually most of the saving,
+    then time."""
     fields = (("cost", lambda r: r.cost_usd), ("api cost", lambda r: r.api_cost_usd),
-              ("tokens", lambda r: r.output_tokens), ("seconds", lambda r: r.duration_s))
+              ("tokens", lambda r: r.total_tokens), ("seconds", lambda r: r.duration_s))
     for name, field in fields:
         old = _mid([field(r) for r in before if field(r)])
         new = _mid([field(r) for r in trial if field(r)])

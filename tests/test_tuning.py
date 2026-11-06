@@ -54,6 +54,14 @@ def test_free_runs_compare_tokens_then_time():
     assert not tuning.evaluate(before, [_run("t1", 0.0, output=4900), _run("t2", 0.0, output=4900)], answers)["ok"]
 
 
+def test_no_price_counts_prompt_tokens_too():
+    answers = {"b1": ANSWER, "b2": ANSWER, "t1": ANSWER, "t2": ANSWER}
+    before = [_run("b1", None, output=500, inp=50000), _run("b2", None, output=500, inp=50000)]
+    trial = [_run("t1", None, output=500, inp=5000), _run("t2", None, output=500, inp=5000)]
+    r = tuning.evaluate(before, trial, answers)
+    assert r["ok"] and r["metric"] == "tokens"
+
+
 def test_unknown_price_is_not_treated_as_free():
     before = [_run("b1", 0.02, output=5000), _run("b2", 0.02, output=5000)]
     answers = {"b1": ANSWER, "b2": ANSWER, "t1": ANSWER, "t2": ANSWER}
