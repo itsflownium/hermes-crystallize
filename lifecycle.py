@@ -101,7 +101,12 @@ def _edit_job(job_id: str, *flags: str) -> None:
 
 def set_toolsets(job_id: str, toolsets: Optional[list[str]]) -> None:
     """Limit a job to these toolsets. None goes back to Hermes's default for cron jobs.
-    Hermes's CLI has no flag for this, so it goes through Hermes's own job update."""
+    Hermes's documented CLI has no flag for this. The private compatibility
+    dependency is deliberate and remains a catalog SDK gap (docs/sdk-gaps.md).
+    """
+    if toolsets is not None and (not isinstance(toolsets, list) or any(
+            not isinstance(name, str) or not name.strip() for name in toolsets)):
+        raise LifecycleError("Toolsets must be a list of nonempty names, or null for the cron default.")
     try:
         from cron.jobs import update_job
 
@@ -112,14 +117,14 @@ def set_toolsets(job_id: str, toolsets: Optional[list[str]]) -> None:
 
 
 def _set_job_fields(job_id: str, fields: dict[str, Any]) -> None:
-    """Update host fields without inventing CLI flags that older Hermes lacks."""
-    try:
-        from cron.jobs import update_job
-
-        if not update_job(job_id, fields):
-            raise LifecycleError("Hermes couldn't find that job to update.")
-    except ImportError as exc:
-        raise LifecycleError("This version of Hermes can't update the job's script interpreter.") from exc
+    """Use documented CLI edits for supported fields; do not fall back to internals."""
+    if set(fields) - {"interpreter"}:
+        raise LifecycleError("These job fields have no supported Crystallize CLI adapter.")
+    if fields:
+        value = fields["interpreter"]
+        if value is not None and not isinstance(value, str):
+            raise LifecycleError("The job's script interpreter must be a path or null.")
+        _edit_job(job_id, "--interpreter", value or "")
 
 
 def _set_prompt(job_id: str, prompt: str) -> None:
@@ -174,7 +179,11 @@ def normalize_prompt(prompt: str) -> str:
 
     unwrapped = unwrap_prompt(prompt)
     prompt = unwrapped if unwrapped is not None else prompt
-    prompt = prompt.replace(tuning.EFFICIENCY_HINT, "").replace("\r\n", "\n")
+    for name in ("EFFICIENCY_HINT", "LEGACY_EFFICIENCY_HINT"):
+        hint = getattr(tuning, name, "")
+        if hint:
+            prompt = prompt.replace(hint, "")
+    prompt = prompt.replace("\r\n", "\n")
     # Whitespace in fenced code can change a program, so retain it exactly.
     parts = re.split(r"(```[\s\S]*?```)", prompt)
     return "".join(part if part.startswith("```") else " ".join(part.split()) for part in parts).strip()
@@ -269,7 +278,10 @@ def _restore_attachment(routine: dict[str, Any], meta: dict[str, Any]) -> bool:
         tune = _tuning_for_job(job)
         if (tune and tune.get("hint_added", True) and
                 (tune.get("status") not in ("starting", "trial", "kept") or not tune.get("hint"))):
-            body = body.replace(tuning.EFFICIENCY_HINT, "")
+            for name in ("EFFICIENCY_HINT", "LEGACY_EFFICIENCY_HINT"):
+                hint = getattr(tuning, name, "")
+                if hint:
+                    body = body.replace(hint, "")
         flags += ["--prompt", body]
     # If someone edited the generated wrapper's instructions, keep the script in
     # fallback mode. Their text stays intact and the agent sees a failed routine.
@@ -280,11 +292,11 @@ def _restore_attachment(routine: dict[str, Any], meta: dict[str, Any]) -> bool:
         flags += ["--script", meta.get("own_script") or ""]
     if meta.get("mode") == "no_ai" and job.get("no_agent"):
         flags.append("--agent")
-    if flags:
-        _edit_job(job["id"], *flags)
     if (not unrecognized_wrapper and meta.get("installed_interpreter") and
             job.get("interpreter") == meta["installed_interpreter"]):
-        _set_job_fields(job["id"], {"interpreter": meta.get("own_interpreter")})
+        flags += ["--interpreter", meta.get("own_interpreter") or ""]
+    if flags:
+        _edit_job(job["id"], *flags)
     if script_owned and unrecognized_wrapper:
         from . import prerun
 
@@ -577,6 +589,8 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     flags = ["--prompt", prompt, "--script", script]
     if mode == "no_ai":
         flags.append("--no-agent")
+    if own_interpreter:
+        flags += ["--interpreter", sys.executable]
     # Saved first, so a failure or a crash during the change can always be undone.
     recovery = {"job_id": job["id"], "original_prompt": original, "own_script": own_script, "at": time.time(),
                 "installed_prompt": prompt, "installed_script": script, "mode": mode,
@@ -586,8 +600,6 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     store.update_routine(routine_id, meta={**meta, "promoting": recovery})
     try:
         _edit_job(job["id"], *flags)
-        if own_interpreter:
-            _set_job_fields(job["id"], {"interpreter": sys.executable})
     except LifecycleError:
         try:
             if _restore_attachment(routine, recovery):

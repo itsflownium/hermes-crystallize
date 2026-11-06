@@ -1,4 +1,4 @@
-"""Choosing whether a lower reasoning level is worth keeping."""
+"""Compare efficiency while preserving the configured model and reasoning."""
 
 import pytest
 
@@ -11,7 +11,8 @@ ANSWER = "\n".join(f"{i}. item https://example.com/{i}" for i in range(5))
 def _run(sid, cost, outcome="completed", reasoning=1000, output=1100, inp=500, cache=100):
     return Run(execution_id=sid, job_id="j", job_name="job", session_id=sid, scheduled=True, started_ts=1.0,
                outcome=outcome, cost_usd=cost, reasoning_tokens=reasoning, output_tokens=output,
-               input_tokens=inp, cache_read_tokens=cache, finished=True, session_started=1.0)
+               input_tokens=inp, cache_read_tokens=cache, finished=True, session_started=1.0,
+               model="test-model", provider="test-provider", reasoning_effort="high")
 
 
 BEFORE = [_run("b1", 0.02), _run("b2", 0.02)]
@@ -142,14 +143,14 @@ def _choices(monkeypatch, runs, job=None, answered=True):
     return tuning._tool_choices({"id": "j", **(job or {})}, "job")
 
 
-def test_narrow_tools_come_from_the_cheapest_good_run(monkeypatch):
+def test_tool_choices_keep_every_observed_branch(monkeypatch):
     runs = [_with_tools("a", 0.02, ["terminal", "web_extract"]), _with_tools("b", 0.01, ["web_extract"])]
-    assert _choices(monkeypatch, runs) == (["web"], ["terminal", "web"])
+    assert _choices(monkeypatch, runs) == (["terminal", "web"], ["terminal", "web"])
 
 
-def test_skills_are_dropped_first_unless_the_job_attaches_them(monkeypatch):
+def test_skills_remain_available_for_quality(monkeypatch):
     runs = [_with_tools("a", 0.01, ["skill_view", "web_extract"])]
-    assert _choices(monkeypatch, runs) == (["web"], ["skills", "web"])
+    assert _choices(monkeypatch, runs) == (["skills", "web"], ["skills", "web"])
     assert _choices(monkeypatch, runs, {"skills": ["x"]}) == (["skills", "web"], ["skills", "web"])
 
 
@@ -166,18 +167,18 @@ def test_tools_are_left_alone_when_unsure(monkeypatch):
     assert _choices(monkeypatch, outside, {"enabled_toolsets": ["web"]}) == (None, None)
 
 
-def test_stages_give_back_tools_then_reasoning():
+def test_stages_cannot_reduce_reasoning_even_with_legacy_levels():
     stages = tuning.plan_stages(["low", "medium"], ["web"], ["terminal", "web"])
-    assert stages == [{"level": "low", "toolsets": ["web"]}, {"level": "low", "toolsets": ["terminal", "web"]},
-                      {"level": "medium", "toolsets": ["terminal", "web"]}]
+    assert stages == [{"level": None, "toolsets": ["web"]}, {"level": None, "toolsets": ["terminal", "web"]}]
     assert tuning.plan_stages([], None, None) == [{"level": None, "toolsets": None}]
 
 
 def test_close_results_get_more_runs():
-    assert tuning._is_close({"kind": "saving", "before": 1.0, "after": 0.95})
-    assert tuning._is_close({"kind": "saving", "before": 1.0, "after": 1.1})
-    assert not tuning._is_close({"kind": "saving", "before": 1.0, "after": 1.5})
-    assert not tuning._is_close({"kind": "quality", "before": 1.0, "after": 0.95})
+    evidence = {"saving_evidence": {"sufficient_samples": True, "required_drop": .2}}
+    assert tuning._is_close({"kind": "saving", "before": 1.0, "after": 0.95, **evidence})
+    assert tuning._is_close({"kind": "saving", "before": 1.0, "after": 1.1, **evidence})
+    assert not tuning._is_close({"kind": "saving", "before": 1.0, "after": 1.5, **evidence})
+    assert not tuning._is_close({"kind": "quality", "before": 1.0, "after": 0.95, **evidence})
 
 
 def test_included_runs_compare_at_api_prices():
@@ -244,9 +245,9 @@ def test_the_instruction_protects_actions_and_details():
     assert "every action" in tuning.EFFICIENCY_HINT and "links" in tuning.EFFICIENCY_HINT
 
 
-def test_reasoning_stays_yours_unless_you_opt_in(monkeypatch):
+def test_reasoning_stays_yours_even_with_stale_opt_in(monkeypatch):
     settings = {}
     monkeypatch.setattr(tuning.store, "get_setting", lambda key, default=None: settings.get(key, default))
     assert tuning.lowers_reasoning() is False
     settings["lower_reasoning"] = True
-    assert tuning.lowers_reasoning() is True
+    assert tuning.lowers_reasoning() is False

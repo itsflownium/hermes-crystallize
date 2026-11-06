@@ -13,6 +13,7 @@ import math
 import re
 import statistics
 import time
+from types import SimpleNamespace
 from typing import Any, Optional
 
 from . import history, store
@@ -185,9 +186,12 @@ def _cost(run: Any, info: Optional[dict[str, Any]]) -> dict[str, Any]:
     actual = _number(info.get("actual_cost_usd"))
     estimated = _number(info.get("estimated_cost_usd"))
     provenance = getattr(run, "cost_provenance", None)
-    uncertainty = []
-    if info.get("cost_status") == "unknown" and actual is None:
+    uncertainty = list(dict.fromkeys([*((info.get("attribution_evidence") or {}).get("uncertainty") or []),
+                                      *((getattr(run, "attribution_evidence", {}) or {}).get("uncertainty") or [])]))
+    usage_complete = info.get("usage_totals_complete", True) and getattr(run, "usage_totals_complete", True)
+    if not usage_complete or (info.get("cost_status") == "unknown" and actual is None):
         actual = estimated = None
+        provenance = "unknown"
     elif actual is not None:
         provenance = "session_actual"
     elif info.get("cost_status") == "included" or getattr(run, "included", False):
@@ -202,12 +206,15 @@ def _cost(run: Any, info: Optional[dict[str, Any]]) -> dict[str, Any]:
             provenance = provenance or "legacy_unclassified_estimate"
             uncertainty.append("The saved session total has no invoice-level provenance.")
     api = _number(getattr(run, "api_cost_usd", None))
+    if not usage_complete:
+        api = None
     api_provenance = getattr(run, "api_cost_provenance", None) or "aggregate_session_api_equivalent_estimate"
     if api is not None and "request" not in str(api_provenance):
         uncertainty.append("API-equivalent session totals may span request pricing tiers; they are approximate, not exact prices.")
     return {"actual_usd": actual, "estimated_usd": estimated, "api_equivalent_usd": api,
             "provenance": provenance or "unknown", "api_equivalent_provenance": api_provenance,
             "pricing_uncertain": bool(getattr(run, "pricing_uncertain", False)),
+            "usage_totals_complete": bool(usage_complete),
             "uncertainty": uncertainty}
 
 
@@ -220,12 +227,25 @@ def _sync_runs(job_id: str, runs: list[Any]) -> None:
         for run in runs:
             if str(getattr(run, "job_id", "")) != job_id:
                 continue
+            info = infos.get(run.session_id or "") or {}
+            effort, fingerprint = history._reasoning(info)
+            identity_complete = info.get("identity_attribution_complete", getattr(run, "identity_attribution_complete", None))
+            if getattr(run, "identity_attribution_complete", None) is False:
+                identity_complete = False
             data = {"execution_id": str(run.execution_id), "session_id": run.session_id,
                     "started_at": run.started_ts, "scheduled": bool(run.scheduled), "outcome": run.outcome,
                     "finished": bool(run.finished), "cost": _cost(run, infos.get(run.session_id or "")),
                     "tokens": {k: getattr(run, k, None) for k in
                                ("input_tokens", "output_tokens", "reasoning_tokens", "cache_read_tokens", "cache_write_tokens")},
-                    "duration_s": run.duration_s, "model": run.model}
+                    "duration_s": run.duration_s, "model": info.get("model", run.model),
+                    "provider": info.get("billing_provider", getattr(run, "provider", None)),
+                    "reasoning_effort": info.get("reasoning_effort", getattr(run, "reasoning_effort", None) or effort),
+                    "reasoning_config_fingerprint": info.get("reasoning_config_fingerprint", getattr(run, "reasoning_config_fingerprint", None) or fingerprint),
+                    "identity_attribution_complete": identity_complete,
+                    "usage_totals_complete": info.get("usage_totals_complete", True) and getattr(run, "usage_totals_complete", True),
+                    "execution_binding": getattr(run, "execution_binding", "unknown"),
+                    "session_ids": list(info.get("session_ids") or getattr(run, "session_ids", []) or ([run.session_id] if run.session_id else [])),
+                    "attribution_evidence": info.get("attribution_evidence", getattr(run, "attribution_evidence", {}))}
             previous = conn.execute("SELECT data_json FROM proof_runs WHERE job_id=? AND execution_id=?",
                                     (job_id, str(run.execution_id))).fetchone()
             if previous:
@@ -239,8 +259,21 @@ def _sync_runs(job_id: str, runs: list[Any]) -> None:
                             data["cost"][key] = old.get("cost", {}).get(key)
                     if data["cost"]["provenance"] in {"unknown", "legacy_unclassified_estimate"} and old.get("cost", {}).get("provenance"):
                         data["cost"]["provenance"] = old["cost"]["provenance"]
+                    for key in ("model", "provider", "reasoning_effort", "reasoning_config_fingerprint", "identity_attribution_complete"):
+                        if data.get(key) is None:
+                            data[key] = old.get(key)
+                    if not data["attribution_evidence"]:
+                        data["attribution_evidence"] = old.get("attribution_evidence", {})
+                    if old.get("session_ids"):
+                        data["session_ids"] = old["session_ids"]
+                    if old.get("usage_totals_complete") is False:
+                        data["usage_totals_complete"] = False
+                    if data["execution_binding"] == "unknown":
+                        data["execution_binding"] = old.get("execution_binding", "unknown")
                 if data["outcome"] is None:
                     data["outcome"] = old.get("outcome")
+            data["comparison_identity"] = _comparison_key(data)
+            data["comparison_settings_verified"] = data["comparison_identity"] is not None
             conn.execute("INSERT INTO proof_runs VALUES (?, ?, ?, ?) ON CONFLICT(job_id,execution_id) "
                          "DO UPDATE SET data_json=excluded.data_json, updated_at=excluded.updated_at",
                          (job_id, str(run.execution_id), _json(data), time.time()))
@@ -337,7 +370,8 @@ def _sync_helpers(job_id: str, runs: list[dict[str, Any]]) -> None:
         return
     # Host auxiliary calls may not be included in the main session's price. The
     # ledger explicitly marks this when known; otherwise show the missing data.
-    for sid in {r.get("session_id") for r in runs if r.get("session_id")}:
+    session_ids = {sid for row in runs for sid in (row.get("session_ids") or [row.get("session_id")]) if sid}
+    for sid in session_ids:
         for row in reader(sid, limit=1000):
             if not row.get("helper_call"):
                 continue
@@ -376,6 +410,17 @@ def _successful(row: dict[str, Any]) -> bool:
     return row.get("outcome") in {"completed", "no_change", "skipped", "silent"} and row.get("contract_ok") is not False
 
 
+def _comparison_key(row: dict[str, Any]) -> Optional[tuple[str, str, str, str]]:
+    return history.comparison_identity(SimpleNamespace(**row))
+
+
+def _legacy_settings_unknown(row: dict[str, Any]) -> bool:
+    # Preserve old receipt arithmetic, but never call two unknown settings equal.
+    # Modern host reads explicitly set attribution_complete=False for unknowns.
+    return (row.get("identity_attribution_complete") is None and
+            all(row.get(key) is None for key in ("model", "provider", "reasoning_effort", "reasoning_config_fingerprint")))
+
+
 def _tally(rows: list[dict[str, Any]], basis: str) -> dict[str, Any]:
     values = [_value(r.get("cost", r), basis) for r in rows]
     known = [v for v in values if v is not None]
@@ -391,6 +436,12 @@ def _basis_receipt(runs: list[dict[str, Any]], campaigns: list[dict[str, Any]],
     baseline_rows: dict[str, list[dict[str, Any]]] = {}
     campaign_baselines = []
     contributions = []
+    matched_savings = []
+    comparisons = []
+    unproven_comparisons = 0
+    confounded_comparisons = 0
+    verified_comparisons = 0
+    incomplete_baseline_comparisons = 0
     unknown_savings = 0
     # The earliest optimization establishes a clean baseline. Later experiments
     # must not quietly turn already-optimized runs into the original baseline.
@@ -403,11 +454,29 @@ def _basis_receipt(runs: list[dict[str, Any]], campaigns: list[dict[str, Any]],
         baseline_rows[campaign["campaign_id"]] = before
         prices = [_value(r["cost"], basis) for r in before]
         known = [v for v in prices if v is not None]
-        baseline = statistics.median(known) if known else None
+        cohorts: dict[Any, list[dict[str, Any]]] = {}
+        for row in before:
+            identity = _comparison_key(row)
+            key = identity or ("legacy_unproven" if _legacy_settings_unknown(row) else f"unknown:{row['execution_id']}")
+            cohorts.setdefault(key, []).append(row)
+        # A mixed baseline has no single representative price. Each live run
+        # chooses its own same-settings cohort below.
+        baseline = statistics.median(known) if known and len(cohorts) == 1 else None
+        cohort_rows = []
+        for key, samples in cohorts.items():
+            values = [_value(sample["cost"], basis) for sample in samples]
+            numbers = [value for value in values if value is not None]
+            cohort_rows.append({"comparison_identity": key if isinstance(key, tuple) else None,
+                                "settings_verified": isinstance(key, tuple),
+                                "per_run_usd": statistics.median(numbers) if numbers else None,
+                                "sample_count": len(numbers), "missing_cost_count": len(values) - len(numbers),
+                                "execution_ids": [sample["execution_id"] for sample in samples[:MAX_EXPORT_ROWS]]})
         campaign_baselines.append({"campaign_id": campaign["campaign_id"], "per_run_usd": baseline,
                                    "sample_count": len(known), "missing_cost_count": len(prices) - len(known),
                                    "execution_ids": [r["execution_id"] for r in before[:MAX_EXPORT_ROWS]],
                                    "execution_ids_truncated": len(before) > MAX_EXPORT_ROWS,
+                                   "settings_cohorts": cohort_rows[:MAX_EXPORT_ROWS],
+                                   "settings_cohorts_truncated": len(cohort_rows) > MAX_EXPORT_ROWS,
                                    "provenance": "median_of_recorded_baseline_sessions"})
     for row in runs:
         if not row.get("scheduled"):
@@ -423,14 +492,38 @@ def _basis_receipt(runs: list[dict[str, Any]], campaigns: list[dict[str, Any]],
             trial_rows.append(row)
             continue
         live_rows.append(row)
-        baseline = next(b["per_run_usd"] for b in campaign_baselines if b["campaign_id"] == campaign["campaign_id"])
         price = _value(row["cost"], basis)
+        identity = _comparison_key(row)
+        candidates = baseline_rows[campaign["campaign_id"]]
+        legacy = _legacy_settings_unknown(row)
+        matched = [sample for sample in candidates if
+                   (identity is not None and _comparison_key(sample) == identity) or
+                   (legacy and _legacy_settings_unknown(sample))]
+        matched_prices = [_value(sample["cost"], basis) for sample in matched]
+        known_prices = [value for value in matched_prices if value is not None]
+        baseline = statistics.median(known_prices) if known_prices else None
+        status = "failed_spend" if not _successful(row) else "matched" if identity and matched else "legacy_unproven" if legacy and matched else "unknown_settings" if identity is None else "no_equivalent_baseline"
+        if _successful(row):
+            incomplete_baseline_comparisons += bool(matched and len(known_prices) != len(matched_prices))
+            if status == "matched":
+                verified_comparisons += 1
+            elif status == "legacy_unproven":
+                unproven_comparisons += 1
+            else:
+                confounded_comparisons += 1
+        comparisons.append({"execution_id": row["execution_id"], "status": status,
+                            "comparison_identity": identity, "baseline_per_run_usd": baseline,
+                            "missing_baseline_cost_count": len(matched_prices) - len(known_prices),
+                            "baseline_execution_ids": [sample["execution_id"] for sample in matched[:MAX_EXPORT_ROWS]],
+                            "baseline_execution_ids_truncated": len(matched) > MAX_EXPORT_ROWS})
         # A failed run delivered no result: all its known spend is a loss.
         saving = (-price if not _successful(row) else baseline - price) if price is not None and (baseline is not None or not _successful(row)) else None
         if saving is None:
             unknown_savings += 1
         else:
             contributions.append(saving)
+            if _successful(row):
+                matched_savings.append(saving)
     additional_events = [e for e in events if not e.get("included_in_session")]
     event_cost = _tally(additional_events, basis)
     trial_cost = _tally(trial_rows, basis)
@@ -439,18 +532,28 @@ def _basis_receipt(runs: list[dict[str, Any]], campaigns: list[dict[str, Any]],
     historical_known = sum(contributions)
     net_known = historical_known - overhead_known
     complete = unknown_savings == 0 and unknown_overhead == 0 and bool(campaigns or events)
-    success_prices = [_value(r["cost"], basis) for r in live_rows if _successful(r)]
-    known_success_prices = [v for v in success_prices if v is not None]
-    baselines = [b["per_run_usd"] for b in campaign_baselines if b["per_run_usd"] is not None]
-    per_run = (statistics.median(baselines) - statistics.median(known_success_prices)) if baselines and known_success_prices else None
+    per_run = statistics.median(matched_savings) if matched_savings and not confounded_comparisons else None
+    pricing_uncertain = basis == "api_equivalent" and any(r["cost"].get("pricing_uncertain") or
+                        "request" not in str(r["cost"].get("api_equivalent_provenance")) for r in live_rows + trial_rows)
+    qualified = (complete and unproven_comparisons == 0 and confounded_comparisons == 0
+                 and incomplete_baseline_comparisons == 0 and not pricing_uncertain)
     active = any(c.get("activated_at") is not None and c.get("ended_at") is None for c in campaigns)
     remaining = math.ceil(max(0.0, -net_known) / per_run) if complete and per_run is not None and per_run > 0 and (active or net_known >= 0) else None
     return {"basis": basis, "baseline": campaign_baselines,
             "spend_provenance": {"actual": "recorded_actual_or_subscription_incremental", "estimated": "recorded_actual_or_estimated",
                                  "api_equivalent": "listed_API_equivalent_estimate; not a bill"}[basis],
             "historical_savings_are_counterfactual_estimates": True,
-            "pricing_uncertain": basis == "api_equivalent" and any(r["cost"].get("pricing_uncertain") or
-                                      "request" not in str(r["cost"].get("api_equivalent_provenance")) for r in live_rows + trial_rows),
+            "pricing_uncertain": pricing_uncertain,
+            "equivalent_settings_comparison_count": verified_comparisons,
+            "unproven_settings_comparison_count": unproven_comparisons,
+            "excluded_settings_comparison_count": confounded_comparisons,
+            "efficiency_savings_proven": qualified and verified_comparisons > 0,
+            "qualified_historical_savings_usd": historical_known if qualified else None,
+            "qualified_efficiency_savings_usd": historical_known if qualified else None,
+            "qualified_net_payback_usd": net_known if qualified else None,
+            "comparisons": comparisons[-MAX_EXPORT_ROWS:],
+            "comparisons_truncated": len(comparisons) > MAX_EXPORT_ROWS,
+            "comparison_policy": "Same recorded model, provider and full reasoning configuration; unknown settings do not establish equivalence.",
             "live_run_count": len(live_rows), "failed_live_run_count": sum(not _successful(r) for r in live_rows),
             "trial_run_count": len(trial_rows), "failed_trial_run_count": sum(not _successful(r) for r in trial_rows),
             "historical_savings_usd": historical_known if unknown_savings == 0 else None,
@@ -499,6 +602,10 @@ def receipt(job_id: str, *, runs: Optional[list[Any]] = None) -> dict[str, Any]:
         uncertainties.add("No durable optimization start/activation boundary is known; historical savings and break-even are unavailable.")
     if any(c.get("activated_at") is None for c in campaigns):
         uncertainties.add("An activation boundary is missing; affected runs are charged as trial overhead, with no claimed live saving.")
+    if any(b["unproven_settings_comparison_count"] for b in bases.values()):
+        uncertainties.add("Legacy counterfactual totals have unknown model/provider/reasoning settings; they are not qualified efficiency savings.")
+    if any(b["excluded_settings_comparison_count"] for b in bases.values()):
+        uncertainties.add("Runs without an equivalent recorded model, provider and full reasoning configuration baseline are excluded from savings credit.")
     for row in rows:
         uncertainties.update(row["cost"].get("uncertainty") or [])
     if any(e.get("details", {}).get("session_inclusion") == "not_reported; treated_as_additional" for e in events):
@@ -509,12 +616,16 @@ def receipt(job_id: str, *, runs: Optional[list[Any]] = None) -> dict[str, Any]:
             value["complete"] = False
             value["net_payback_usd"] = None
             value["estimated_break_even_remaining_runs"] = None
+            value["qualified_historical_savings_usd"] = value["qualified_efficiency_savings_usd"] = value["qualified_net_payback_usd"] = None
+            value["efficiency_savings_proven"] = False
     if not (runs_complete and campaigns_complete and events_complete and checks_complete):
         uncertainties.add("The receipt row limit was reached; totals cover the bounded recorded subset only.")
         for value in bases.values():
             value["complete"] = False
             value["net_payback_usd"] = None
             value["estimated_break_even_remaining_runs"] = None
+            value["qualified_historical_savings_usd"] = value["qualified_efficiency_savings_usd"] = value["qualified_net_payback_usd"] = None
+            value["efficiency_savings_proven"] = False
     if any(b["unknown_overhead_count"] or b["unknown_savings_run_count"] for b in bases.values()):
         uncertainties.add("Missing prices remain unknown; known subtotals are not complete net payback.")
     if any(baseline["missing_cost_count"] for basis in bases.values() for baseline in basis["baseline"]):
@@ -525,6 +636,9 @@ def receipt(job_id: str, *, runs: Optional[list[Any]] = None) -> dict[str, Any]:
               "helper_call_count": sum(e["kind"] == "helper" for e in events), "campaigns": campaigns,
               "cost_bases": bases, "preferred_basis": preferred,
               "net_payback_usd": bases[preferred]["net_payback_usd"] if preferred else None,
+              "qualified_efficiency_savings_usd": bases[preferred]["qualified_efficiency_savings_usd"] if preferred else None,
+              "qualified_net_payback_usd": bases[preferred]["qualified_net_payback_usd"] if preferred else None,
+              "efficiency_savings_proven": bool(preferred and bases[preferred]["efficiency_savings_proven"]),
               "estimated_break_even_remaining_runs": bases[preferred]["estimated_break_even_remaining_runs"] if preferred else None,
               "recorded_spend": {basis: _tally(rows, basis) for basis in bases},
               "overhead_by_kind": {kind: {basis: _tally([e for e in events if e["kind"] == kind], basis) for basis in bases}

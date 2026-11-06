@@ -80,6 +80,7 @@ def test_readiness_and_receipt_gets_never_start_comparison(monkeypatch):
     calls = []
     modules = {
         "experiments": SimpleNamespace(preview=lambda job: {"available": True, "job_id": job},
+                                        comparisons=lambda job, limit=1: [],
                                         compare=lambda *a, **kw: calls.append(kw)),
         "receipts": SimpleNamespace(receipt=lambda job: {"job_id": job, "net_payback_usd": None}),
     }
@@ -93,13 +94,20 @@ def test_comparison_requires_explicit_action_and_preserves_failed_call_receipt(m
     calls = []
     def compare(job, **kwargs):
         calls.append((job, kwargs, threading.get_ident()))
-        return {"status": "failed", "calls": [{"status": "failed", "cost": None}]}
-    monkeypatch.setattr(api, "_module", lambda name: SimpleNamespace(compare=compare))
+        return {"id": "pair-a", "status": "failed", "calls": [{"status": "failed", "cost": None}]}
+    modules = {
+        "experiments": SimpleNamespace(compare=compare),
+        "blind": SimpleNamespace(present=lambda ident: {"id": ident, "revealed": False,
+                                  "samples": [{"A": {"status": "failed", "answer": ""}, "B": {"status": "failed", "answer": ""}}]}),
+    }
+    monkeypatch.setattr(api, "_module", modules.__getitem__)
     assert call(api.compare_job, {"job_id": "job-a", "confirmed": False})["code"] == "invalid_request"
     assert not calls
     result = call(api.compare_job, {"job_id": "job-a", "confirmed": True, "execution_id": "run-a"})
     assert not result["ok"] and result["code"] == "comparison_failed"
-    assert result["comparison"]["calls"][0]["cost"] is None
+    assert result["comparison"]["samples"][0]["A"]["status"] == "failed"
+    assert result["comparison"]["revealed"] is False
+    assert "cost" not in str(result["comparison"])
     assert calls[0][:2] == ("job-a", {"execution_id": "run-a", "confirmed": True})
     assert calls[0][2] != threading.get_ident()
 

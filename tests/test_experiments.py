@@ -326,3 +326,193 @@ def test_absent_host_usage_zeroes_are_not_fabricated_as_free_api_price(world, mo
     result = ex.compare("j1", completion=complete, confirmed=True)
     assert all(c["cost"]["api_equivalent_usd"] is None for c in result["calls"])
     assert all(c["cost"]["provenance"] == "unknown" for c in result["calls"])
+
+
+@pytest.mark.parametrize("metadata", [
+    {"finish_reason": "length"},
+    {"stop_reason": "max_output_tokens"},
+    {"status": "incomplete"},
+    {"raw_response": {"choices": [{"finish_reason": "length"}]}},
+    {"raw": {"incomplete_details": {"reason": "max_output_tokens"}}},
+    {"audit": {"truncated": True}},
+    {"complete": False},
+    {"error": {"message": "provider failed after producing partial output"}},
+])
+def test_incomplete_provider_responses_are_failed_paid_overhead(world, metadata):
+    world.trace()
+    calls = []
+    base = completion(calls)
+
+    def complete(messages, **kwargs):
+        answer = base(messages, **kwargs)
+        for key, value in metadata.items():
+            setattr(answer, key, value)
+        return answer
+
+    result = ex.compare("j1", completion=complete, confirmed=True)
+    assert len(calls) == 2
+    assert result["status"] == "failed"
+    assert not result["quality_evidence"]["all_outputs_complete"]
+    for call in result["calls"]:
+        assert call["status"] == "failed" and call["complete"] is False
+        assert "output" not in call and "validation" not in call
+        assert call["cost"]["estimated_usd"] == 0.01
+        assert call["completion_check"]["ok"] is False
+    assert receipts.receipt("j1")["comparison_call_count"] == 2
+
+
+def test_output_token_ceiling_is_conservatively_incomplete_without_finish_reason(world):
+    world.trace()
+    calls = []
+    base = completion(calls)
+
+    def complete(messages, **kwargs):
+        answer = base(messages, **kwargs)
+        answer.usage.output_tokens = kwargs["max_tokens"]
+        return answer
+
+    result = ex.compare("j1", completion=complete, confirmed=True)
+    assert result["status"] == "failed"
+    assert all(call["completion_check"]["output_token_ceiling_reached"] for call in result["calls"])
+
+
+@pytest.mark.parametrize("text", ["Output truncated: rest omitted", '{"truncated":true,"answer":"partial"}'])
+def test_explicitly_truncated_answer_text_is_not_accepted(world, text):
+    world.trace()
+    result = ex.compare("j1", completion=completion([], text=text), confirmed=True)
+    assert result["status"] == "failed"
+    assert all("output" not in call and "validation" not in call for call in result["calls"])
+
+
+def test_no_contract_is_unreviewed_quality_evidence(world):
+    world.trace()
+    result = ex.compare("j1", completion=completion([]), confirmed=True)
+    assert not result["pairs"][0]["both_pass_contract"]
+    assert not result["pairs"][0]["contract_configured"]
+    assert result["quality_evidence"] == {
+        "all_outputs_complete": True, "contract_configured": False,
+        "all_contract_checks_passed": False, "semantic_quality_proven": False,
+        "human_review": "blind_review_available",
+        "limitation": "Task-specific deterministic checks and a human preference are evidence, not proof of factual correctness or live-job equivalence."}
+
+
+def test_empty_contract_cannot_claim_outcome_requirements_passed(world):
+    world.trace()
+    contracts.set("j1", {})
+    result = ex.compare("j1", completion=completion([]), confirmed=True)
+    assert result["contract_configured"]
+    assert not result["pairs"][0]["both_pass_contract"]
+    assert not result["quality_evidence"]["all_contract_checks_passed"]
+    assert not result["calls"][0]["validation"]["task_checks_configured"]
+    assert "No task-specific" in result["calls"][0]["validation"]["why"]
+
+
+def test_main_to_helper_is_a_model_switch_never_an_efficiency_saving(world):
+    world.trace()
+    preview = ex.preview("j1")
+    result = ex.compare("j1", completion=completion([]), confirmed=True)
+    for value in (preview, result, ex.comparison(result["id"])):
+        assert value["experiment_kind"] == "model_switch"
+        assert value["efficiency_comparison"] is False
+        assert value["efficiency_savings_claimed"] is False
+        assert value["reasoning_overridden"] is False
+        assert "not efficiency savings" in value["cost_difference_scope"]
+
+
+def test_same_route_prompt_experiment_keeps_reasoning_and_live_savings_unclaimed(world):
+    world.trace()
+    calls = []
+    result = ex.compare("j1", candidate={"task": None, "prompt": "Answer more concisely using the frozen value and URL."},
+                        completion=completion(calls), confirmed=True)
+    assert result["experiment_kind"] == "same_route_efficiency"
+    assert result["efficiency_comparison"] is True
+    assert result["efficiency_savings_claimed"] is False
+    assert result["reasoning_overridden"] is False
+    assert all("reasoning" not in kwargs for _, kwargs in calls)
+
+
+def test_observed_route_change_is_separate_even_with_same_requested_selector(world):
+    world.trace()
+    calls = []
+    base = completion(calls)
+
+    def complete(messages, **kwargs):
+        answer = base(messages, **kwargs)
+        answer.provider = "different-provider" if len(calls) == 2 else answer.provider
+        return answer
+
+    result = ex.compare("j1", candidate={"task": None, "prompt": "Answer concisely."},
+                        completion=complete, confirmed=True)
+    assert result["pairs"][0]["served_routes_identical"] is False
+    assert result["experiment_kind"] == "model_switch" and not result["efficiency_comparison"]
+
+
+@pytest.mark.parametrize("side", ["original", "candidate"])
+def test_no_main_or_helper_reasoning_override_can_be_requested(world, side):
+    world.trace()
+    calls = []
+    with pytest.raises(ex.ComparisonError, match="Unsupported public"):
+        ex.compare("j1", **{side: {"reasoning_effort": "low"}}, completion=completion(calls), confirmed=True)
+    assert not calls
+
+
+@pytest.mark.parametrize("domain,payload,fields", [
+    ("market report", {"asset": "ZQX", "price": 19.75, "currency": "AUD"}, ["asset", "price", "currency"]),
+    ("build report", {"commit": "b17ad39", "passed": 17, "failed": 2}, ["commit", "passed", "failed"]),
+    ("inventory", {"sku": "part-413", "available": 16, "warehouse": "west"}, ["sku", "available", "warehouse"]),
+    ("research digest", {"title": "Unseen result", "sample_size": 137, "method": "measured"}, ["title", "sample_size", "method"]),
+    ("travel schedule", {"train": "T23", "departure": "14:37", "platform": 6}, ["train", "departure", "platform"]),
+    ("incident report", {"service": "queue-bridge", "status": "degraded", "incident": "INC-9"}, ["service", "status", "incident"]),
+])
+def test_quality_evidence_is_task_contract_based_across_unseen_domains(world, domain, payload, fields):
+    world.job["prompt"] = "Report the observed " + domain + " as JSON, preserving exact values and evidence URL."
+    payload["url"] = "https://evidence.example/" + domain.replace(" ", "-")
+    text = json.dumps(payload)
+    world.trace(text=text)
+    contracts.set("j1", {"required_sources": [{"tool": "read_file", "target": "/tmp/observed.json"}],
+                         "required_fields": fields + ["url"], "required_urls": [payload["url"]]})
+    calls = []
+    result = ex.compare("j1", completion=completion(calls, text=text), confirmed=True)
+    assert calls[0][0][-1] == calls[1][0][-1]
+    frozen = json.loads(calls[0][0][-1]["content"].split("\n", 1)[1])
+    assert frozen["observations"][0]["output"] == text
+    assert result["pairs"][0]["both_pass_contract"]
+    assert result["quality_evidence"]["all_contract_checks_passed"]
+    assert not result["quality_evidence"]["semantic_quality_proven"]
+    assert {c["rule"] for c in result["calls"][0]["validation"]["checks"]} == {"required_source", "required_field", "required_url"}
+
+
+def test_structurally_valid_wrong_value_never_claims_semantic_quality(world):
+    world.trace(text='{"value":19.75,"url":"https://source.example/today"}')
+    contracts.set("j1", {"required_fields": ["value", "url"], "required_urls": ["https://source.example/today"]})
+    result = ex.compare("j1", completion=completion([], text='{"value":99.75,"url":"https://source.example/today"}'), confirmed=True)
+    assert result["pairs"][0]["both_pass_contract"]
+    assert result["quality_evidence"]["semantic_quality_proven"] is False
+    assert "not proof" in result["quality_evidence"]["limitation"]
+
+
+def test_single_diagnostic_reader_is_read_only_and_not_found_is_explicit(world):
+    world.trace()
+    result = ex.compare("j1", completion=completion([]), confirmed=True)
+    assert ex.comparison(result["id"])["id"] == result["id"]
+    with pytest.raises(LookupError, match="does not exist"):
+        ex.comparison("not-a-comparison")
+
+
+def test_explicit_comparison_flows_to_anonymous_vote_then_revealed_evidence(world, monkeypatch):
+    from crystallize import blind
+
+    world.trace()
+    contracts.set("j1", {"required_fields": ["value", "url"]})
+    monkeypatch.setattr(blind.secrets, "randbelow", lambda count: 1)
+    result = ex.compare("j1", completion=completion([]), confirmed=True)
+    anonymous = blind.present(result["id"])
+    assert anonymous["can_choose"] and not anonymous["revealed"]
+    assert "original-model" not in json.dumps(anonymous) and "candidate-model" not in json.dumps(anonymous)
+    assert "cost" not in anonymous and "reveal" not in anonymous
+    revealed = blind.choose(result["id"], "neither")
+    assert revealed["reveal"]["samples"][0]["A"]["answered_by"]["model"] == "candidate-model-canonical"
+    assert revealed["reveal"]["samples"][0]["A"]["cost"]["estimated_usd"] == 0.01
+    assert revealed["reveal"]["samples"][0]["A"]["validation"]["task_checks_configured"]
+    assert revealed["reveal"]["quality_evidence"]["human_review"]["choice"] == "neither"
+    assert revealed["reveal"]["quality_evidence"]["semantic_quality_proven"] is False

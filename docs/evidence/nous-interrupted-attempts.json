@@ -1,0 +1,360 @@
+{
+  "scope": "Two earlier isolated runtime exits; no completed result, billing unknown. Retained conservatively in the same budget.",
+  "reservation_usd": 0.2,
+  "attempts": [
+    {
+      "schema_version": 1,
+      "execution": "live_requested",
+      "scope": "frozen_answer_only_cleaning",
+      "live_calls": 1,
+      "cost_status": "see_per_call_host_estimates",
+      "actual_billed_usd": null,
+      "limitations": [
+        "Frozen answer-generation fixtures, not a full agent loop or live-job benchmark.",
+        "Observable field checks do not establish semantic equivalence or general competence in a domain.",
+        "Deliberately oversized JSON indentation is synthetic. Its compression ratio is not representative of real workloads.",
+        "Only the input representation changes; main model, requested reasoning, temperature and output limit must match.",
+        "No earlier reasoning is supplied, replayed or summarized. Current public ctx.llm does not expose effective wire reasoning.",
+        "usage.cost_usd is a Hermes estimate, never proof of actual billing. Absent usage and default zero tokens remain unknown.",
+        "Cache state, serving load and sampling can vary. Orders are counterbalanced, not a controlled cache experiment.",
+        "The live budget is a conservative reservation guard, not a provider billing limit; host retries/fallbacks may add cost.",
+        "No result here proves every provider or task works, or establishes marketplace admission."
+      ],
+      "fixtures": [
+        {
+          "fixture_id": "research-conflicting-sources-v1",
+          "domain": "research",
+          "complete_input_sha256": "1ff2e03d6265669cd32e528da8a03c57f7959f98578b4653cd0e3c30421f9273",
+          "inputs": {
+            "baseline": {
+              "sha256": "21e77a03029e4eedf42b72d746899d423167d517193b7ab92abf6d7454080a63",
+              "observation_chars": 2346,
+              "message_chars": 3144
+            },
+            "candidate": {
+              "sha256": "fc0d9f6f23e17e579f3368ed6d821ca714926ed8b97705b76539a2fd263798b4",
+              "observation_chars": 539,
+              "message_chars": 1333
+            }
+          },
+          "candidate_evidence_literals_preserved": true,
+          "observation_chars_removed": 1807,
+          "reference_self_check": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:capacity",
+                "ok": true
+              },
+              {
+                "name": "field:previous_capacity",
+                "ok": true
+              },
+              {
+                "name": "field:effective_date",
+                "ok": true
+              },
+              {
+                "name": "field:source_urls",
+                "ok": true
+              },
+              {
+                "name": "field:currentness",
+                "ok": true
+              },
+              {
+                "name": "field:opening_hour",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "limitations": "Checks a correction, missing evidence and citations; does not assess source credibility or current research.",
+          "calls": [
+            {
+              "arm": "baseline",
+              "status": "in_flight",
+              "settings_snapshots": [
+                {
+                  "provider": "nous",
+                  "model": "deepseek/deepseek-v4.1-flash",
+                  "reasoning": {
+                    "effort": "max"
+                  },
+                  "source": "public_host_configuration"
+                }
+              ],
+              "input_sha256": "21e77a03029e4eedf42b72d746899d423167d517193b7ab92abf6d7454080a63",
+              "usage": {
+                "status": "unknown",
+                "tokens": {
+                  "input_tokens": null,
+                  "output_tokens": null,
+                  "total_tokens": null,
+                  "cache_read_tokens": null,
+                  "cache_write_tokens": null
+                },
+                "ambiguous_default_zero_tokens": false,
+                "host_estimate_usd": null,
+                "actual_billed_usd": null,
+                "cost_status": "unknown",
+                "cost_basis": "unknown"
+              }
+            }
+          ],
+          "status": "running",
+          "confounders": [],
+          "expected_settings": {
+            "provider": "nous",
+            "model": "deepseek/deepseek-v4.1-flash",
+            "reasoning": {
+              "effort": "max"
+            },
+            "source": "public_host_configuration"
+          },
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "generation": {
+            "temperature": 0.0,
+            "max_tokens": 4096,
+            "timeout_seconds": 90.0,
+            "task": "crystallize_validation",
+            "prior_reasoning_supplied": false,
+            "tools_supplied": false,
+            "output_limit_verification": "request_only; the host may omit max_tokens on some routes"
+          },
+          "unknown_cost_continuation_authorized": true,
+          "budget_committed_usd": 0.1,
+          "cost_summary": {
+            "attempted_calls": 1,
+            "error_calls": 0,
+            "in_flight_or_interrupted_calls": 1,
+            "known_zero_estimate_calls": 0,
+            "unknown_cost_calls": 1,
+            "known_host_estimate_usd": 0,
+            "complete_host_estimate_usd": null,
+            "actual_billed_usd": null
+          }
+        }
+      ],
+      "provider_coverage": {
+        "live_tested": [],
+        "untested": "All providers not named here; fixture coverage is not universal provider validation."
+      },
+      "allowed_providers": [
+        "nous"
+      ],
+      "settings": {
+        "provider": "nous",
+        "model": "deepseek/deepseek-v4.1-flash",
+        "reasoning": {
+          "effort": "max"
+        },
+        "source": "public_host_configuration"
+      },
+      "budget": {
+        "limit_usd": 2.0,
+        "reserve_per_call_usd": 0.1,
+        "basis": "operator_conservative_per_call_envelope; not a provider billing cap",
+        "unknown_cost_continuation_authorized": true,
+        "committed_usd": 0.1
+      },
+      "stop_reason": "Stopped after an incomplete, changed-route, failed, timed-out or unknown-cost pair.",
+      "cost_summary": {
+        "attempted_calls": 1,
+        "error_calls": 0,
+        "in_flight_or_interrupted_calls": 1,
+        "known_zero_estimate_calls": 0,
+        "unknown_cost_calls": 1,
+        "known_host_estimate_usd": 0,
+        "complete_host_estimate_usd": null,
+        "actual_billed_usd": null
+      }
+    },
+    {
+      "schema_version": 1,
+      "execution": "live_requested",
+      "scope": "frozen_answer_only_cleaning",
+      "live_calls": 1,
+      "cost_status": "see_per_call_host_estimates",
+      "actual_billed_usd": null,
+      "limitations": [
+        "Frozen answer-generation fixtures, not a full agent loop or live-job benchmark.",
+        "Observable field checks do not establish semantic equivalence or general competence in a domain.",
+        "Deliberately oversized JSON indentation is synthetic. Its compression ratio is not representative of real workloads.",
+        "Only the input representation changes; main model, requested reasoning, temperature and output limit must match.",
+        "No earlier reasoning is supplied, replayed or summarized. Current public ctx.llm does not expose effective wire reasoning.",
+        "usage.cost_usd is a Hermes estimate, never proof of actual billing. Absent usage and default zero tokens remain unknown.",
+        "Cache state, serving load and sampling can vary. Orders are counterbalanced, not a controlled cache experiment.",
+        "The live budget is a conservative reservation guard, not a provider billing limit; host retries/fallbacks may add cost.",
+        "No result here proves every provider or task works, or establishes marketplace admission."
+      ],
+      "fixtures": [
+        {
+          "fixture_id": "research-conflicting-sources-v1",
+          "domain": "research",
+          "complete_input_sha256": "1ff2e03d6265669cd32e528da8a03c57f7959f98578b4653cd0e3c30421f9273",
+          "inputs": {
+            "baseline": {
+              "sha256": "21e77a03029e4eedf42b72d746899d423167d517193b7ab92abf6d7454080a63",
+              "observation_chars": 2346,
+              "message_chars": 3144
+            },
+            "candidate": {
+              "sha256": "fc0d9f6f23e17e579f3368ed6d821ca714926ed8b97705b76539a2fd263798b4",
+              "observation_chars": 539,
+              "message_chars": 1333
+            }
+          },
+          "candidate_evidence_literals_preserved": true,
+          "observation_chars_removed": 1807,
+          "reference_self_check": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:capacity",
+                "ok": true
+              },
+              {
+                "name": "field:previous_capacity",
+                "ok": true
+              },
+              {
+                "name": "field:effective_date",
+                "ok": true
+              },
+              {
+                "name": "field:source_urls",
+                "ok": true
+              },
+              {
+                "name": "field:currentness",
+                "ok": true
+              },
+              {
+                "name": "field:opening_hour",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "limitations": "Checks a correction, missing evidence and citations; does not assess source credibility or current research.",
+          "calls": [
+            {
+              "arm": "baseline",
+              "status": "in_flight",
+              "settings_snapshots": [
+                {
+                  "provider": "nous",
+                  "model": "deepseek/deepseek-v4.1-flash",
+                  "reasoning": {
+                    "effort": "max"
+                  },
+                  "source": "public_host_configuration"
+                }
+              ],
+              "input_sha256": "21e77a03029e4eedf42b72d746899d423167d517193b7ab92abf6d7454080a63",
+              "usage": {
+                "status": "unknown",
+                "tokens": {
+                  "input_tokens": null,
+                  "output_tokens": null,
+                  "total_tokens": null,
+                  "cache_read_tokens": null,
+                  "cache_write_tokens": null
+                },
+                "ambiguous_default_zero_tokens": false,
+                "host_estimate_usd": null,
+                "actual_billed_usd": null,
+                "cost_status": "unknown",
+                "cost_basis": "unknown"
+              }
+            }
+          ],
+          "status": "worker_failed",
+          "confounders": [],
+          "expected_settings": {
+            "provider": "nous",
+            "model": "deepseek/deepseek-v4.1-flash",
+            "reasoning": {
+              "effort": "max"
+            },
+            "source": "public_host_configuration"
+          },
+          "order": [
+            "baseline",
+            "candidate"
+          ],
+          "generation": {
+            "temperature": 0.0,
+            "max_tokens": 4096,
+            "timeout_seconds": 90.0,
+            "task": "crystallize_validation",
+            "prior_reasoning_supplied": false,
+            "tools_supplied": false,
+            "output_limit_verification": "request_only; the host may omit max_tokens on some routes"
+          },
+          "unknown_cost_continuation_authorized": true,
+          "budget_committed_usd": 0.1,
+          "worker_returncode": 1,
+          "error_type": "WorkerProcessExit",
+          "stop_reason": "Worker exited before a complete report; in-flight billing remains unknown.",
+          "cost_summary": {
+            "attempted_calls": 1,
+            "error_calls": 0,
+            "in_flight_or_interrupted_calls": 1,
+            "known_zero_estimate_calls": 0,
+            "unknown_cost_calls": 1,
+            "known_host_estimate_usd": 0,
+            "complete_host_estimate_usd": null,
+            "actual_billed_usd": null
+          }
+        }
+      ],
+      "provider_coverage": {
+        "live_tested": [],
+        "untested": "All providers not named here; fixture coverage is not universal provider validation."
+      },
+      "allowed_providers": [
+        "nous"
+      ],
+      "settings": {
+        "provider": "nous",
+        "model": "deepseek/deepseek-v4.1-flash",
+        "reasoning": {
+          "effort": "max"
+        },
+        "source": "public_host_configuration"
+      },
+      "budget": {
+        "limit_usd": 2.0,
+        "reserve_per_call_usd": 0.1,
+        "basis": "operator_conservative_per_call_envelope; not a provider billing cap",
+        "already_reserved_usd": 0.1,
+        "unknown_cost_continuation_authorized": true,
+        "committed_usd": 0.2
+      },
+      "stop_reason": "Stopped after an incomplete, changed-route, failed, timed-out or unknown-cost pair.",
+      "cost_summary": {
+        "attempted_calls": 1,
+        "error_calls": 0,
+        "in_flight_or_interrupted_calls": 1,
+        "known_zero_estimate_calls": 0,
+        "unknown_cost_calls": 1,
+        "known_host_estimate_usd": 0,
+        "complete_host_estimate_usd": null,
+        "actual_billed_usd": null
+      }
+    }
+  ]
+}

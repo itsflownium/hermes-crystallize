@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "status": "submission_bundle_only",
+  "catalog_ready": false,
+  "pinned_commit": "c2c15d8dfa62b3e075da78547669b165e2b4c523",
+  "pinned_manifest_version": "0.4.0",
+  "literal_capabilities_match_manifest": true,
+  "source_analysis": {
+    "registered": {
+      "provides_tools": [
+        "crystal_cheap",
+        "crystal_full_result",
+        "crystal_list",
+        "crystal_run"
+      ],
+      "provides_hooks": [
+        "on_session_end",
+        "post_api_request",
+        "post_tool_call",
+        "pre_llm_call",
+        "pre_tool_call",
+        "transform_llm_output",
+        "transform_tool_result"
+      ],
+      "provides_middleware": [
+        "llm_request",
+        "tool_execution"
+      ]
+    },
+    "core_imports_requiring_public_api_review": [
+      {
+        "file": "chat_savings.py",
+        "line": 300,
+        "module": "hermes_cli.inventory"
+      },
+      {
+        "file": "chat_savings.py",
+        "line": 324,
+        "module": "plugins.plugin_storage"
+      },
+      {
+        "file": "dashboard/plugin_api.py",
+        "line": 130,
+        "module": "plugins.plugin_storage"
+      },
+      {
+        "file": "delegation.py",
+        "line": 37,
+        "module": "agent.delegation_provider"
+      },
+      {
+        "file": "history.py",
+        "line": 91,
+        "module": "hermes_constants"
+      },
+      {
+        "file": "lifecycle.py",
+        "line": 111,
+        "module": "cron.jobs"
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 155,
+        "module": "agent.usage_pricing"
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 238,
+        "module": "agent.usage_pricing"
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 292,
+        "module": "agent.usage_pricing"
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 24,
+        "module": "hermes_cli.config"
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 55,
+        "module": "providers"
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 106,
+        "module": "hermes_constants"
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 224,
+        "module": "tools.registry"
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 269,
+        "module": "providers"
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 280,
+        "module": "hermes_cli.models"
+      },
+      {
+        "file": "store.py",
+        "line": 144,
+        "module": "plugins.plugin_storage"
+      },
+      {
+        "file": "tool_discovery.py",
+        "line": 18,
+        "module": "tools.registry"
+      },
+      {
+        "file": "tools.py",
+        "line": 57,
+        "module": "tools.registry"
+      },
+      {
+        "file": "tools.py",
+        "line": 73,
+        "module": "model_tools"
+      }
+    ],
+    "requires_env_validation": "Manifest-declared mandatory names only; host load/secret-scope validation remains required."
+  },
+  "pinned_features": {
+    "delegated_file_handoffs": true,
+    "sdk_gap_document": true
+  },
+  "publication_verified": false,
+  "upstream_catalog_pr": null,
+  "maintainer_approval": "not_obtained",
+  "hermes_plugins_validate": {
+    "status": "not_run_by_generator",
+    "warnings_suppressed": false,
+    "command": "hermes plugins validate /path/to/pinned-checkout --install-deps"
+  },
+  "blockers": [
+    "Public SDK migration/review of remaining core imports.",
+    "Hermes install/scanner validation at the exact pin, with warnings reviewed.",
+    "Public clone/pin availability and owner-or-major-contributor submission.",
+    "Upstream hermes-agent catalog PR and maintainer review/merge."
+  ],
+  "limitations": [
+    "Static literal registration comparison is not a runtime-load or security scan.",
+    "The local host catalog policy was used; re-read it at actual submission.",
+    "No live provider, semantic-equivalence or actual-billing proof is manufactured."
+  ]
+}

@@ -1,0 +1,1742 @@
+{
+  "schema_version": 1,
+  "execution": "live_requested",
+  "scope": "frozen_answer_only_cleaning",
+  "live_calls": 12,
+  "cost_status": "see_per_call_host_estimates",
+  "actual_billed_usd": null,
+  "limitations": [
+    "Frozen answer-generation fixtures, not a full agent loop or live-job benchmark.",
+    "Observable field checks do not establish semantic equivalence or general competence in a domain.",
+    "Deliberately oversized JSON indentation is synthetic. Its compression ratio is not representative of real workloads.",
+    "Only the input representation changes; main model, requested reasoning, temperature and output limit must match.",
+    "No earlier reasoning is supplied, replayed or summarized. Current public ctx.llm does not expose effective wire reasoning.",
+    "usage.cost_usd is a Hermes estimate, never proof of actual billing. Absent usage and default zero tokens remain unknown.",
+    "Cache state, serving load and sampling can vary. Orders are counterbalanced, not a controlled cache experiment.",
+    "The live budget is a conservative reservation guard, not a provider billing limit; host retries/fallbacks may add cost.",
+    "No result here proves every provider or task works, or establishes marketplace admission."
+  ],
+  "fixtures": [
+    {
+      "fixture_id": "research-conflicting-sources-v1",
+      "domain": "research",
+      "complete_input_sha256": "1ff2e03d6265669cd32e528da8a03c57f7959f98578b4653cd0e3c30421f9273",
+      "inputs": {
+        "baseline": {
+          "sha256": "21e77a03029e4eedf42b72d746899d423167d517193b7ab92abf6d7454080a63",
+          "observation_chars": 2346,
+          "message_chars": 3144
+        },
+        "candidate": {
+          "sha256": "fc0d9f6f23e17e579f3368ed6d821ca714926ed8b97705b76539a2fd263798b4",
+          "observation_chars": 539,
+          "message_chars": 1333
+        }
+      },
+      "candidate_evidence_literals_preserved": true,
+      "observation_chars_removed": 1807,
+      "reference_self_check": {
+        "ok": true,
+        "checks": [
+          {
+            "name": "json_object",
+            "ok": true
+          },
+          {
+            "name": "field:capacity",
+            "ok": true
+          },
+          {
+            "name": "field:previous_capacity",
+            "ok": true
+          },
+          {
+            "name": "field:effective_date",
+            "ok": true
+          },
+          {
+            "name": "field:source_urls",
+            "ok": true
+          },
+          {
+            "name": "field:currentness",
+            "ok": true
+          },
+          {
+            "name": "field:opening_hour",
+            "ok": true
+          }
+        ],
+        "semantic_equivalence": "not_established"
+      },
+      "limitations": "Checks a correction, missing evidence and citations; does not assess source credibility or current research.",
+      "calls": [
+        {
+          "arm": "baseline",
+          "status": "ok",
+          "settings_snapshots": [
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            },
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            }
+          ],
+          "input_sha256": "21e77a03029e4eedf42b72d746899d423167d517193b7ab92abf6d7454080a63",
+          "usage": {
+            "status": "reported",
+            "tokens": {
+              "input_tokens": 355,
+              "output_tokens": 260,
+              "total_tokens": 615,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "ambiguous_default_zero_tokens": false,
+            "host_estimate_usd": null,
+            "actual_billed_usd": null,
+            "cost_status": "unknown",
+            "cost_basis": "unknown"
+          },
+          "answered_by": {
+            "provider": "nous",
+            "model": "deepseek/deepseek-v4.1-flash"
+          },
+          "answer": "{\"capacity\":96,\"previous_capacity\":120,\"effective_date\":\"2026-11-12\",\"source_urls\":[\"https://example.test/notices/original?edition=A\",\"https://example.test/notices/correction?edition=B\"],\"currentness\":\"frozen\",\"opening_hour\":null}",
+          "answer_redacted": false,
+          "answer_sha256": "c5358c983085963b930e6d121d5fe4ecb4d613441416fc315d87b6f9c19018d2",
+          "quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:capacity",
+                "ok": true
+              },
+              {
+                "name": "field:previous_capacity",
+                "ok": true
+              },
+              {
+                "name": "field:effective_date",
+                "ok": true
+              },
+              {
+                "name": "field:source_urls",
+                "ok": true
+              },
+              {
+                "name": "field:currentness",
+                "ok": true
+              },
+              {
+                "name": "field:opening_hour",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "truncated_or_empty": false,
+          "duration_ms": 5532.311
+        },
+        {
+          "arm": "candidate",
+          "status": "ok",
+          "settings_snapshots": [
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            },
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            }
+          ],
+          "input_sha256": "fc0d9f6f23e17e579f3368ed6d821ca714926ed8b97705b76539a2fd263798b4",
+          "usage": {
+            "status": "reported",
+            "tokens": {
+              "input_tokens": 331,
+              "output_tokens": 230,
+              "total_tokens": 561,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "ambiguous_default_zero_tokens": false,
+            "host_estimate_usd": null,
+            "actual_billed_usd": null,
+            "cost_status": "unknown",
+            "cost_basis": "unknown"
+          },
+          "answered_by": {
+            "provider": "nous",
+            "model": "deepseek/deepseek-v4.1-flash"
+          },
+          "answer": "{\"capacity\":96,\"previous_capacity\":120,\"effective_date\":\"2026-11-12\",\"source_urls\":[\"https://example.test/notices/original?edition=A\",\"https://example.test/notices/correction?edition=B\"],\"currentness\":\"frozen\",\"opening_hour\":null}",
+          "answer_redacted": false,
+          "answer_sha256": "c5358c983085963b930e6d121d5fe4ecb4d613441416fc315d87b6f9c19018d2",
+          "quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:capacity",
+                "ok": true
+              },
+              {
+                "name": "field:previous_capacity",
+                "ok": true
+              },
+              {
+                "name": "field:effective_date",
+                "ok": true
+              },
+              {
+                "name": "field:source_urls",
+                "ok": true
+              },
+              {
+                "name": "field:currentness",
+                "ok": true
+              },
+              {
+                "name": "field:opening_hour",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "truncated_or_empty": false,
+          "duration_ms": 2974.483
+        }
+      ],
+      "status": "completed",
+      "confounders": [],
+      "expected_settings": {
+        "provider": "nous",
+        "model": "deepseek/deepseek-v4.1-flash",
+        "reasoning": {
+          "effort": "max"
+        },
+        "source": "public_host_configuration"
+      },
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "generation": {
+        "temperature": 0.0,
+        "max_tokens": 4096,
+        "timeout_seconds": 90.0,
+        "task": "crystallize_validation",
+        "prior_reasoning_supplied": false,
+        "tools_supplied": false,
+        "output_limit_verification": "request_only; the host may omit max_tokens on some routes"
+      },
+      "unknown_cost_continuation_authorized": true,
+      "budget_committed_usd": 0.2,
+      "comparison": {
+        "same_declared_main_settings": true,
+        "configuration_snapshots_verified": true,
+        "effective_reasoning_verification": "not_exposed_by_current_public_facade",
+        "both_pass_observable_checks": true,
+        "confounders": [
+          "Usage or cost is unknown/invalid."
+        ],
+        "cost_comparison_eligible": false,
+        "actual_billed_reduction_usd": null,
+        "host_estimate_reduction_usd": null,
+        "host_estimate_reduction_pct": null,
+        "semantic_equivalence": "not_established",
+        "verified_live_job_savings": false
+      },
+      "cost_summary": {
+        "attempted_calls": 2,
+        "error_calls": 0,
+        "in_flight_or_interrupted_calls": 0,
+        "known_zero_estimate_calls": 0,
+        "unknown_cost_calls": 2,
+        "known_host_estimate_usd": 0,
+        "complete_host_estimate_usd": null,
+        "actual_billed_usd": null
+      },
+      "worker_returncode": 0
+    },
+    {
+      "fixture_id": "writing-brief-v1",
+      "domain": "writing",
+      "complete_input_sha256": "2200b48ea7c48911eb1fc52cefde7bf65e6ad6e10edec7b158bc85d44ad94bfe",
+      "inputs": {
+        "baseline": {
+          "sha256": "4a1b3d1249a1c0de126d3cb8a30b47042d4b94ca3f1ef8a8470c3b22ca6ab011",
+          "observation_chars": 2292,
+          "message_chars": 3196
+        },
+        "candidate": {
+          "sha256": "c820ea593c95588bb8a1d1ca1b3998b79fce23bf8854bbfa83dfd0646256e5a1",
+          "observation_chars": 485,
+          "message_chars": 1385
+        }
+      },
+      "candidate_evidence_literals_preserved": true,
+      "observation_chars_removed": 1807,
+      "reference_self_check": {
+        "ok": true,
+        "checks": [
+          {
+            "name": "json_object",
+            "ok": true
+          },
+          {
+            "name": "headline_length",
+            "ok": true
+          },
+          {
+            "name": "body_length",
+            "ok": true
+          },
+          {
+            "name": "brief:12 November 2026",
+            "ok": true
+          },
+          {
+            "name": "brief:18:30",
+            "ok": true
+          },
+          {
+            "name": "brief:Riverside Library",
+            "ok": true
+          },
+          {
+            "name": "brief:24 places",
+            "ok": true
+          },
+          {
+            "name": "brief:free",
+            "ok": true
+          },
+          {
+            "name": "brief:step-free access",
+            "ok": true
+          },
+          {
+            "name": "brief:bring a notebook",
+            "ok": true
+          },
+          {
+            "name": "booking_required",
+            "ok": true
+          },
+          {
+            "name": "no_invented_url",
+            "ok": true
+          },
+          {
+            "name": "no_certification_mention",
+            "ok": true
+          }
+        ],
+        "semantic_equivalence": "not_established"
+      },
+      "limitations": "Checks brief compliance and bounded length; style, originality and editorial quality still need human judgment.",
+      "calls": [
+        {
+          "arm": "candidate",
+          "status": "ok",
+          "settings_snapshots": [
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            },
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            }
+          ],
+          "input_sha256": "c820ea593c95588bb8a1d1ca1b3998b79fce23bf8854bbfa83dfd0646256e5a1",
+          "usage": {
+            "status": "reported",
+            "tokens": {
+              "input_tokens": 332,
+              "output_tokens": 914,
+              "total_tokens": 1246,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "ambiguous_default_zero_tokens": false,
+            "host_estimate_usd": null,
+            "actual_billed_usd": null,
+            "cost_status": "unknown",
+            "cost_basis": "unknown"
+          },
+          "answered_by": {
+            "provider": "nous",
+            "model": "deepseek/deepseek-v4.1-flash"
+          },
+          "answer": "{\"headline\":\"Join Our Welcoming Community Story Workshop\",\"body\":\"Come to a welcoming community story workshop for adults trying creative writing for the first time. It takes place on 12 November 2026 at 18:30 at Riverside Library. There are 24 places, and the workshop is free. The venue has step-free access. Please bring a notebook. Booking is required. Come along, meet others, and enjoy a friendly introduction to creative writing.\"}",
+          "answer_redacted": false,
+          "answer_sha256": "503abc4ff27bee9ae92784c6c711ad4f73266245d5dfb0807589d85eed60461e",
+          "quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "headline_length",
+                "ok": true
+              },
+              {
+                "name": "body_length",
+                "ok": true
+              },
+              {
+                "name": "brief:12 November 2026",
+                "ok": true
+              },
+              {
+                "name": "brief:18:30",
+                "ok": true
+              },
+              {
+                "name": "brief:Riverside Library",
+                "ok": true
+              },
+              {
+                "name": "brief:24 places",
+                "ok": true
+              },
+              {
+                "name": "brief:free",
+                "ok": true
+              },
+              {
+                "name": "brief:step-free access",
+                "ok": true
+              },
+              {
+                "name": "brief:bring a notebook",
+                "ok": true
+              },
+              {
+                "name": "booking_required",
+                "ok": true
+              },
+              {
+                "name": "no_invented_url",
+                "ok": true
+              },
+              {
+                "name": "no_certification_mention",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "truncated_or_empty": false,
+          "duration_ms": 12419.822
+        },
+        {
+          "arm": "baseline",
+          "status": "ok",
+          "settings_snapshots": [
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            },
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            }
+          ],
+          "input_sha256": "4a1b3d1249a1c0de126d3cb8a30b47042d4b94ca3f1ef8a8470c3b22ca6ab011",
+          "usage": {
+            "status": "reported",
+            "tokens": {
+              "input_tokens": 356,
+              "output_tokens": 1057,
+              "total_tokens": 1413,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "ambiguous_default_zero_tokens": false,
+            "host_estimate_usd": null,
+            "actual_billed_usd": null,
+            "cost_status": "unknown",
+            "cost_basis": "unknown"
+          },
+          "answered_by": {
+            "provider": "nous",
+            "model": "deepseek/deepseek-v4.1-flash"
+          },
+          "answer": "{\"headline\":\"Join Our Welcoming Community Story Workshop\",\"body\":\"Come to a friendly community story workshop at Riverside Library on 12 November 2026 at 18:30. It is free, with 24 places, and is designed for adults trying creative writing for the first time. The library has step-free access. Please bring a notebook. Booking is required. No experience is needed, and everyone is welcome. We look forward to welcoming you.\"}",
+          "answer_redacted": false,
+          "answer_sha256": "97b2326f8a1ab975a05c25b84cf448ff0bdb13901c2d7eabe6d56a16a1803893",
+          "quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "headline_length",
+                "ok": true
+              },
+              {
+                "name": "body_length",
+                "ok": true
+              },
+              {
+                "name": "brief:12 November 2026",
+                "ok": true
+              },
+              {
+                "name": "brief:18:30",
+                "ok": true
+              },
+              {
+                "name": "brief:Riverside Library",
+                "ok": true
+              },
+              {
+                "name": "brief:24 places",
+                "ok": true
+              },
+              {
+                "name": "brief:free",
+                "ok": true
+              },
+              {
+                "name": "brief:step-free access",
+                "ok": true
+              },
+              {
+                "name": "brief:bring a notebook",
+                "ok": true
+              },
+              {
+                "name": "booking_required",
+                "ok": true
+              },
+              {
+                "name": "no_invented_url",
+                "ok": true
+              },
+              {
+                "name": "no_certification_mention",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "truncated_or_empty": false,
+          "duration_ms": 10687.259
+        }
+      ],
+      "status": "completed",
+      "confounders": [],
+      "expected_settings": {
+        "provider": "nous",
+        "model": "deepseek/deepseek-v4.1-flash",
+        "reasoning": {
+          "effort": "max"
+        },
+        "source": "public_host_configuration"
+      },
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "generation": {
+        "temperature": 0.0,
+        "max_tokens": 4096,
+        "timeout_seconds": 90.0,
+        "task": "crystallize_validation",
+        "prior_reasoning_supplied": false,
+        "tools_supplied": false,
+        "output_limit_verification": "request_only; the host may omit max_tokens on some routes"
+      },
+      "unknown_cost_continuation_authorized": true,
+      "budget_committed_usd": 0.2,
+      "comparison": {
+        "same_declared_main_settings": true,
+        "configuration_snapshots_verified": true,
+        "effective_reasoning_verification": "not_exposed_by_current_public_facade",
+        "both_pass_observable_checks": true,
+        "confounders": [
+          "Usage or cost is unknown/invalid."
+        ],
+        "cost_comparison_eligible": false,
+        "actual_billed_reduction_usd": null,
+        "host_estimate_reduction_usd": null,
+        "host_estimate_reduction_pct": null,
+        "semantic_equivalence": "not_established",
+        "verified_live_job_savings": false
+      },
+      "cost_summary": {
+        "attempted_calls": 2,
+        "error_calls": 0,
+        "in_flight_or_interrupted_calls": 0,
+        "known_zero_estimate_calls": 0,
+        "unknown_cost_calls": 2,
+        "known_host_estimate_usd": 0,
+        "complete_host_estimate_usd": null,
+        "actual_billed_usd": null
+      },
+      "worker_returncode": 0
+    },
+    {
+      "fixture_id": "data-missing-values-v1",
+      "domain": "data",
+      "complete_input_sha256": "ab015476501b7a5bc1d975a285627e5d1d2a3d5ab8dea4036966afc413aab866",
+      "inputs": {
+        "baseline": {
+          "sha256": "da75b3e812810d5678855114ae2c28f5d3c81f05a2bbb4e35d67eaf0440dc4b1",
+          "observation_chars": 1956,
+          "message_chars": 2795
+        },
+        "candidate": {
+          "sha256": "247c22b231de9d625b7ab68374ebb9fbe0e73b00672de8011fa4e73d4465f82c",
+          "observation_chars": 149,
+          "message_chars": 984
+        }
+      },
+      "candidate_evidence_literals_preserved": true,
+      "observation_chars_removed": 1807,
+      "reference_self_check": {
+        "ok": true,
+        "checks": [
+          {
+            "name": "json_object",
+            "ok": true
+          },
+          {
+            "name": "field:row_count",
+            "ok": true
+          },
+          {
+            "name": "field:valid_row_count",
+            "ok": true
+          },
+          {
+            "name": "field:invalid_ids",
+            "ok": true
+          },
+          {
+            "name": "field:net_units_valid",
+            "ok": true
+          },
+          {
+            "name": "field:revenue_total",
+            "ok": true
+          }
+        ],
+        "semantic_equivalence": "not_established"
+      },
+      "limitations": "Checks a small known table with a return and a missing value; does not validate arbitrary datasets or statistical pipelines.",
+      "calls": [
+        {
+          "arm": "baseline",
+          "status": "ok",
+          "settings_snapshots": [
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            },
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            }
+          ],
+          "input_sha256": "da75b3e812810d5678855114ae2c28f5d3c81f05a2bbb4e35d67eaf0440dc4b1",
+          "usage": {
+            "status": "reported",
+            "tokens": {
+              "input_tokens": 276,
+              "output_tokens": 366,
+              "total_tokens": 642,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "ambiguous_default_zero_tokens": false,
+            "host_estimate_usd": null,
+            "actual_billed_usd": null,
+            "cost_status": "unknown",
+            "cost_basis": "unknown"
+          },
+          "answered_by": {
+            "provider": "nous",
+            "model": "deepseek/deepseek-v4.1-flash"
+          },
+          "answer": "{\"row_count\":4,\"valid_row_count\":3,\"invalid_ids\":[\"D\"],\"net_units_valid\":4,\"revenue_total\":35.5}",
+          "answer_redacted": false,
+          "answer_sha256": "787afe248fab577f1d2a9300314f4fcda544ca711c8318d9968724b9edc49836",
+          "quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:row_count",
+                "ok": true
+              },
+              {
+                "name": "field:valid_row_count",
+                "ok": true
+              },
+              {
+                "name": "field:invalid_ids",
+                "ok": true
+              },
+              {
+                "name": "field:net_units_valid",
+                "ok": true
+              },
+              {
+                "name": "field:revenue_total",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "truncated_or_empty": false,
+          "duration_ms": 6749.67
+        },
+        {
+          "arm": "candidate",
+          "status": "ok",
+          "settings_snapshots": [
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            },
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            }
+          ],
+          "input_sha256": "247c22b231de9d625b7ab68374ebb9fbe0e73b00672de8011fa4e73d4465f82c",
+          "usage": {
+            "status": "reported",
+            "tokens": {
+              "input_tokens": 251,
+              "output_tokens": 404,
+              "total_tokens": 655,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "ambiguous_default_zero_tokens": false,
+            "host_estimate_usd": null,
+            "actual_billed_usd": null,
+            "cost_status": "unknown",
+            "cost_basis": "unknown"
+          },
+          "answered_by": {
+            "provider": "nous",
+            "model": "deepseek/deepseek-v4.1-flash"
+          },
+          "answer": "{\"row_count\":4,\"valid_row_count\":3,\"invalid_ids\":[\"D\"],\"net_units_valid\":4,\"revenue_total\":35.5}",
+          "answer_redacted": false,
+          "answer_sha256": "787afe248fab577f1d2a9300314f4fcda544ca711c8318d9968724b9edc49836",
+          "quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:row_count",
+                "ok": true
+              },
+              {
+                "name": "field:valid_row_count",
+                "ok": true
+              },
+              {
+                "name": "field:invalid_ids",
+                "ok": true
+              },
+              {
+                "name": "field:net_units_valid",
+                "ok": true
+              },
+              {
+                "name": "field:revenue_total",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "truncated_or_empty": false,
+          "duration_ms": 6344.273
+        }
+      ],
+      "status": "completed",
+      "confounders": [],
+      "expected_settings": {
+        "provider": "nous",
+        "model": "deepseek/deepseek-v4.1-flash",
+        "reasoning": {
+          "effort": "max"
+        },
+        "source": "public_host_configuration"
+      },
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "generation": {
+        "temperature": 0.0,
+        "max_tokens": 4096,
+        "timeout_seconds": 90.0,
+        "task": "crystallize_validation",
+        "prior_reasoning_supplied": false,
+        "tools_supplied": false,
+        "output_limit_verification": "request_only; the host may omit max_tokens on some routes"
+      },
+      "unknown_cost_continuation_authorized": true,
+      "budget_committed_usd": 0.2,
+      "comparison": {
+        "same_declared_main_settings": true,
+        "configuration_snapshots_verified": true,
+        "effective_reasoning_verification": "not_exposed_by_current_public_facade",
+        "both_pass_observable_checks": true,
+        "confounders": [
+          "Usage or cost is unknown/invalid."
+        ],
+        "cost_comparison_eligible": false,
+        "actual_billed_reduction_usd": null,
+        "host_estimate_reduction_usd": null,
+        "host_estimate_reduction_pct": null,
+        "semantic_equivalence": "not_established",
+        "verified_live_job_savings": false
+      },
+      "cost_summary": {
+        "attempted_calls": 2,
+        "error_calls": 0,
+        "in_flight_or_interrupted_calls": 0,
+        "known_zero_estimate_calls": 0,
+        "unknown_cost_calls": 2,
+        "known_host_estimate_usd": 0,
+        "complete_host_estimate_usd": null,
+        "actual_billed_usd": null
+      },
+      "worker_returncode": 0
+    },
+    {
+      "fixture_id": "analysis-observational-rates-v1",
+      "domain": "analysis",
+      "complete_input_sha256": "715fba72f3c91017c4fd79f3dbedd73edfe79dc994e627243997f8e5947a7676",
+      "inputs": {
+        "baseline": {
+          "sha256": "acf1c130dbadaae22c65c33705e80d7cbefcf7d7f8deacb975cc219a4feb15c2",
+          "observation_chars": 2129,
+          "message_chars": 2917
+        },
+        "candidate": {
+          "sha256": "c30dec90e2ca15551b5d232f56fb57812d13e4fe4c907db8c6593da35c9b0bba",
+          "observation_chars": 322,
+          "message_chars": 1106
+        }
+      },
+      "candidate_evidence_literals_preserved": true,
+      "observation_chars_removed": 1807,
+      "reference_self_check": {
+        "ok": true,
+        "checks": [
+          {
+            "name": "json_object",
+            "ok": true
+          },
+          {
+            "name": "field:a_rate",
+            "ok": true
+          },
+          {
+            "name": "field:b_rate",
+            "ok": true
+          },
+          {
+            "name": "field:difference_pp",
+            "ok": true
+          },
+          {
+            "name": "field:sample_total",
+            "ok": true
+          },
+          {
+            "name": "field:causal_claim_supported",
+            "ok": true
+          },
+          {
+            "name": "field:limitations",
+            "ok": true
+          }
+        ],
+        "semantic_equivalence": "not_established"
+      },
+      "limitations": "Checks arithmetic and an explicit causal limitation; does not establish sound open-ended analysis or calibrated uncertainty.",
+      "calls": [
+        {
+          "arm": "candidate",
+          "status": "ok",
+          "settings_snapshots": [
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            },
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            }
+          ],
+          "input_sha256": "c30dec90e2ca15551b5d232f56fb57812d13e4fe4c907db8c6593da35c9b0bba",
+          "usage": {
+            "status": "reported",
+            "tokens": {
+              "input_tokens": 257,
+              "output_tokens": 323,
+              "total_tokens": 580,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "ambiguous_default_zero_tokens": false,
+            "host_estimate_usd": null,
+            "actual_billed_usd": null,
+            "cost_status": "unknown",
+            "cost_basis": "unknown"
+          },
+          "answered_by": {
+            "provider": "nous",
+            "model": "deepseek/deepseek-v4.1-flash"
+          },
+          "answer": "{\"a_rate\":\"4/5\",\"b_rate\":\"3/5\",\"difference_pp\":20,\"sample_total\":50,\"causal_claim_supported\":false,\"limitations\":\"Observational and self-selected groups with a small sample; no uncertainty interval or other variables were supplied, so the difference does not support a causal claim that A causes better outcomes.\"}",
+          "answer_redacted": false,
+          "answer_sha256": "02ea5f9ad97a9c5fc59524e49bb0c2e04af306e8ea989e46813f96fa4476909a",
+          "quality": {
+            "ok": false,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:a_rate",
+                "ok": false
+              },
+              {
+                "name": "field:b_rate",
+                "ok": false
+              },
+              {
+                "name": "field:difference_pp",
+                "ok": true
+              },
+              {
+                "name": "field:sample_total",
+                "ok": true
+              },
+              {
+                "name": "field:causal_claim_supported",
+                "ok": true
+              },
+              {
+                "name": "field:limitations",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "truncated_or_empty": false,
+          "duration_ms": 7030.69
+        },
+        {
+          "arm": "baseline",
+          "status": "ok",
+          "settings_snapshots": [
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            },
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            }
+          ],
+          "input_sha256": "acf1c130dbadaae22c65c33705e80d7cbefcf7d7f8deacb975cc219a4feb15c2",
+          "usage": {
+            "status": "reported",
+            "tokens": {
+              "input_tokens": 281,
+              "output_tokens": 247,
+              "total_tokens": 528,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "ambiguous_default_zero_tokens": false,
+            "host_estimate_usd": null,
+            "actual_billed_usd": null,
+            "cost_status": "unknown",
+            "cost_basis": "unknown"
+          },
+          "answered_by": {
+            "provider": "nous",
+            "model": "deepseek/deepseek-v4.1-flash"
+          },
+          "answer": "{\"a_rate\":\"4/5\",\"b_rate\":\"3/5\",\"difference_pp\":20,\"sample_total\":50,\"causal_claim_supported\":false,\"limitations\":\"This is an observational, non-randomized comparison with a small sample; participants selected their own group, and no uncertainty interval or other variables were supplied, so no causal conclusion can be drawn.\"}",
+          "answer_redacted": false,
+          "answer_sha256": "d33cd11960076f5357043d0090cc833f71dd55c782f94580c87929332cb8bed9",
+          "quality": {
+            "ok": false,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:a_rate",
+                "ok": false
+              },
+              {
+                "name": "field:b_rate",
+                "ok": false
+              },
+              {
+                "name": "field:difference_pp",
+                "ok": true
+              },
+              {
+                "name": "field:sample_total",
+                "ok": true
+              },
+              {
+                "name": "field:causal_claim_supported",
+                "ok": true
+              },
+              {
+                "name": "field:limitations",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "truncated_or_empty": false,
+          "duration_ms": 4188.775
+        }
+      ],
+      "status": "completed",
+      "confounders": [],
+      "expected_settings": {
+        "provider": "nous",
+        "model": "deepseek/deepseek-v4.1-flash",
+        "reasoning": {
+          "effort": "max"
+        },
+        "source": "public_host_configuration"
+      },
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "generation": {
+        "temperature": 0.0,
+        "max_tokens": 4096,
+        "timeout_seconds": 90.0,
+        "task": "crystallize_validation",
+        "prior_reasoning_supplied": false,
+        "tools_supplied": false,
+        "output_limit_verification": "request_only; the host may omit max_tokens on some routes"
+      },
+      "unknown_cost_continuation_authorized": true,
+      "budget_committed_usd": 0.2,
+      "comparison": {
+        "same_declared_main_settings": true,
+        "configuration_snapshots_verified": true,
+        "effective_reasoning_verification": "not_exposed_by_current_public_facade",
+        "both_pass_observable_checks": false,
+        "confounders": [
+          "Usage or cost is unknown/invalid."
+        ],
+        "cost_comparison_eligible": false,
+        "actual_billed_reduction_usd": null,
+        "host_estimate_reduction_usd": null,
+        "host_estimate_reduction_pct": null,
+        "semantic_equivalence": "not_established",
+        "verified_live_job_savings": false
+      },
+      "cost_summary": {
+        "attempted_calls": 2,
+        "error_calls": 0,
+        "in_flight_or_interrupted_calls": 0,
+        "known_zero_estimate_calls": 0,
+        "unknown_cost_calls": 2,
+        "known_host_estimate_usd": 0,
+        "complete_host_estimate_usd": null,
+        "actual_billed_usd": null
+      },
+      "worker_returncode": 0
+    },
+    {
+      "fixture_id": "coding-pure-clamp-v1",
+      "domain": "coding",
+      "complete_input_sha256": "aa566f5e8b1ba36a3b7236b58160d3799e3d69f434713116e2cf36c1d4d8dc15",
+      "inputs": {
+        "baseline": {
+          "sha256": "ccac255270c60899f2746137af84775be7e5b3ff3ba0938b5c18660854fa6fdb",
+          "observation_chars": 2269,
+          "message_chars": 3216
+        },
+        "candidate": {
+          "sha256": "77bb06d8af17a4d0a77d4f98625ac6931c923378ef35ba741a0cf41e0ed2911a",
+          "observation_chars": 462,
+          "message_chars": 1405
+        }
+      },
+      "candidate_evidence_literals_preserved": true,
+      "observation_chars_removed": 1807,
+      "reference_self_check": {
+        "ok": true,
+        "checks": [
+          {
+            "name": "json_object",
+            "ok": true
+          },
+          {
+            "name": "restricted_ast_no_execution",
+            "ok": true
+          },
+          {
+            "name": "case_(-1, 0, 10)",
+            "ok": true
+          },
+          {
+            "name": "case_(5, 0, 10)",
+            "ok": true
+          },
+          {
+            "name": "case_(20, 0, 10)",
+            "ok": true
+          },
+          {
+            "name": "case_(0, 0, 10)",
+            "ok": true
+          },
+          {
+            "name": "case_(3, 5, 2)",
+            "ok": true
+          },
+          {
+            "name": "case_(2.5, 0.0, 3.0)",
+            "ok": true
+          }
+        ],
+        "semantic_equivalence": "not_established"
+      },
+      "limitations": "Interprets one deliberately restricted pure function against six cases; no generated code is executed and no general coding claim follows.",
+      "calls": [
+        {
+          "arm": "baseline",
+          "status": "ok",
+          "settings_snapshots": [
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            },
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            }
+          ],
+          "input_sha256": "ccac255270c60899f2746137af84775be7e5b3ff3ba0938b5c18660854fa6fdb",
+          "usage": {
+            "status": "reported",
+            "tokens": {
+              "input_tokens": 361,
+              "output_tokens": 498,
+              "total_tokens": 859,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "ambiguous_default_zero_tokens": false,
+            "host_estimate_usd": null,
+            "actual_billed_usd": null,
+            "cost_status": "unknown",
+            "cost_basis": "unknown"
+          },
+          "answered_by": {
+            "provider": "nous",
+            "model": "deepseek/deepseek-v4.1-flash"
+          },
+          "answer": "{\"code\":\"def clamp(value, lower, upper):\\n    if lower > upper:\\n        return None\\n    if value < lower:\\n        return lower\\n    if value > upper:\\n        return upper\\n    return value\"}",
+          "answer_redacted": false,
+          "answer_sha256": "3680b8182f0c2066c4200f91e268404084e9bf1ef81c0c76a12d72cabe290a18",
+          "quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "restricted_ast_no_execution",
+                "ok": true
+              },
+              {
+                "name": "case_(-1, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(5, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(20, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(0, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(3, 5, 2)",
+                "ok": true
+              },
+              {
+                "name": "case_(2.5, 0.0, 3.0)",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "truncated_or_empty": false,
+          "duration_ms": 8058.46
+        },
+        {
+          "arm": "candidate",
+          "status": "ok",
+          "settings_snapshots": [
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            },
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            }
+          ],
+          "input_sha256": "77bb06d8af17a4d0a77d4f98625ac6931c923378ef35ba741a0cf41e0ed2911a",
+          "usage": {
+            "status": "reported",
+            "tokens": {
+              "input_tokens": 337,
+              "output_tokens": 305,
+              "total_tokens": 642,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "ambiguous_default_zero_tokens": false,
+            "host_estimate_usd": null,
+            "actual_billed_usd": null,
+            "cost_status": "unknown",
+            "cost_basis": "unknown"
+          },
+          "answered_by": {
+            "provider": "nous",
+            "model": "deepseek/deepseek-v4.1-flash"
+          },
+          "answer": "{\"code\":\"def clamp(value, lower, upper):\\n    if lower > upper:\\n        return None\\n    if value < lower:\\n        return lower\\n    if value > upper:\\n        return upper\\n    return value\"}",
+          "answer_redacted": false,
+          "answer_sha256": "3680b8182f0c2066c4200f91e268404084e9bf1ef81c0c76a12d72cabe290a18",
+          "quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "restricted_ast_no_execution",
+                "ok": true
+              },
+              {
+                "name": "case_(-1, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(5, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(20, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(0, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(3, 5, 2)",
+                "ok": true
+              },
+              {
+                "name": "case_(2.5, 0.0, 3.0)",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "truncated_or_empty": false,
+          "duration_ms": 5382.434
+        }
+      ],
+      "status": "completed",
+      "confounders": [],
+      "expected_settings": {
+        "provider": "nous",
+        "model": "deepseek/deepseek-v4.1-flash",
+        "reasoning": {
+          "effort": "max"
+        },
+        "source": "public_host_configuration"
+      },
+      "order": [
+        "baseline",
+        "candidate"
+      ],
+      "generation": {
+        "temperature": 0.0,
+        "max_tokens": 4096,
+        "timeout_seconds": 90.0,
+        "task": "crystallize_validation",
+        "prior_reasoning_supplied": false,
+        "tools_supplied": false,
+        "output_limit_verification": "request_only; the host may omit max_tokens on some routes"
+      },
+      "unknown_cost_continuation_authorized": true,
+      "budget_committed_usd": 0.2,
+      "comparison": {
+        "same_declared_main_settings": true,
+        "configuration_snapshots_verified": true,
+        "effective_reasoning_verification": "not_exposed_by_current_public_facade",
+        "both_pass_observable_checks": true,
+        "confounders": [
+          "Usage or cost is unknown/invalid."
+        ],
+        "cost_comparison_eligible": false,
+        "actual_billed_reduction_usd": null,
+        "host_estimate_reduction_usd": null,
+        "host_estimate_reduction_pct": null,
+        "semantic_equivalence": "not_established",
+        "verified_live_job_savings": false
+      },
+      "cost_summary": {
+        "attempted_calls": 2,
+        "error_calls": 0,
+        "in_flight_or_interrupted_calls": 0,
+        "known_zero_estimate_calls": 0,
+        "unknown_cost_calls": 2,
+        "known_host_estimate_usd": 0,
+        "complete_host_estimate_usd": null,
+        "actual_billed_usd": null
+      },
+      "worker_returncode": 0
+    },
+    {
+      "fixture_id": "cron-delta-source-error-v1",
+      "domain": "cron",
+      "complete_input_sha256": "c5f00a7753ad147f7fcfd6d63d3ab653c9300a2869e928c03c703961f4b841fc",
+      "inputs": {
+        "baseline": {
+          "sha256": "b93f4d5efcd20b4c68dccafb9663c18e45cd2865eeb113d392c2f0ed80ebad70",
+          "observation_chars": 2183,
+          "message_chars": 3052
+        },
+        "candidate": {
+          "sha256": "83c5c36b338668f47b0aaba4c87d6581959b397924c9e8532a9e77c095b9ac52",
+          "observation_chars": 376,
+          "message_chars": 1241
+        }
+      },
+      "candidate_evidence_literals_preserved": true,
+      "observation_chars_removed": 1807,
+      "reference_self_check": {
+        "ok": true,
+        "checks": [
+          {
+            "name": "json_object",
+            "ok": true
+          },
+          {
+            "name": "field:new_ids",
+            "ok": true
+          },
+          {
+            "name": "field:unchanged_ids",
+            "ok": true
+          },
+          {
+            "name": "field:failed_sources",
+            "ok": true
+          },
+          {
+            "name": "field:can_silence",
+            "ok": true
+          },
+          {
+            "name": "field:agent_required",
+            "ok": true
+          },
+          {
+            "name": "field:action_performed",
+            "ok": true
+          }
+        ],
+        "semantic_equivalence": "not_established"
+      },
+      "limitations": "Checks a frozen delta and error/action disclosure; never runs a cron schedule, delivery, read recipe or external action.",
+      "calls": [
+        {
+          "arm": "candidate",
+          "status": "ok",
+          "settings_snapshots": [
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            },
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            }
+          ],
+          "input_sha256": "83c5c36b338668f47b0aaba4c87d6581959b397924c9e8532a9e77c095b9ac52",
+          "usage": {
+            "status": "reported",
+            "tokens": {
+              "input_tokens": 297,
+              "output_tokens": 899,
+              "total_tokens": 1196,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "ambiguous_default_zero_tokens": false,
+            "host_estimate_usd": null,
+            "actual_billed_usd": null,
+            "cost_status": "unknown",
+            "cost_basis": "unknown"
+          },
+          "answered_by": {
+            "provider": "nous",
+            "model": "deepseek/deepseek-v4.1-flash"
+          },
+          "answer": "{\"new_ids\":[\"b\",\"c\"],\"unchanged_ids\":[\"a\"],\"failed_sources\":[\"feed-2\"],\"can_silence\":false,\"agent_required\":true,\"action_performed\":false}",
+          "answer_redacted": false,
+          "answer_sha256": "3d9945ac5aa16fc2e8d36ba00baf2533aaff736c9d4a40a9fa34291686d37437",
+          "quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:new_ids",
+                "ok": true
+              },
+              {
+                "name": "field:unchanged_ids",
+                "ok": true
+              },
+              {
+                "name": "field:failed_sources",
+                "ok": true
+              },
+              {
+                "name": "field:can_silence",
+                "ok": true
+              },
+              {
+                "name": "field:agent_required",
+                "ok": true
+              },
+              {
+                "name": "field:action_performed",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "truncated_or_empty": false,
+          "duration_ms": 12179.585
+        },
+        {
+          "arm": "baseline",
+          "status": "ok",
+          "settings_snapshots": [
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            },
+            {
+              "provider": "nous",
+              "model": "deepseek/deepseek-v4.1-flash",
+              "reasoning": {
+                "effort": "max"
+              },
+              "source": "public_host_configuration"
+            }
+          ],
+          "input_sha256": "b93f4d5efcd20b4c68dccafb9663c18e45cd2865eeb113d392c2f0ed80ebad70",
+          "usage": {
+            "status": "reported",
+            "tokens": {
+              "input_tokens": 321,
+              "output_tokens": 2341,
+              "total_tokens": 2662,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            "ambiguous_default_zero_tokens": false,
+            "host_estimate_usd": null,
+            "actual_billed_usd": null,
+            "cost_status": "unknown",
+            "cost_basis": "unknown"
+          },
+          "answered_by": {
+            "provider": "nous",
+            "model": "deepseek/deepseek-v4.1-flash"
+          },
+          "answer": "{\n  \"new_ids\": [\"b\", \"c\"],\n  \"unchanged_ids\": [\"a\"],\n  \"failed_sources\": [\"feed-2\"],\n  \"can_silence\": false,\n  \"agent_required\": true,\n  \"action_performed\": \"none\"\n}",
+          "answer_redacted": false,
+          "answer_sha256": "554180229d6399055552713f024ddc0a31823242fc84228e465df4ad49c8ff66",
+          "quality": {
+            "ok": false,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:new_ids",
+                "ok": true
+              },
+              {
+                "name": "field:unchanged_ids",
+                "ok": true
+              },
+              {
+                "name": "field:failed_sources",
+                "ok": true
+              },
+              {
+                "name": "field:can_silence",
+                "ok": true
+              },
+              {
+                "name": "field:agent_required",
+                "ok": true
+              },
+              {
+                "name": "field:action_performed",
+                "ok": false
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "truncated_or_empty": false,
+          "duration_ms": 23694.259
+        }
+      ],
+      "status": "completed",
+      "confounders": [],
+      "expected_settings": {
+        "provider": "nous",
+        "model": "deepseek/deepseek-v4.1-flash",
+        "reasoning": {
+          "effort": "max"
+        },
+        "source": "public_host_configuration"
+      },
+      "order": [
+        "candidate",
+        "baseline"
+      ],
+      "generation": {
+        "temperature": 0.0,
+        "max_tokens": 4096,
+        "timeout_seconds": 90.0,
+        "task": "crystallize_validation",
+        "prior_reasoning_supplied": false,
+        "tools_supplied": false,
+        "output_limit_verification": "request_only; the host may omit max_tokens on some routes"
+      },
+      "unknown_cost_continuation_authorized": true,
+      "budget_committed_usd": 0.2,
+      "comparison": {
+        "same_declared_main_settings": true,
+        "configuration_snapshots_verified": true,
+        "effective_reasoning_verification": "not_exposed_by_current_public_facade",
+        "both_pass_observable_checks": false,
+        "confounders": [
+          "Usage or cost is unknown/invalid."
+        ],
+        "cost_comparison_eligible": false,
+        "actual_billed_reduction_usd": null,
+        "host_estimate_reduction_usd": null,
+        "host_estimate_reduction_pct": null,
+        "semantic_equivalence": "not_established",
+        "verified_live_job_savings": false
+      },
+      "cost_summary": {
+        "attempted_calls": 2,
+        "error_calls": 0,
+        "in_flight_or_interrupted_calls": 0,
+        "known_zero_estimate_calls": 0,
+        "unknown_cost_calls": 2,
+        "known_host_estimate_usd": 0,
+        "complete_host_estimate_usd": null,
+        "actual_billed_usd": null
+      },
+      "worker_returncode": 0
+    }
+  ],
+  "provider_coverage": {
+    "live_tested": [
+      "nous"
+    ],
+    "untested": "All providers not named here; fixture coverage is not universal provider validation."
+  },
+  "allowed_providers": [
+    "nous"
+  ],
+  "settings": {
+    "provider": "nous",
+    "model": "deepseek/deepseek-v4.1-flash",
+    "reasoning": {
+      "effort": "max"
+    },
+    "source": "public_host_configuration"
+  },
+  "budget": {
+    "limit_usd": 2.0,
+    "reserve_per_call_usd": 0.1,
+    "basis": "operator_conservative_per_call_envelope; not a provider billing cap",
+    "already_reserved_usd": 0.2,
+    "unknown_cost_continuation_authorized": true,
+    "committed_usd": 1.4
+  },
+  "cost_summary": {
+    "attempted_calls": 12,
+    "error_calls": 0,
+    "in_flight_or_interrupted_calls": 0,
+    "known_zero_estimate_calls": 0,
+    "unknown_cost_calls": 12,
+    "known_host_estimate_usd": 0,
+    "complete_host_estimate_usd": null,
+    "actual_billed_usd": null
+  }
+}

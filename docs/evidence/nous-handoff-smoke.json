@@ -1,0 +1,452 @@
+{
+  "scope": "real public-facade handoff smoke, not a full agent loop or efficiency benchmark",
+  "provider_allowlist": [
+    "nous"
+  ],
+  "already_reserved_usd": 1.4,
+  "reserved_usd": 1.8,
+  "main_model": "moonshotai/kimi-k3",
+  "helper_model": "tencent/hy3",
+  "requested_reasoning": "max",
+  "actual_wire_reasoning": "unverified by public facade",
+  "actual_billed_usd": null,
+  "cases": [
+    {
+      "domain": "writing",
+      "baseline": {
+        "served_provider": "nous",
+        "served_model": "moonshotai/kimi-k3",
+        "usage": {
+          "input_tokens": 383,
+          "output_tokens": 565,
+          "total_tokens": 948,
+          "cost_usd": null
+        },
+        "duration_ms": 22744.75,
+        "answer": "{\"headline\":\"Community Story Workshop at Riverside Library\",\"body\":\"Join our welcoming community story workshop for adults trying creative writing for the first time. We will meet on 12 November 2026 at 18:30 at Riverside Library. There are 24 places, and the session is free. The venue has step-free access. Please bring a notebook and a readiness to share ideas at your own pace. Booking is required.\"}",
+        "quality": {
+          "ok": true,
+          "checks": [
+            {
+              "name": "json_object",
+              "ok": true
+            },
+            {
+              "name": "headline_length",
+              "ok": true
+            },
+            {
+              "name": "body_length",
+              "ok": true
+            },
+            {
+              "name": "brief:12 November 2026",
+              "ok": true
+            },
+            {
+              "name": "brief:18:30",
+              "ok": true
+            },
+            {
+              "name": "brief:Riverside Library",
+              "ok": true
+            },
+            {
+              "name": "brief:24 places",
+              "ok": true
+            },
+            {
+              "name": "brief:free",
+              "ok": true
+            },
+            {
+              "name": "brief:step-free access",
+              "ok": true
+            },
+            {
+              "name": "brief:bring a notebook",
+              "ok": true
+            },
+            {
+              "name": "booking_required",
+              "ok": true
+            },
+            {
+              "name": "no_invented_url",
+              "ok": true
+            },
+            {
+              "name": "no_certification_mention",
+              "ok": true
+            }
+          ],
+          "checker_revision": "2-analysis-rational-rates",
+          "semantic_equivalence": "not_established"
+        }
+      },
+      "handoff": {
+        "response": {
+          "answered_by": "tencent/hy3",
+          "full_result_id": "11b2f865dfbe177d",
+          "placeholder": "{{crystal:11b2f865dfbe177d}}",
+          "completion": {
+            "cut_off": false,
+            "rejected": false,
+            "finish_reasons": [],
+            "truncation_confidence": "unknown",
+            "requested_output_limit": 4000,
+            "limit_requested_not_guaranteed": true
+          },
+          "estimate": {
+            "worthwhile": true,
+            "min_output_tokens": 158,
+            "observed_calls": 0,
+            "helper_latency_ms": null,
+            "cost_basis": "list_price_estimate",
+            "estimated_helper_cost": 0.001158036,
+            "expected_output_tokens": 2000,
+            "estimated_input_tokens": 773,
+            "extra_main_read_usd": 0.00037917,
+            "prompt_usage_observed": true,
+            "cache_usage_observed": true,
+            "unknown_cost_calls": 0,
+            "estimated_success_share": 1.0,
+            "prefix_cost_unknown": false,
+            "output_size_source": "caller"
+          },
+          "note": "Check the deliverable. Reuse the placeholder in your answer or a supported text tool field instead of retyping.",
+          "output": "{\"headline\":\"Welcome to our community story workshop\",\"body\":\"We warmly invite adults trying creative writing for the first time to our community story workshop. The session will be held on 12 November 2026 at 18:30 at Riverside Library. There are 24 places available and the event is free. The venue has step-free access. Please bring a notebook. Booking is required. We hope you can join us for this welcoming workshop.\"}"
+        },
+        "duration_ms": 31348.278,
+        "quality": {
+          "ok": true,
+          "checks": [
+            {
+              "name": "json_object",
+              "ok": true
+            },
+            {
+              "name": "headline_length",
+              "ok": true
+            },
+            {
+              "name": "body_length",
+              "ok": true
+            },
+            {
+              "name": "brief:12 November 2026",
+              "ok": true
+            },
+            {
+              "name": "brief:18:30",
+              "ok": true
+            },
+            {
+              "name": "brief:Riverside Library",
+              "ok": true
+            },
+            {
+              "name": "brief:24 places",
+              "ok": true
+            },
+            {
+              "name": "brief:free",
+              "ok": true
+            },
+            {
+              "name": "brief:step-free access",
+              "ok": true
+            },
+            {
+              "name": "brief:bring a notebook",
+              "ok": true
+            },
+            {
+              "name": "booking_required",
+              "ok": true
+            },
+            {
+              "name": "no_invented_url",
+              "ok": true
+            },
+            {
+              "name": "no_certification_mention",
+              "ok": true
+            }
+          ],
+          "checker_revision": "2-analysis-rational-rates",
+          "semantic_equivalence": "not_established"
+        },
+        "placeholder_exact": true
+      },
+      "events": [
+        {
+          "id": 3,
+          "session_id": "isolated-writing",
+          "turn_id": "fixture-turn",
+          "kind": "routed_output",
+          "status": "accepted",
+          "chars": 0,
+          "output_chars": 395,
+          "added_input_chars": 0,
+          "results": 0,
+          "helper_call": 0,
+          "cheap_tokens": 0,
+          "cheap_cost": 0.0,
+          "input_tokens": null,
+          "output_tokens": null,
+          "duration_ms": null,
+          "model": null,
+          "provider": null,
+          "cost_source": null,
+          "ts": 1793961359.0814521,
+          "updated_at": 1793961359.0814521
+        },
+        {
+          "id": 2,
+          "session_id": "isolated-writing",
+          "turn_id": "fixture-turn",
+          "kind": "routed",
+          "status": "accepted",
+          "chars": 0,
+          "output_chars": 0,
+          "added_input_chars": 1327,
+          "results": 0,
+          "helper_call": 0,
+          "cheap_tokens": 0,
+          "cheap_cost": 0.0,
+          "input_tokens": null,
+          "output_tokens": null,
+          "duration_ms": null,
+          "model": null,
+          "provider": null,
+          "cost_source": null,
+          "ts": 1793961359.079793,
+          "updated_at": 1793961359.079793
+        },
+        {
+          "id": 1,
+          "session_id": "isolated-writing",
+          "turn_id": "fixture-turn",
+          "kind": "routed",
+          "status": "accepted",
+          "chars": 0,
+          "output_chars": 0,
+          "added_input_chars": 0,
+          "results": 0,
+          "helper_call": 1,
+          "cheap_tokens": 2599,
+          "cheap_cost": 0.001226148,
+          "input_tokens": 369,
+          "output_tokens": 2230,
+          "duration_ms": 30812.975250009913,
+          "model": "tencent/hy3",
+          "provider": "nous",
+          "cost_source": "list_price_estimate",
+          "ts": 1793961328.264151,
+          "updated_at": 1793961359.079597
+        }
+      ],
+      "finished_workers": true
+    },
+    {
+      "domain": "coding",
+      "baseline": {
+        "served_provider": "nous",
+        "served_model": "moonshotai/kimi-k3",
+        "usage": {
+          "input_tokens": 390,
+          "output_tokens": 262,
+          "total_tokens": 652,
+          "cost_usd": null
+        },
+        "duration_ms": 2441.568,
+        "answer": "{\"code\":\"def clamp(value, lower, upper):\\n    if lower > upper:\\n        return None\\n    if value < lower:\\n        return lower\\n    if value > upper:\\n        return upper\\n    return value\"}",
+        "quality": {
+          "ok": true,
+          "checks": [
+            {
+              "name": "json_object",
+              "ok": true
+            },
+            {
+              "name": "restricted_ast_no_execution",
+              "ok": true
+            },
+            {
+              "name": "case_(-1, 0, 10)",
+              "ok": true
+            },
+            {
+              "name": "case_(5, 0, 10)",
+              "ok": true
+            },
+            {
+              "name": "case_(20, 0, 10)",
+              "ok": true
+            },
+            {
+              "name": "case_(0, 0, 10)",
+              "ok": true
+            },
+            {
+              "name": "case_(3, 5, 2)",
+              "ok": true
+            },
+            {
+              "name": "case_(2.5, 0.0, 3.0)",
+              "ok": true
+            }
+          ],
+          "checker_revision": "2-analysis-rational-rates",
+          "semantic_equivalence": "not_established"
+        }
+      },
+      "handoff": {
+        "response": {
+          "answered_by": "tencent/hy3",
+          "full_result_id": "92960cc8016276f0",
+          "placeholder": "{{crystal:92960cc8016276f0}}",
+          "completion": {
+            "cut_off": false,
+            "rejected": false,
+            "finish_reasons": [],
+            "truncation_confidence": "unknown",
+            "requested_output_limit": 4000,
+            "limit_requested_not_guaranteed": true
+          },
+          "estimate": {
+            "worthwhile": true,
+            "min_output_tokens": 159,
+            "observed_calls": 0,
+            "helper_latency_ms": null,
+            "cost_basis": "list_price_estimate",
+            "estimated_helper_cost": 0.001158696,
+            "expected_output_tokens": 2000,
+            "estimated_input_tokens": 778,
+            "extra_main_read_usd": 0.0003861,
+            "prompt_usage_observed": true,
+            "cache_usage_observed": true,
+            "unknown_cost_calls": 0,
+            "estimated_success_share": 1.0,
+            "prefix_cost_unknown": false,
+            "output_size_source": "caller"
+          },
+          "note": "Check the deliverable. Reuse the placeholder in your answer or a supported text tool field instead of retyping.",
+          "output": "{\"code\":\"def clamp(value, lower, upper):\\n if lower > upper: return None\\n if value < lower: return lower\\n if value > upper: return upper\\n return value\"}"
+        },
+        "duration_ms": 11435.328,
+        "quality": {
+          "ok": true,
+          "checks": [
+            {
+              "name": "json_object",
+              "ok": true
+            },
+            {
+              "name": "restricted_ast_no_execution",
+              "ok": true
+            },
+            {
+              "name": "case_(-1, 0, 10)",
+              "ok": true
+            },
+            {
+              "name": "case_(5, 0, 10)",
+              "ok": true
+            },
+            {
+              "name": "case_(20, 0, 10)",
+              "ok": true
+            },
+            {
+              "name": "case_(0, 0, 10)",
+              "ok": true
+            },
+            {
+              "name": "case_(3, 5, 2)",
+              "ok": true
+            },
+            {
+              "name": "case_(2.5, 0.0, 3.0)",
+              "ok": true
+            }
+          ],
+          "checker_revision": "2-analysis-rational-rates",
+          "semantic_equivalence": "not_established"
+        },
+        "placeholder_exact": true
+      },
+      "events": [
+        {
+          "id": 6,
+          "session_id": "isolated-coding",
+          "turn_id": "fixture-turn",
+          "kind": "routed_output",
+          "status": "accepted",
+          "chars": 0,
+          "output_chars": 127,
+          "added_input_chars": 0,
+          "results": 0,
+          "helper_call": 0,
+          "cheap_tokens": 0,
+          "cheap_cost": 0.0,
+          "input_tokens": null,
+          "output_tokens": null,
+          "duration_ms": null,
+          "model": null,
+          "provider": null,
+          "cost_source": null,
+          "ts": 1793961372.9628658,
+          "updated_at": 1793961372.9628658
+        },
+        {
+          "id": 5,
+          "session_id": "isolated-coding",
+          "turn_id": "fixture-turn",
+          "kind": "routed",
+          "status": "accepted",
+          "chars": 0,
+          "output_chars": 0,
+          "added_input_chars": 1058,
+          "results": 0,
+          "helper_call": 0,
+          "cheap_tokens": 0,
+          "cheap_cost": 0.0,
+          "input_tokens": null,
+          "output_tokens": null,
+          "duration_ms": null,
+          "model": null,
+          "provider": null,
+          "cost_source": null,
+          "ts": 1793961372.960154,
+          "updated_at": 1793961372.960154
+        },
+        {
+          "id": 4,
+          "session_id": "isolated-coding",
+          "turn_id": "fixture-turn",
+          "kind": "routed",
+          "status": "accepted",
+          "chars": 0,
+          "output_chars": 0,
+          "added_input_chars": 0,
+          "results": 0,
+          "helper_call": 1,
+          "cheap_tokens": 1321,
+          "cheap_cost": 0.0005501760000000001,
+          "input_tokens": 372,
+          "output_tokens": 949,
+          "duration_ms": 11428.75683301827,
+          "model": "tencent/hy3",
+          "provider": "nous",
+          "cost_source": "list_price_estimate",
+          "ts": 1793961361.527005,
+          "updated_at": 1793961372.959829
+        }
+      ],
+      "finished_workers": true
+    }
+  ],
+  "workers_drained": true
+}

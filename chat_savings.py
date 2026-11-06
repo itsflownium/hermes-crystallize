@@ -37,7 +37,7 @@ MAX_SUMMARY_SHARE = 0.5         # a summary that keeps more than this isn't wort
 MIN_PROMPTS = 1
 MAX_SUMMARY_TOKENS = 2000
 MAX_ROUTED_TOKENS = 4000
-CONDENSE_SECONDS = 20.0         # the longest a chat waits for the cheap model
+CONDENSE_SECONDS = 20.0         # summaries/questions; routed work has an output-scaled deadline
 PAUSE_AFTER_PROBLEM_SECONDS = 600.0
 REPEATABLE_TOOLS = {"terminal", "execute_code", "web_extract", "web_search", "web_crawl", "search_files"}
 MIN_REPEAT_CHARS = 1000
@@ -142,13 +142,18 @@ def set_model(provider: str, model: str) -> None:
 
 
 ROUTING_NOTE = (
-    "[Crystallize Chat] For long routine writing, use crystal_cheap: give it an input and get its output straight "
-    "back from a much cheaper model. Each hand-off costs you an extra call, so use it only when the output would "
-    "be long, about 500 words or more, such as translating a lot of text, long drafts, or reformatting long "
-    "data. Do anything shorter yourself. If it isn't loaded, find it with tool_search. When its output is right, "
-    "write the placeholder it gives you instead of retyping it. Include everything it needs, because it can't "
-    "see this chat or use tools. Keep planning, decisions, debugging, anything that sends or changes something, "
-    "and your own conclusions for yourself."
+    "[Crystallize Chat] Use crystal_cheap for self-contained, checkable work in any subject: extraction, "
+    "classification, calculations, translation, reformatting or drafting. Each handoff costs an extra call, "
+    "so use it only when the deliverable would "
+    "repay its input, output and extra main-model call costs. Call shape: "
+    'crystal_cheap({"input":"Complete instruction and source text","expected_output_tokens":1200}). '
+    "The required input must contain a complete nonempty instruction, including when input_files is supplied. "
+    "For source files, pass input_files:[paths]; save_to:path writes accepted output through the normal guarded file tool. "
+    "For a self-contained text subtask set subtask:true. If it isn't loaded, find it with tool_search. When its output is right, "
+    "reuse its placeholder in your answer or a supported text tool field instead of retyping it. Include all needed context: "
+    "the helper cannot see this chat or use tools. Keep consequential decisions and verification with the main model. "
+    "If the helper fails or reports incomplete output, finish the task yourself; do not repeat a failed paid handoff. "
+    "Reasoning settings and the main model stay as configured."
 )
 MIN_ROUTING_PRICE_RATIO = 5     # retained for integrations; routing now uses a break-even estimate
 
@@ -157,43 +162,21 @@ def _same_model(answered: Optional[str], picked: Optional[str]) -> bool:
     """Providers often report a dated or prefixed id, such as vendor/model-2026-01."""
     if not answered or not picked:
         return True
-    a, p = answered.split("/")[-1].lower(), picked.split("/")[-1].lower()
-    return a == p or a.startswith(p + "-") or p.startswith(a + "-")
+    if not isinstance(answered, str) or not isinstance(picked, str):
+        return False
+    a, p = answered.lower(), picked.lower()
+    if "/" in a and "/" in p and a.rsplit("/", 1)[0] != p.rsplit("/", 1)[0]:
+        return False
+    a, p = a.split("/")[-1], p.split("/")[-1]
+    date = r"(?:\d{4}[-_]\d{2}[-_]\d{2}|\d{8}|latest)"
+    return a == p or bool(re.fullmatch(re.escape(p) + "[-_]" + date, a) or
+                          re.fullmatch(re.escape(a) + "[-_]" + date, p))
 
 
-def ask_cheap(ctx: Any, text: str, session_id: str = "", turn_id: str = "") -> str:
-    """One input to the picked model, its output straight back: no extra prompt or tools."""
-    if not store.chat_enabled(session_id):
-        return _opt_in_error()
-    picked = chosen_model()
-    if not picked["model"]:
-        return json.dumps({"error": "No cheap model is picked. Do this yourself."})
-    if not (text or "").strip():
-        return json.dumps({"error": "Give the cheap model an input."})
-    if len(text) > MAX_INPUT_CHARS:
-        return json.dumps({"error": f"That input exceeds {MAX_INPUT_CHARS} characters. Split it into complete parts; nothing was sent."})
-    if not _is_cheaper(picked, session_id) or not _routing_pays(picked, session_id):
-        return json.dumps({"error": "This helper is unlikely to save money for this chat. Do this yourself."})
-    event: dict[str, Any] = {}
-    answer, problem = _call(ctx, [{"role": "user", "content": text}], "routed task",
-                            max_tokens=MAX_ROUTED_TOKENS, session_id=session_id, turn_id=turn_id,
-                            picked=picked, kind="routed", event=event)
-    if answer is None:
-        return json.dumps({"error": f"The cheap model didn't answer ({problem}). Do this yourself."})
-    if not _answered_by(answer, picked):
-        _outcome(event, "rejected")
-        return json.dumps({"error": "A different model answered. Do this yourself."})
-    output = (answer.text or "").strip()
-    if not output:
-        _outcome(event, "rejected")
-        return json.dumps({"error": "The cheap model returned no text. Do this yourself."})
-    _outcome(event, "accepted")
-    output_id = _keep_full(output, session_id, turn_id)
-    placeholder = f"{{{{crystal:{output_id}}}}}"
-    response = json.dumps({"output": output, "answered_by": picked["model"], "placeholder": placeholder,
-                           "note": "To show this output as it is, write the placeholder instead of retyping it. It's filled in for you."})
-    store.add_chat_event(session_id, turn_id=turn_id, kind="routed", results=0, added_input_chars=len(response))
-    return response
+def ask_cheap(ctx: Any, text: str, session_id: str = "", turn_id: str = "", **options: Any) -> str:
+    """Compatibility entry point; every handoff uses the same guarded path."""
+    from . import handoffs
+    return handoffs.execute(ctx, text, session_id, turn_id, **options)
 
 
 _PLACEHOLDER = re.compile(r"\{\{crystal:([0-9a-f]{16})\}\}")
@@ -209,15 +192,8 @@ def fill_placeholders(response: str, session_id: str = "", turn_id: str = "") ->
     def fill(match: "re.Match[str]") -> str:
         result = _load_full(match.group(1), session_id)
         if result is not None:
-            session_key = _session_key(session_id)
-            if session_key not in _filled and len(_filled) >= MAX_TRACKED_CHATS:
-                return result  # bounded accounting state; never over-credit a repeat
-            seen = _filled.setdefault(session_key, set())
-            key = f"{turn_id}:{match.group(1)}"
-            if key not in seen and len(seen) < MAX_TRACKED_RESULTS:
-                seen.add(key)
-                store.add_chat_event(session_id, turn_id=turn_id, kind="routed_output", results=0,
-                                     output_chars=max(0, len(result) - len(match.group(0))))
+            from . import handoffs
+            handoffs.credit_output(match.group(1), session_id, turn_id, len(result) - len(match.group(0)))
         return result if result is not None else match.group(0)
 
     filled = _PLACEHOLDER.sub(fill, response)
@@ -229,16 +205,16 @@ def routing_context(session_id: str = "", parent_session_id: str = "", **_: Any)
     if parent_session_id or not session_id or not store.chat_enabled(session_id):
         return None
     picked = chosen_model()
-    if not picked["model"] or not _is_cheaper(picked, session_id) or not _routing_pays(picked, session_id):
+    if not picked["model"] or not _is_cheaper(picked, session_id, "routed") or not _routing_pays(picked, session_id):
         return None
     # Keep the injected text stable as observations change. Live thresholds are
     # exposed in summary(), rather than rewriting the main model's cache prefix.
     return {"context": ROUTING_NOTE}
 
 
-def _routing_pays(picked: dict[str, Optional[str]], session_id: Optional[str]) -> bool:
+def _routing_pays(picked: dict[str, Optional[str]], session_id: Optional[str], plan: Optional[dict] = None) -> bool:
     """Estimate the whole hand-off, including reading its answer and measured overhead."""
-    return _routing_plan(picked, session_id)["worthwhile"]
+    return (plan if plan is not None else _routing_plan(picked, session_id))["worthwhile"]
 
 
 def _observations(picked: dict[str, Optional[str]], session_id: Optional[str], kind: str) -> list[dict[str, Any]]:
@@ -247,36 +223,64 @@ def _observations(picked: dict[str, Optional[str]], session_id: Optional[str], k
             and r["provider"] == picked["provider"] and r["status"] != "pending"][:20]
 
 
-def _routing_plan(picked: dict[str, Optional[str]], session_id: Optional[str]) -> dict[str, Any]:
+def _routing_plan(picked: dict[str, Optional[str]], session_id: Optional[str], *,
+                  input_tokens: Optional[int] = None, expected_output_tokens: Optional[int] = None,
+                  saved_output: bool = False) -> dict[str, Any]:
+    from . import handoffs
+
     main = _main_model(session_id)
     theirs = modelinfo.token_prices(picked["model"], picked["provider"])
     ours = modelinfo.token_prices(main.get("model"), main.get("provider"))
     rows = _observations(picked, session_id, "routed")
     timings = [r["duration_ms"] for r in rows if r["duration_ms"] is not None]
     latency = sum(timings) / len(timings) if timings else None
-    repeated_failure = len(rows) >= 3 and sum(r["status"] in {"failed", "timeout", "timeout_finished", "rejected"} for r in rows[:3]) >= 2
-    plan = {"worthwhile": not repeated_failure and (latency is None or latency < CONDENSE_SECONDS * 1000), "min_output_tokens": None,
-            "observed_calls": len(rows), "helper_latency_ms": latency,
-            "cost_basis": "unknown", "estimated_helper_cost": None}
+    failures = {"failed", "timeout", "timeout_finished", "rejected"}
+    recent = [r for r in rows[:3] if time.time() - (r.get("updated_at") or r.get("ts") or 0) < PAUSE_AFTER_PROBLEM_SECONDS]
+    repeated_failure = len(recent) >= 3 and sum(r["status"] in failures for r in recent) >= 2
+    observed_inputs = [r["input_tokens"] for r in rows if r.get("input_tokens")]
+    observed_outputs = [r["output_tokens"] for r in rows if r.get("output_tokens") and r["status"] == "accepted"]
+    inputs = input_tokens if input_tokens is not None else (sum(observed_inputs) / len(observed_inputs) if observed_inputs else 0)
+    outputs = expected_output_tokens if expected_output_tokens is not None else (sum(observed_outputs) / len(observed_outputs) if observed_outputs else MAX_ROUTED_TOKENS)
+    usage = handoffs.main_usage(session_id or "")
+    prefix = usage.get("input_tokens")
+    extra_read = None
+    if ours and prefix is not None and ours.get("input") is not None:
+        cached = min(prefix, usage.get("cache_read_tokens") or 0)
+        written = min(prefix - cached, usage.get("cache_write_tokens") or 0)
+        extra_read = ((prefix - cached - written) * ours["input"]
+                      + cached * ours.get("cache_read", ours["input"])
+                      + written * ours.get("cache_write", ours["input"]))
+    timely = latency is None or latency < handoffs.MAX_SECONDS * 1000
+    plan = {"worthwhile": not repeated_failure and timely, "min_output_tokens": None,
+            "observed_calls": len(rows), "helper_latency_ms": latency, "cost_basis": "unknown",
+            "estimated_helper_cost": None, "expected_output_tokens": outputs, "estimated_input_tokens": inputs,
+            "extra_main_read_usd": extra_read, "prompt_usage_observed": prefix is not None,
+            "cache_usage_observed": bool(usage) and usage.get("cache_read_tokens") is not None and usage.get("cache_write_tokens") is not None,
+            "unknown_cost_calls": sum(r["cheap_cost"] is None for r in rows)}
     if not theirs or not ours or "output" not in theirs or "output" not in ours:
         return plan
-    # The main model still reads the helper's tool response. A small final wrapper
-    # also costs output tokens even when the answer itself uses a placeholder.
-    margin = ours["output"] - ours.get("input", 0.0) - theirs["output"]
-    fixed = 250 * theirs.get("input", 0.0) + 80 * ours["output"]
-    measured = [r for r in rows if r["cheap_cost"] is not None and r["output_tokens"]]
-    if measured:
-        per_output = sum(r["cheap_cost"] for r in measured) / sum(r["output_tokens"] for r in measured)
-        # Failed/rejected attempts are part of the observed route cost.
-        known_failures = sum(r["cheap_cost"] or 0.0 for r in rows if r not in measured)
-        per_output += known_failures / sum(r["output_tokens"] for r in measured)
-        margin = ours["output"] - ours.get("input", 0.0) - per_output
-        fixed = 80 * ours["output"]
+    # Only accepted outputs produce a benefit. Failed/rejected attempts still
+    # contribute their full cost, with unknown charges kept explicitly unknown.
+    accepted = [r for r in rows if r["status"] == "accepted" and r.get("output_tokens")]
+    per_output = None
+    if accepted and not plan["unknown_cost_calls"]:
+        per_output = sum(r["cheap_cost"] for r in rows) / sum(r["output_tokens"] for r in accepted)
+    success_share = (len(accepted) + 1) / (len(rows) + 1) if rows else 1.0
+    helper_cost = ((outputs * per_output) if per_output is not None else
+                   (inputs * theirs.get("input", 0.0) + outputs * theirs["output"]) / success_share)
+    # The normal response echoes the output; save_to returns only a small preview.
+    answer_read = 0.0 if saved_output else ours.get("input", 0.0)
+    marginal_helper = per_output if per_output is not None else theirs["output"] / success_share
+    margin = ours["output"] - answer_read - marginal_helper
+    fixed = (extra_read or 0.0) + (0 if per_output is not None else inputs * theirs.get("input", 0.0) / success_share)
+    # These wrappers are estimates, separate from the observed prefix above.
+    fixed += 48 * ours["output"] + (384 if saved_output else 256) * ours.get("input", 0.0)
     threshold = math.ceil(fixed / margin) + 1 if margin > 0 else None
-    plan.update(min_output_tokens=threshold, cost_basis="observed_and_list_price" if measured else "list_price_estimate",
-                estimated_helper_cost=(700 * per_output if measured else 250 * theirs.get("input", 0.0) + 700 * theirs["output"]))
-    plan["worthwhile"] = bool(plan["worthwhile"] and threshold is not None and threshold <= MAX_ROUTED_TOKENS
-                              and (latency is None or latency < CONDENSE_SECONDS * 1000))
+    plan.update(min_output_tokens=threshold, cost_basis="observed_and_list_price" if per_output is not None else "list_price_estimate",
+                estimated_helper_cost=helper_cost, estimated_success_share=success_share,
+                prefix_cost_unknown=extra_read is None)
+    plan["worthwhile"] = bool(not repeated_failure and threshold is not None and threshold <= min(outputs, MAX_ROUTED_TOKENS)
+                              and timely)
     return plan
 
 
@@ -285,8 +289,9 @@ def _opt_in_error() -> str:
 
 
 def _answered_by(answer: Any, picked: dict[str, Optional[str]]) -> bool:
-    provider = getattr(answer, "provider", None)
-    return _same_model(getattr(answer, "model", None), picked["model"]) and (not provider or not picked["provider"] or provider == picked["provider"])
+    from .handoffs import value
+    provider = value(answer, "provider")
+    return _same_model(value(answer, "model"), picked["model"]) and (not provider or not picked["provider"] or provider == picked["provider"])
 
 
 def connected_models() -> list[dict[str, Any]]:
@@ -437,11 +442,15 @@ def ask_full(ctx: Any, result_id: str, question: str, session_id: str = "", turn
         picked=picked, kind="question", event=event)
     if answer is None:
         return json.dumps({"error": f"The helper didn't answer ({problem}). Read the exact result instead."})
-    if not _answered_by(answer, picked) or not (answer.text or "").strip():
+    from . import handoffs
+    completion = handoffs.completion_status(answer, MAX_SUMMARY_TOKENS)
+    output = handoffs.value(answer, "text")
+    if (not _answered_by(answer, picked) or not isinstance(output, str) or not output.strip()
+            or completion["cut_off"] or completion["rejected"]):
         _outcome(event, "rejected")
         return json.dumps({"error": "The selected helper didn't return an answer. Read the exact result instead."})
     _outcome(event, "accepted")
-    return json.dumps({"answer": (answer.text or "").strip(), "answered_by": "Crystallize Chat's cheap model",
+    return json.dumps({"answer": output.strip(), "answered_by": "Crystallize Chat's cheap model", "completion": completion,
                        "note": "Read the result without a question if you need the exact text."})
 
 
@@ -455,7 +464,7 @@ def _main_model(session_id: Optional[str]) -> dict[str, Optional[str]]:
     return modelinfo.route({})
 
 
-def _is_cheaper(picked: dict[str, Optional[str]], session_id: Optional[str] = None) -> bool:
+def _is_cheaper(picked: dict[str, Optional[str]], session_id: Optional[str] = None, kind: str = "summary") -> bool:
     """Condensing costs a read by the picked model, so it only pays if that model reads for less
     than the main one. With no price to compare it stays on, since you chose that model."""
     main = _main_model(session_id)
@@ -463,6 +472,9 @@ def _is_cheaper(picked: dict[str, Optional[str]], session_id: Optional[str] = No
         return False
     theirs = modelinfo.token_prices(picked["model"], picked["provider"])
     ours = modelinfo.token_prices(main.get("model"), main.get("provider"))
+    if kind == "routed":
+        return not (theirs and ours and theirs.get("input", 0) >= ours.get("input", 0)
+                    and theirs.get("output", 0) >= ours.get("output", 0))
     return not (theirs and ours and theirs["input"] >= ours["input"])
 
 
@@ -541,11 +553,14 @@ def _outcome(event: dict[str, Any], status: str) -> None:
 
 def _call(ctx: Any, messages: list[dict[str, str]], purpose: str, max_tokens: int = MAX_SUMMARY_TOKENS,
           *, session_id: str = "", turn_id: str = "", picked: Optional[dict[str, Optional[str]]] = None,
-          kind: str = "summary", event: Optional[dict[str, Any]] = None) -> tuple[Any, str]:
-    """Call the picked model within a hard time limit, so a slow one can't hold up the chat."""
+          kind: str = "summary", event: Optional[dict[str, Any]] = None,
+          seconds: Optional[float] = None) -> tuple[Any, str]:
+    """Call the configured public task route, preserving all reasoning controls."""
+    from .handoffs import value
     if not store.chat_enabled(session_id):
         return None, "Crystallize Chat is off"
     picked = picked or chosen_model()
+    seconds = CONDENSE_SECONDS if seconds is None else max(1.0, min(float(seconds), 180.0))
     event = event if event is not None else {}
     event["id"] = store.add_chat_event(session_id, turn_id=turn_id, kind=kind, status="pending",
                                         helper_call=True, cheap_cost=None, model=picked["model"],
@@ -562,11 +577,11 @@ def _call(ctx: Any, messages: list[dict[str, str]], purpose: str, max_tokens: in
                     done["error"] = RuntimeError("Crystallize Chat was turned off")
                     event["update"](status="skipped", cheap_cost=0.0, cost_source="no_call")
                 return
-            answer = ctx.llm.complete(messages, task=TASK, timeout=CONDENSE_SECONDS,
+            answer = ctx.llm.complete(messages, task=TASK, timeout=seconds,
                                       max_tokens=max_tokens, purpose=purpose)
-            usage = getattr(answer, "usage", None)
-            actual = {"model": getattr(answer, "model", None) or picked["model"],
-                      "provider": getattr(answer, "provider", None) or picked["provider"]}
+            usage = value(answer, "usage")
+            actual = {"model": value(answer, "model") or picked["model"],
+                      "provider": value(answer, "provider") or picked["provider"]}
             tokens, cost = _usage_cost(usage, actual)
             with state_lock:
                 event["update"](status="timeout_finished" if done.get("timed_out") else "answered",
@@ -574,15 +589,21 @@ def _call(ctx: Any, messages: list[dict[str, str]], purpose: str, max_tokens: in
                                         input_tokens=_usage_value(usage, "input_tokens"),
                                         output_tokens=_usage_value(usage, "output_tokens"),
                                         duration_ms=(time.monotonic() - started) * 1000,
-                                        model=actual["model"], provider=actual["provider"],
                                         cost_source=_cost_source(usage, cost))
+                # Group observations by the requested route, including a host
+                # fallback that was billed on a different, rejected route.
+                event.update(actual_model=actual["model"], actual_provider=actual["provider"])
                 done["answer"] = answer
         except Exception as exc:  # noqa: BLE001 — reported to the caller
             with state_lock:
                 done["error"] = exc
-                usage = getattr(exc, "usage", None)
-                tokens, cost = _usage_cost(usage, picked)
+                usage = value(exc, "usage")
+                actual = {"model": value(exc, "model") or picked["model"],
+                          "provider": value(exc, "provider") or picked["provider"]}
+                tokens, cost = _usage_cost(usage, actual)
                 event["update"](status="failed", cheap_tokens=tokens, cheap_cost=cost,
+                                        input_tokens=_usage_value(usage, "input_tokens"),
+                                        output_tokens=_usage_value(usage, "output_tokens"),
                                         duration_ms=(time.monotonic() - started) * 1000,
                                         cost_source=_cost_source(usage, cost))
 
@@ -606,7 +627,7 @@ def _call(ctx: Any, messages: list[dict[str, str]], purpose: str, max_tokens: in
             _workers.discard(worker)
         event["update"](status="failed", cheap_cost=0.0, cost_source="no_call")
         return None, str(exc)
-    worker.join(CONDENSE_SECONDS)
+    worker.join(seconds)
     with state_lock:
         if worker.is_alive() and "answer" not in done and "error" not in done:
             done["timed_out"] = True
@@ -632,17 +653,20 @@ def _condense(ctx: Any, tool: str, text: str, picked: dict[str, Optional[str]], 
         _pause(key)
         logger.warning("crystallize: condensing paused: %s", problem)
         return None
-    if not _answered_by(answer, picked):
+    from . import handoffs
+    completion = handoffs.completion_status(answer, MAX_SUMMARY_TOKENS)
+    if not _answered_by(answer, picked) or completion["cut_off"] or completion["rejected"]:
         _outcome(event, "rejected")
         _pause(key)
-        logger.warning("crystallize: condensing paused: Hermes used a different model/provider")
+        logger.warning("crystallize: condensing paused: incomplete output or different model/provider")
         return None
-    summary = (answer.text or "").strip()
+    output = handoffs.value(answer, "text")
+    summary = output.strip() if isinstance(output, str) else ""
     if not summary or len(summary) > len(text) * MAX_SUMMARY_SHARE:
         _outcome(event, "rejected")
         return None
     _outcome(event, "accepted")
-    return summary, getattr(answer, "usage", None)
+    return summary, handoffs.value(answer, "usage")
 
 
 _seen: "dict[str, set[str]]" = {}
@@ -737,13 +761,26 @@ def shrink(ctx: Any, session_id: str, tool: str, result: Any, turn_id: str = "")
 
 
 def _usage_value(usage: Any, key: str) -> Optional[int]:
-    value = usage.get(key) if isinstance(usage, dict) else getattr(usage, key, None)
-    return max(0, int(value)) if isinstance(value, (int, float)) and math.isfinite(value) else None
+    from .handoffs import value
+    aliases = {"input_tokens": ("input_tokens", "prompt_tokens"),
+               "output_tokens": ("output_tokens", "completion_tokens"),
+               "cache_read_tokens": ("cache_read_tokens", "cache_read_input_tokens"),
+               "cache_write_tokens": ("cache_write_tokens", "cache_creation_input_tokens")}
+    for name in aliases.get(key, (key,)):
+        number = value(usage, name)
+        if isinstance(number, (int, float)) and not isinstance(number, bool) and math.isfinite(number) and number >= 0:
+            return int(number)
+    if key == "cache_read_tokens":
+        for name in ("input_tokens_details", "prompt_tokens_details"):
+            number = value(value(usage, name), "cached_tokens")
+            if isinstance(number, (int, float)) and not isinstance(number, bool) and math.isfinite(number) and number >= 0:
+                return int(number)
+    return None
 
 
 def _reported_cost(usage: Any) -> Optional[float]:
     value = usage.get("cost_usd") if isinstance(usage, dict) else getattr(usage, "cost_usd", None)
-    return float(value) if isinstance(value, (int, float)) and math.isfinite(value) and value >= 0 else None
+    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0 else None
 
 
 def _cost_source(usage: Any, cost: Optional[float]) -> str:
@@ -761,10 +798,10 @@ def _usage_cost(usage: Any, picked: dict[str, Optional[str]]) -> tuple[int, Opti
     if reported is not None:
         return tokens, reported
     prices = modelinfo.token_prices(picked["model"], picked["provider"])
-    if not prices or inp is None or out is None or not tokens:
+    if not prices or inp is None or out is None or not tokens or "input" not in prices or "output" not in prices:
         return tokens, None
-    read = _usage_value(usage, "cache_read_tokens") or 0
-    write = _usage_value(usage, "cache_write_tokens") or 0
+    read = min(inp, _usage_value(usage, "cache_read_tokens") or 0)
+    write = min(inp - read, _usage_value(usage, "cache_write_tokens") or 0)
     uncached = max(0, inp - read - write)
     return tokens, (uncached * prices["input"] + out * prices["output"]
                     + read * prices.get("cache_read", prices["input"])
@@ -784,7 +821,7 @@ def cleanup_session(session_id: str) -> None:
 # ---------------------------------------------------------------- what to show
 
 def summary(session_id: Optional[str]) -> dict[str, Any]:
-    from . import chat, chat_policy, overview
+    from . import chat, chat_policy, handoffs, overview
 
     picked = chosen_model()
     rows = store.list_chat_savings(session_id)
@@ -800,11 +837,21 @@ def summary(session_id: Optional[str]) -> dict[str, Any]:
         added_input = math.ceil(row.get("added_input_chars", 0) / CHARS_PER_TOKEN)
         output_benefit = avoided_output * output_rate if output_rate is not None else None
         read_cost = added_input * input_rate if input_rate is not None else None
-        net = (once + output_benefit - read_cost - row["cheap_cost"]
-               if once is not None and output_benefit is not None and read_cost is not None and row["cheap_cost"] is not None else None)
+        prefix = {"usd": 0.0, "calls": 0, "unknown_calls": 0}
+        if "session_id" in row:
+            prefix = handoffs.overhead(row["session_id"])
+        elif "turn_id" in row:
+            prefix = handoffs.overhead(session_id or "", row["turn_id"])
+        elif row.get("kind") == "routed":
+            prefix = handoffs.overhead(session_id or "")
+        prefix_cost = prefix["usd"]
+        net = (once + output_benefit - read_cost - row["cheap_cost"] - prefix_cost
+               if all(cost is not None for cost in (once, output_benefit, read_cost, row["cheap_cost"], prefix_cost)) else None)
         return {**row, "tokens_removed": tokens, "once_at_main_price": once,
                 "estimated_output_tokens_avoided": avoided_output, "estimated_output_avoided_usd": output_benefit,
                 "estimated_helper_read_usd": read_cost, "net_once": net,
+                "estimated_extra_main_read_usd": prefix_cost, "extra_main_calls": prefix["calls"],
+                "unknown_prefix_cost_calls": prefix["unknown_calls"],
                 "cost_basis": "one_read_at_list_price", "savings_are_estimates": True}
 
     current = status_for(session_id)

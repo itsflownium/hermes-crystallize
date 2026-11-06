@@ -94,7 +94,8 @@ def test_required_action_needs_the_recipient_count_and_success_evidence():
 
 def run(sid, cost, answer_sources=None):
     return Run(execution_id=sid, job_id="j", job_name="job", session_id=sid, scheduled=True, started_ts=1,
-               session_started=1, finished=True, outcome="completed", cost_usd=cost, steps=answer_sources or [])
+               session_started=1, finished=True, outcome="completed", cost_usd=cost, steps=answer_sources or [],
+               model="same-test-model", provider="same-test-provider", reasoning_effort="high")
 
 
 def test_trial_rejects_equal_length_wrong_answer_and_wrong_action_target():
@@ -104,7 +105,7 @@ def test_trial_rejects_equal_length_wrong_answer_and_wrong_action_target():
     bad = '{"items":[{"title":"x","uri":"u"}]}'
     assert len(good) == len(bad)
     answers = {"b1": good, "b2": good, "t1": bad, "t2": bad}
-    assert tuning.evaluate(before, trial, answers)["ok"]  # old structural heuristics alone
+    assert tuning.evaluate(before, trial, answers)["ok"]  # structural heuristics do not prove semantic equivalence
     report = tuning.evaluate(before, trial, answers, contract={"required_fields": ["items.*.url"]})
     assert not report["ok"] and "outcome contract" in report["why"]
     wrong = Step("send_message", {"recipient": "dev", "text": "ops"}, None, None, 5, "ok", 1)

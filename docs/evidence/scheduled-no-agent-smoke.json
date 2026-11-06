@@ -1,0 +1,22 @@
+{
+  "scope": "isolated real due schedule; no-agent local snapshot only",
+  "paid_calls": 0,
+  "gateway_restarted": false,
+  "production_jobs_modified": false,
+  "scheduled_instant": "2026-11-06T10:22:27.195049+00:00",
+  "executions": [
+    {
+      "id": "24eaea94c00a432c80766bd0d7cf5bbe",
+      "job_id": "e9c6d337a14d",
+      "source": "builtin",
+      "status": "completed",
+      "scheduled_instant": "2026-11-06T10:22:27.195049+00:00",
+      "started_at": "2026-11-06T21:22:29.377747+11:00",
+      "finished_at": "2026-11-06T21:22:29.562966+11:00"
+    }
+  ],
+  "passed": true,
+  "output_files": [
+    "2026-11-06_21-22-29.md"
+  ]
+}

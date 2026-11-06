@@ -2,237 +2,182 @@
   <img src="assets/crystallize-logo.svg" alt="Crystallize" width="380">
 </p>
 
-**Hermes cron jobs that cost a lot less, on any cloud model, with proof.**
+**Spend less on repeated work in Hermes chats and cron jobs while preserving your main model and reasoning settings.**
 
-### Chat and Cron controls in 0.3
+Crystallize targets repeated context, duplicated file text, unnecessary tool
+schemas and stable read steps. It keeps originals recoverable, records helper
+overhead and shows when evidence is incomplete. It does not reduce the main
+model's reasoning or reuse an earlier reasoning transcript as a shortcut.
 
-Chat now has **Exact**, **Clean** and **Summary** modes, per-tool overrides and an
-optional task focus. Clean is the default. Summary uses your chosen helper only
-when the estimate pays back; routing also learns from observed helper cost and
-latency. Every paid helper entry point checks that this chat is enabled. The
-panel shows per-turn input reduction, helper spend and net estimates, including
-failed/rejected calls; missing prices stay **Unknown**.
+The architecture uses Hermes's host-owned model facade and provider declarations
+across cloud routes. This is a compatibility design, not a claim that every
+provider, model, operating system or task has been tested. Missing prices,
+capabilities, usage and guarded execution stay unknown or fail closed.
 
-Cron jobs can have explicit outcome requirements, exportable cost/payback
-receipts, and a **Compare same input** action. Comparison makes two bounded
-answer-only model calls on identical recorded observations, without replaying
-tools or actions. It shows the actual served models, checks and answer diff.
-It measures answer generation, not the cost or correctness of a whole live job.
+## Chat and Cron
 
-Changing a task, route, tool configuration, contract or observed source schema
-triggers revalidation. The normal agent handles the task while fresh evidence
-is collected. Promotion remains your choice. Required checks establish
-observable conditions, not semantic equivalence.
+| Control | What it does | Boundary |
+| --- | --- | --- |
+| Chat Exact/Clean/Summary | Keeps results exact, losslessly compacts JSON whitespace, or explicitly condenses large results with the selected helper | Summary can lose meaning; file contents and errors stay exact |
+| Complete task handoffs | Sends supplied text or requested file inputs to a helper; guarded file output and placeholders avoid retyping | Main route stays fixed; the helper needs complete inputs and output review |
+| Re-read savings | Opt-in projections of eligible replayed text, with recovery and a cache-aware payback check | Reasoning and the current thinking pass are untouched; projections are not semantic proofs |
+| Tool discovery | Opt-in schema deferral with host-supported discovery | Unsupported/required tool paths retain normal schemas |
+| Cron input tuning | Reduces repeated instructions/tool schemas at the same model and reasoning; restores failed trials | Changed settings and uncertain evidence do not become savings claims |
+| Read routines | Reuses tested read steps before the agent, retaining complete outputs and errors | Actions remain with the agent; drift invalidates old evidence |
+| Blind review | Presents anonymous A/B answers before model/cost reveal | A preference and structural checks do not establish correctness |
+| Model Auction | Explicit bounded model comparisons on frozen recorded evidence | Different-model selection is not same-model efficiency proof |
+| Rhythm | Explains observed changes and previews an explicit noncritical schedule adjustment | Confirmation, sufficient observations and declared slack are required |
 
-Advanced read recipes support explicit result/date/artifact bindings, and
-opt-in fetch caching can share fresh public reads across jobs within one profile.
-See [the controls and recipes guide](docs/controls-and-recipes.md).
+Chat controls apply to the chat where you enable them, after its first prompt.
+Choose a helper from a connected Hermes route. Hermes owns authentication;
+Crystallize does not read keys or OAuth stores. Helper calls incur provider
+usage, including unsuccessful attempts. The main model keeps its chosen route
+and reasoning.
 
-A cron job costs roughly **its prompt size × its AI calls, plus reasoning**. Crystallize shows where
-each job's money goes, works on all of it, and keeps a change only if the job's answers hold up and its
-cost really fell. If a change doesn't pay off, the old settings come back by themselves.
+Originals belong to their originating chat and expire after seven days.
+`crystal_full_result` retrieves exact text; asking a helper about it requires
+chat opt-in. Requested file reads/writes pass through guarded host tools.
+Placeholders expand only in eligible text fields before policy checks, and
+cannot become commands, URLs or file paths.
 
-It works with every cloud provider in Hermes: API keys, OAuth and subscriptions such as Codex. Levels
-and prices are read from Hermes, so new models and providers work without an update.
+See [controls and recipes](docs/controls-and-recipes.md), [Rhythm](docs/rhythm.md),
+[Model Auction](docs/model-auction.md) and [validation](docs/validation.md) for
+exact controls and limitations.
 
-### Measured on real cron jobs
+## Evidence and cost
 
-The same feed-digest job per model, comparing its first 2 normal runs with its latest runs on full savings
-(1–2 runs each so far, so treat these as early numbers). Codex runs are included in the plan, so their cost
-is shown at API prices.
+Crystallize separates actual cost evidence, host/list-price estimates, included
+subscription usage and unknown values. An API equivalent is not a subscription's
+cash cost. Token counts and character estimates are labelled separately. Helper
+requests, retrievals, unsuccessful attempts, comparisons and cache-rewrite
+overhead belong in net payback; a smaller visible message alone proves no saving.
 
-| Model | Route | AI calls | Tokens | Time | Cost per run | Saved |
-|---|---|---|---|---|---|---|
-| DeepSeek V4.1 Flash | Nous Portal | 6.5 → 1 | 359k → 11k | 364s → 9s | $0.0247 → $0.0010 | **96%** |
-| GPT-6 Sol | Codex OAuth | 8 → 1 | 275k → 12k | 109s → 12s | $0.2418 → $0.0230 | **90%** |
-| GLM 5.3 Flash | Nous Portal | 4.5 → 1 | 90k → 6k | 79s → 16s | $0.0073 → $0.0008 | **89%** |
-| GPT-6 Luna | Codex OAuth | 5 → 1 | 141k → 11k | 107s → 12s | $0.0073 → $0.0012 | **84%** |
-| Kimi K3 | Nous Portal | 3 → 1 | 54k → 9k | 47s → 10s | $0.0408 → $0.0118 | **71%** |
+Cron trials require comparable recorded model/provider/reasoning and observable
+outcome checks. Source, task, route, tool or contract changes require fresh
+validation. The normal agent handles work while evidence is rebuilt. Contracts
+catch missing fields, IDs, URLs, errors and actions; they cannot prove factual
+correctness or semantic equivalence. Review answers and real side effects before
+promotion.
 
-Trials on more models also kept their savings, with the same job. These were judged on 2 or more runs without routines:
+The former README percentage tables were small, uncontrolled and confounded
+observations. They did not establish fixed-reasoning, same-model savings for
+this release and have been retired. Fresh evidence must name inputs, served
+routes, requested reasoning, usage basis, failures and scope. Historical numbers
+do not fill missing live results.
 
-| Model | Route | Cost per run | Saved |
-|---|---|---|---|
-| Claude Haiku 5.5 | Nous Portal | $0.0228 → $0.0021 | **91%** |
-| Gemini 3.8 Flash | Nous Portal | $0.0942 → $0.0150 | **84%** |
-| GPT-5 Nano | Nous Portal | $0.0043 → $0.0009 | **80%** |
-| MiniMax M3 | Nous Portal | $0.0207 → $0.0052 | **75%** |
-| Mistral Small 3.2 | Nous Portal | $0.0034 → $0.0012 | **65%** |
-| Granite 4.2 8B | Nous Portal | $0.0026 → $0.0010 | **62%** |
-| DeepSeek V4 Flash | Nous Portal | $0.0015 → $0.0006 | **58%** |
-| Gemma 4 26B | Nous Portal | $0.0035 → $0.0015 | **57%** |
-| Solar Mini 4 | Nous Portal | $0.0008 → $0.0004 | **49%** |
-| Mercury 3 | Nous Portal | $0.0015 → $0.0014 | **12%** |
+The reproducible harness covers research, writing, data, analysis, coding and
+cron fixtures. It defaults to local checks without model calls. Optional live
+calls use the public facade, fresh answer-only inputs, an explicit provider
+allowlist, temporary HOME, reservations and process deadlines. Synthetic JSON
+indentation makes its compression ratio unrepresentative of normal workloads.
+Passing it establishes observable conditions, not whole-loop quality or every
+cloud provider's compatibility.
 
-Qwen 3.8 Flash also passed. Hermes has no price for its runs, so its saving is an estimate at API prices: about 59%.
-At API-price estimates, its runs went from about $0.0046 to $0.0019.
-Llama 4 Scout and Nova Lite didn't complete their normal runs on this job (an empty answer and an HTTP 400 error), and
-Step 3.5 Flash was rejected by its provider, so none of the three could start a trial.
+```bash
+python scripts/validation_cross_domain.py --report work/validation-plan.json
+```
 
-Two other kinds of job also passed: one that writes to a file on every run saved 63% at API prices, and one with its
-own pre-run script saved 67%.
+## Install and use
 
-Savings vary by job and model. Cloud providers other than Nous Portal and Codex use the same lookups but haven't had a real run. If a
-job doesn't get cheaper on yours, it goes back to its old settings by itself.
-
-## The savings ladder
-
-Each job uses every step it can, from the biggest saving down. The panel shows each job's ladder.
-
-| Step | What it does | Works on |
-|---|---|---|
-| **No AI at all** | The routine's output is the result, at $0 | Status-style jobs |
-| **Nothing changed** | Stays quiet at $0, or one short call repeats the last answer if someone expects a message | Jobs with a routine |
-| **Fetch before the AI starts** | A tested routine collects the data, so the AI often needs one call | Jobs with stable steps |
-| **Fewer AI calls** | A short instruction to use only the tools the task needs, once each | Any AI job |
-| **Cleaned tool results** | Removes markup and API link fields before the AI reads them, so no later call pays for them. Uses no AI and never touches file contents or errors | Any job using web or shell tools |
-| **New items only** | Sends what changed, plus the last answer to update | Live routines |
-| **Only the tools it uses** | Starts with the toolsets its cheapest good run used, for a smaller prompt on every call | Any AI job |
-| **Lower reasoning (optional)** | Off by default, so jobs keep your setting. Turn it on and it tries the weakest level the job's model takes | Models with reasoning settings |
-
-## How it decides
-
-1. **Measure.** Real cost per run. A subscription run costs $0 and some routes have no price, so those are estimated from their tokens and the same model's listed API price. A model on no price list compares tokens, then time.
-2. **Trial.** Click **Make cheaper** (or **Make all jobs cheaper**), or run `hermes crystal tune <job>`. Earlier runs from Hermes's own records count, so a slow job doesn't wait weeks to start.
-3. **Check.** After 2 answers: did any run fail, did it stop an action it normally takes, are answers much shorter or missing items or links, and did the cost really fall? Close results get more runs.
-4. **Keep or adjust.** If answers suffer, tools and then reasoning come back a step at a time. If nothing works, or it wasn't cheaper, the old settings return. Your global settings never change.
-5. **Keep watching.** Settings that later fail 3 runs in a row go back by themselves.
-
-**What the checks can't catch:** subtle mistakes in an answer, or an action or tool a job only uses now and
-then. `hermes crystal tune <job> --status` shows an answer from before and after to read yourself.
-
-## Routines
-
-`hermes crystal analyze <job>` lines up a job's runs and labels each step: `fixed`, `fill-in` (dates, ids and
-temp paths are refreshed each run), `varies`, `setup` (skipped) or `agent` (always stays with the AI).
-After a routine matches real runs three times in a row, one click promotes it. Hermes's cron `script` field
-then runs it before the AI starts. If it fails, Hermes does the whole task itself, and two failures in a row
-undo the switch.
-
-- **Jobs that act.** A routine only fetches data that comes before a job's first action. The AI still sends or changes what the job is meant to.
-- **Jobs with their own script.** Your script still runs first, can still stop the run, and its output stays in the prompt.
-
-## The panel
-
-A Crystallize button in the top bar and the status bar opens a panel beside the chat, with Cron and Chat sections. It updates from your real cron jobs: running jobs first, with their schedule, model,
-reasoning and tools; a cost graph for each job; time ranges that appear only when they have data; and
-finished jobs collapsed with their full history. Totals keep real money and plan API prices apart.
-
-## Install
+Install from the published repository; this installs its default revision.
+Catalog-name listing is not established. Requires Hermes `>=0.22.7` as declared
+in the manifest; host seams and provider behavior still need checking on the
+version in use.
 
 ```bash
 hermes plugins install itsflownium/hermes-crystallize
 hermes plugins enable crystallize
 ```
 
-Then in Hermes Desktop: **Capabilities → Plugins → Crystallize**, turn on the Desktop
-switch. Works on macOS, Windows and Linux. Requires Hermes 0.22.7 or newer.
+In Hermes Desktop, enable Crystallize under **Capabilities → Plugins**. The
+panel has Cron and Chat sections. Command surfaces also work outside Desktop.
+Desktop uses the plugin SDK; a complete OS/provider test matrix is not claimed.
 
-## Use it
-
-```bash
-hermes crystal tune                    # every AI job: reasoning share, cost, API price, tokens
-hermes crystal tune morning-brief      # make this job cheaper (or --all for every job)
-hermes crystal tune morning-brief --status   # the result, with an answer from before and after
-hermes crystal tune morning-brief --undo     # put its old settings back
-hermes crystal history                 # every cron job: runs, cost, time
-hermes crystal analyze morning-brief   # which steps repeat
-hermes crystal try morning-brief       # save the routine and start testing it
-hermes crystal test morning-brief      # run one test now
-hermes crystal show morning-brief      # test results so far
-hermes crystal promote morning-brief   # switch over (after 3 matching tests)
-hermes crystal mode site-check no-ai   # a status check that needs no AI
-hermes crystal skip morning-brief repeat   # when nothing changed: repeat, quiet, off or auto
-hermes crystal undo morning-brief      # put the original prompt back
+```text
+/crystallize chat on                         # enable this existing chat
+hermes crystal history                       # recorded cron outcomes and usage
+hermes crystal tune morning-brief             # trial input savings; reasoning stays fixed
+hermes crystal tune morning-brief --status
+hermes crystal tune morning-brief --undo
+hermes crystal analyze morning-brief          # inspect repeated read steps
+hermes crystal try morning-brief              # save/test a candidate routine
+hermes crystal show morning-brief
+hermes crystal promote morning-brief          # explicit promotion after evidence
+hermes crystal undo morning-brief
+hermes crystal compatibility                  # SDK gaps; no provider probes
 ```
 
-## Crystallize Chat
+Use `hermes crystal <command> --help` for re-read controls, anonymous comparison
+review, Model Auction, Rhythm and optional delegation/tool discovery. Views and
+previews do not make paid model calls. Comparisons and schedule changes have
+explicit actions. Legacy lower-reasoning trials are restored and require fresh
+baseline evidence; reasoning reduction is refused.
 
-| | Crystallize Cron | Crystallize Chat |
-|---|---|---|
-| **For** | Scheduled jobs | The chat you're in |
-| **Turned on** | Per job, with **Make cheaper** | Per chat, after your first prompt |
-| **How it saves** | Fewer AI calls and tools, cleaned results, lower reasoning, routines | Routine work sent to a cheap model, cleaned results, big ones condensed |
-| **Proof** | Each job's cost is measured, and changes that don't help are undone | Savings shown are estimates |
+## Routines and recovery
 
-For long or expensive chats, your main model keeps the thinking. For routine work, it sends an input to a cheap
-model you pick with `crystal_cheap` and gets the output straight back, deciding by itself when that's worth it.
-The cheap model also reads big tool results first. A result is paid for again on every later message, so reading less adds up. Open **Crystallize
-Chat** in the sidebar, or the **Chat** section of the panel, and pick a model from a subscription you've connected to Hermes. Hermes keeps your
-sign-ins; Crystallize never sees a key.
+A routine contains only the conservative read subset before the first action.
+Each resolved step is checked again and uses Hermes's guarded path, including
+caller identity, availability, approvals, hooks and middleware. If that seam is
+unavailable, dispatch fails closed. A read-command recognizer is not a sandbox
+or proof about arbitrary programs.
 
-Turn it on per chat in the panel's **Chat** section, or with `/crystallize chat on` on platforms without the panel.
+Complete results, source order, nested JSON, errors, timestamps and file artifacts
+remain available. Oversized/unrecognized evidence falls back to the normal
+agent rather than silently truncating it. Parameter bindings are explicit;
+task/endpoint/schema drift requires revalidation. A job's own pre-run script
+keeps its stop behavior and output. Consecutive failures restore prior routine
+settings. Promotion and schedule changes remain explicit choices.
 
-**You can't start a chat with it.** Send your first prompt, then turn it on. Hermes only creates the chat when
-that prompt is sent, and savings come from tool results, which don't exist until the work starts.
+## Disclosures and catalog readiness
 
-- Tool results use the chat's Exact/Clean/Summary policy. Clean uses no AI; Summary can condense big results (8,000+ characters) using your chosen model and task focus.
-- When a result is noticeably reduced, the exact original is kept for 7 days, and your main model can read it with `crystal_full_result`.
-- File contents, errors and small results always stay exact.
-- Your main model isn't switched mid-chat, because that would lose its prompt cache.
-- Original results are owned by their chat, written atomically and checked for expiry on every read. Exact retrieval still works when Chat savings is off; questions that call the helper require opt-in. Legacy originals without provable ownership are unavailable, except for a trusted existing Context Rent eviction mapping.
-- If your picked model isn't cheaper than your main one, results are only cleaned.
-- The panel has two sections, Cron and Chat. Chat shows savings for the chat you're in. The figures are estimates.
-- A summary can still leave out something that matters, so it's off by default.
-
-`/crystallize` shows what's happening with your scheduled jobs and this chat. It works in any chat, including Telegram and Discord.
-
-## How a routine runs
-
-Routine steps run through Hermes's normal guarded tool-call path, preserving the
-available caller identity, policy hooks and execution middleware. The adapter uses
-a feature-detected Hermes tool-dispatch seam and fails closed if it is unavailable.
-Every resolved step is rechecked against a conservative read subset; that recognizer
-is not a sandbox or a proof about arbitrary programs. Each step has
-a check (no tool error, exit code 0, output not suspiciously short). The first failing
-step stops the routine and Hermes does the task itself. Two failed runs in a row undo the
-routine automatically.
-
-Before the data reaches the AI it is cleaned: HTML and RSS/Atom feeds become plain text,
-JSON keeps meaningful fields and empty values, declared scratch files are included, and every
-source gets a fair share of the space, so no feed is dropped because another was long.
-
-## Disclosures
-
-- **Reads your Hermes history (read-only):** session costs and tool calls from
-  `state.db`, run outcomes from `cron/executions.db`, and job definitions from
-  `cron/jobs.json`. Nothing is modified there.
-- **Crystallize Chat sends tool results to the model you pick,** only in chats where you turned it on, and keeps originals in its data folder for 7 days.
-- **Comparisons make model calls only on explicit action.** Their full frozen input, answers, usage and checks are stored locally; exported receipts redact common credential forms. The default baseline uses Hermes's current main model and the candidate uses the selected Crystallize helper, which can differ from the cron job's configured model. Explicit route overrides remain subject to Hermes's own trust policy.
-- **Fetch caching is opt-in.** It stores successful web-result text locally for at most one hour, after the host's normal tool policy checks. Sharing requires an explicit namespace within a profile; use shared namespaces only for reads with the same authorization and freshness requirements. Credential-bearing arguments are not cached. Clear it with `hermes crystal cache --clear`.
-- **Stores its own data** in `<hermes home>/plugin-data/crystallize/`: recorded tool calls
-  (inputs and the first 2,000 characters of each result, adjustable in settings),
-  routines, and a Desktop diagnostics log.
-- **Runs tool calls during test runs:** after each scheduled run of a job that is being
-  tested, its routine's steps run once more through Hermes's guarded tool-call path. Routines
-  never contain steps that send or change things (messages, file writes, `git push`,
-  POST requests), and any step that needed approval stays with Hermes.
-- **Edits cron jobs** only when you Make cheaper, Promote, change mode or Undo: prompt, `script`,
-  no-agent mode and reasoning through `hermes cron edit`, and toolsets through Hermes's job update.
-  A trial that doesn't pass, and automatic undo after two failed runs, restore the earlier settings.
-- **Changes tool results for jobs on cheaper settings.** Web and shell results are cleaned before
-  the AI reads them (markup, whitespace and API link fields). File contents, errors and small results are untouched.
-- **Writes one small script per live job** in `<hermes home>/scripts/crystallize/`. It runs the
-  job's own pre-run script if it has one, then `hermes crystal prerun <routine>`. Undo deletes it.
-- **Uses some Hermes internals** for prices, reasoning levels and toolsets, which public plugin
-  APIs don't cover yet. Each falls back safely if a Hermes update moves it.
-- **Local models aren't a focus yet.** Crystallize is built and tested for cloud providers.
-- **No network calls of its own, no telemetry, no credentials.**
+- Reads profile-scoped session history/costs (`state.db`), cron outcomes
+  (`cron/executions.db`), job definitions (`cron/jobs.json`), configuration,
+  pricing and connected inventory. History reads are read-only.
+- Stores captured arguments/results, originals, caches, contracts, comparison
+  answers, receipts and diagnostics under
+  `<hermes home>/plugin-data/crystallize/`. Originals can contain sensitive text.
+  Receipt export redacts common credential forms; arbitrary sensitive content
+  is not guaranteed to be removed.
+- Helper/comparison features send supplied data through a host-owned model
+  route on the relevant opt-in/explicit action. Hermes metadata lookups may
+  refresh remote model/price catalogs. There is no independent credential
+  reader or telemetry service.
+- Routine validation can run read steps again after a scheduled execution,
+  including approved shell reads. Explicit file tasks can read/write requested
+  paths through guarded tools. Background helpers are bounded; timeouts can
+  still incur provider usage.
+- Explicit tuning/promotion/undo edits selected cron prompt/script/mode/toolset
+  fields and can invoke the Hermes CLI. Rhythm changes schedules only through
+  its confirmed path. Promotion writes a small wrapper script in the profile's
+  Hermes home.
+- Fetch caching is opt-in, profile-scoped, time-limited and applied after normal
+  tool policy checks. Shared namespaces need matching authorization/freshness.
+  Credential-bearing arguments are not cached.
+- Private Hermes couplings remain for guarded dispatch, atomic cron toolset
+  edits, exact pricing/model catalogs and connected inventory. They remain
+  visible to validation. [SDK readiness](docs/sdk-gaps.md) stays false until
+  required public seams are adopted.
+- No self-updater, token-refresh implementation, credential store or runtime
+  patch of Hermes core is introduced. The [catalog bundle](catalog/README.md)
+  is preparation only. [Admission](docs/marketplace.md) needs a separate
+  upstream PR, exact-pin validation and maintainer merge; no listing or
+  marketplace compliance is claimed.
 
 ## Develop
 
+Standalone tests use isolated SQLite storage and local fakes, without a
+signed-in Hermes profile:
+
 ```bash
-git clone https://github.com/itsflownium/hermes-crystallize
-ln -s "$PWD/hermes-crystallize" ~/.hermes/plugins/crystallize
-hermes plugins enable crystallize
-hermes plugins validate hermes-crystallize --install-deps
+python -m pip install -r requirements-dev.txt
 python -m pytest -c tests/pytest.ini --rootdir tests tests
+node --check desktop/plugin.js
 ```
 
-Standalone tests use an isolated SQLite store and do not need a live Hermes
-profile. Install development-only test dependencies with
-`python -m pip install -r requirements-dev.txt`. Host-specific reasoning/pricing
-checks are skipped when those Hermes modules are absent. Tests join helper
-workers before closing their databases, including timeout accounting.
+Host checks can skip when Hermes modules are absent; skipped checks are not
+provider passes. Validate a reviewed exact commit with
+`hermes plugins validate /absolute/pinned-checkout --install-deps` and retain all
+warnings. The [validation guide](docs/validation.md) documents the separate
+root-authorized live workflow and billing/reasoning limits.
 
 MIT licensed.

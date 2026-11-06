@@ -159,14 +159,20 @@ def crystal_full_result(args: dict[str, Any] | None = None, **kwargs: Any) -> st
 
 
 def crystal_cheap(args: dict[str, Any] | None = None, **kwargs: Any) -> str:
-    from . import chat_savings
+    from . import handoffs
 
     try:
         identity = _identity(kwargs)
         if _ctx is None:
             return json.dumps({"error": "Crystallize isn't fully loaded yet. Do this yourself."})
-        return chat_savings.ask_cheap(_ctx, str((args or {}).get("input") or ""),
-                                      str(identity.get("session_id") or ""), str(identity.get("turn_id") or ""))
+        args = args or {}
+        if not isinstance(args.get("subtask", False), bool):
+            raise ValueError("subtask must be true or false.")
+        return handoffs.execute(_ctx, args.get("input"), str(identity.get("session_id") or ""),
+            str(identity.get("turn_id") or ""), input_files=args.get("input_files"), save_to=args.get("save_to"),
+            expected_output_tokens=args.get("expected_output_tokens"), subtask=args.get("subtask", False))
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
     except Exception as exc:  # noqa: BLE001
         logger.warning("crystallize: crystal_cheap failed: %s", exc)
         return json.dumps({"error": "The cheap model couldn't be reached. Do this yourself."})

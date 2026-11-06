@@ -445,7 +445,19 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
     live_week = sum(x.get("saving_per_week") or 0.0 for x in live)
     live_week += sum((c.get("tuned") or {}).get("per_week") or 0.0
                      for c in spotted + testing + watching if (c.get("tuned") or {}).get("metric") == "cost")
+    # Historical counterfactuals can mix model/reasoning changes. Only receipt
+    # cohorts with complete equivalent-settings evidence feed qualified totals.
+    from . import receipts
+    proof_jobs = {t.get("job_id") for t in store.list_tuning() if t.get("job_id")}
+    proof_jobs.update(r.get("source_ref") for r in store.list_routines() if r.get("source") == "cron" and r.get("source_ref"))
+    proofs = [receipts.receipt(job_id) for job_id in sorted(proof_jobs)]
+    gross = [p["qualified_efficiency_savings_usd"] for p in proofs if p.get("qualified_efficiency_savings_usd") is not None]
+    net = [p["qualified_net_payback_usd"] for p in proofs if p.get("qualified_net_payback_usd") is not None]
     return {
+        "qualified_efficiency_savings_usd": sum(gross) if gross else None,
+        "qualified_net_payback_usd": sum(net) if net else None,
+        "qualified_jobs": len(gross),
+        "efficiency_proof_scope": "Comparable recorded cohorts with the same model/provider/reasoning; structural quality checks do not establish semantic equivalence.",
         "live_saving_usd_per_week": live_week,
         "session_id": session_id,
         "chat_enabled": store.chat_enabled(session_id),

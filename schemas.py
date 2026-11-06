@@ -49,12 +49,20 @@ CRYSTAL_FULL_RESULT = {
 
 CRYSTAL_CHEAP = {
     "name": "crystal_cheap",
-    "description": ("Send one input to a cheaper model and get its output straight back. For routine work such as "
-                    "summarizing, extracting data, reformatting, translating or simple drafting. It can't see this "
-                    "chat or use tools, so include everything it needs, and check what comes back."),
+    "description": ("Delegate self-contained, checkable text work in any subject to the configured helper. "
+                    "Examples include extraction, classification, calculations, translation, reformatting and drafting. "
+                    "It cannot see this chat or use tools. Include complete inputs, check the result, and keep reasoning "
+                    "settings as configured. On failure finish the task yourself. Exact call: "
+                    'crystal_cheap({"input":"Complete instruction and source text","expected_output_tokens":1200}).'),
     "parameters": {
         "type": "object",
-        "properties": {"input": {"type": "string", "description": "The full instruction and any text it should work on."}},
+        "properties": {
+            "input": {"type": "string", "minLength": 1, "description": "A complete nonempty instruction and source text. Required even with input_files."},
+            "input_files": {"type": "array", "maxItems": 8, "items": {"type": "string", "minLength": 1}, "description": "Source files read through normal guarded host tools. A complete nonempty input instruction is still required; partial inputs are rejected."},
+            "save_to": {"type": "string", "minLength": 1, "description": "Optional destination. Writes accepted output with its exact whitespace through guarded write_file and returns a short preview plus a reusable placeholder. Check completion metadata; some hosts omit stop reasons."},
+            "expected_output_tokens": {"type": "integer", "minimum": 1, "maximum": 4000, "description": "Expected deliverable size for cost and timeout estimates."},
+            "subtask": {"type": "boolean", "description": "Delegate a complete self-contained text subtask. No global route change and no tools/actions are available to the helper."},
+        },
         "required": ["input"],
     },
 }

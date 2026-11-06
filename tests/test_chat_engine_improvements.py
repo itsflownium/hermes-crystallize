@@ -277,7 +277,11 @@ def test_routing_learns_expensive_or_slow_helpers(engine):
     for _ in range(3):
         store.add_chat_event("s2", kind="routed", helper_call=True, cheap_cost=0.001,
                              output_tokens=1000, duration_ms=30000, **PICKED)
-    assert not cs._routing_pays(PICKED, "s2")
+    assert cs._routing_pays(PICKED, "s2")  # output-sized handoffs can exceed the 20s summary deadline
+    for _ in range(3):
+        store.add_chat_event("s3", kind="routed", helper_call=True, cheap_cost=0.001,
+                             output_tokens=1000, duration_ms=180000, **PICKED)
+    assert not cs._routing_pays(PICKED, "s3")
 
 
 def test_legacy_totals_migrate_once_and_ambiguous_zero_is_unknown(isolated_plugin_storage):

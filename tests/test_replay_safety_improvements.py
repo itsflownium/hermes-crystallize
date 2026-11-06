@@ -179,7 +179,7 @@ def _stored_routine(meta=None):
                        meta=meta or {})
 
 
-def test_changes_after_display_cap_do_not_repeat_old_answer(monkeypatch):
+def test_complete_changes_beyond_legacy_display_cap_do_not_repeat_old_answer(monkeypatch):
     _stored_routine({"when_unchanged": "repeat"})
     monkeypatch.setattr(lifecycle, "check_drift", lambda _: True)
     monkeypatch.setattr(lifecycle, "live_result", lambda *args: None)
@@ -189,7 +189,9 @@ def test_changes_after_display_cap_do_not_repeat_old_answer(monkeypatch):
     dispatch = lambda *args: json.dumps({"content": values.pop(0)})
     first, _ = prerun.run("cr_safe", dispatch)
     second, _ = prerun.run("cr_safe", dispatch)
-    assert "display limits" in first and "more characters not shown" in second
+    assert len(first) > prerun.MAX_STEP_CHARS and len(second) > prerun.MAX_STEP_CHARS
+    assert "Tail AVAILABLE" in first and "Tail NOT AVAILABLE" in second
+    assert "more characters not shown" not in first + second
     assert "stale answer" not in second and prerun.SKIP_GATE not in second
 
 
@@ -201,7 +203,7 @@ def test_live_source_schema_change_invalidates_before_delivering(monkeypatch):
     monkeypatch.setattr(lifecycle, "invalidate", lambda *args: invalid.append(args))
     values = [{"price": 5}, {"price": {"error": "renamed schema"}}]
     dispatch = lambda *args: json.dumps({"output": json.dumps(values.pop(0))})
-    assert "Captured data" in prerun.run("cr_safe", dispatch)[0]
+    assert "Complete captured data" in prerun.run("cr_safe", dispatch)[0]
     text, _ = prerun.run("cr_safe", dispatch)
     assert invalid == [("cr_safe", "source schema changed")] and "tested again" in text
 

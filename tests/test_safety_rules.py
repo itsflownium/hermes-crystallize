@@ -9,7 +9,8 @@ from crystallize.history import Run, Step
 
 def _run(i, steps, started=None, cost=0.01, outcome="completed"):
     run = Run(execution_id=f"e{i}", job_id="j", job_name="job", session_id=f"s{i}", scheduled=True,
-              started_ts=started or float(i), outcome=outcome, cost_usd=cost, api_calls=3, session_started=started or float(i))
+              started_ts=started or float(i), outcome=outcome, cost_usd=cost, api_calls=3, session_started=started or float(i),
+              model="same-test-model", provider="same-test-provider", reasoning_effort="high")
     run.steps = [Step(t, a, preview, None, 500, "ok", 5) for t, a, preview in steps]
     return run
 
@@ -195,37 +196,49 @@ def test_recovery_data_is_saved_before_anything_changes(job):
 
 
 def test_a_partial_failure_puts_everything_back(job, monkeypatch):
-    calls, saved, _ = job
+    calls, saved, found = job
 
     def fail_on_prompt(job_id, *flags):
-        if tuning.EFFICIENCY_HINT in " ".join(flags):
-            raise lifecycle.LifecycleError("nope")
         calls.append(("edit", flags))
+        found["prompt"] = flags[flags.index("--prompt") + 1]
+        if tuning.EFFICIENCY_HINT in " ".join(flags):
+            # Hermes applied the prompt before returning an error.
+            raise lifecycle.LifecycleError("nope")
 
     monkeypatch.setattr(lifecycle, "_edit_job", fail_on_prompt)
     with pytest.raises(lifecycle.LifecycleError, match="old settings are back"):
         tuning.start("job")
-    assert ("tools", ["web"]) in calls and calls[-2] == ("tools", ["web", "terminal"])
+    assert calls[-2] == ("edit", ("--prompt", "Do it"))
+    assert found["prompt"] == "Do it" and found["reasoning_effort"] == "high"
+    assert found["enabled_toolsets"] == ["web", "terminal"] and not any(call[0] == "tools" for call in calls)
     assert saved["job"]["status"] == "reverted"
 
 
 def test_a_restore_that_fails_is_tried_again_and_undo_still_works(job, monkeypatch):
     calls, saved, found = job
-    healthy = lifecycle.set_toolsets
+    healthy = lifecycle._edit_job
 
-    def broken(job_id, tools):
-        if tools == ["web"]:
-            found["enabled_toolsets"] = tools  # apply succeeded before the host failed
+    def broken(job_id, *flags):
+        prompt = flags[flags.index("--prompt") + 1]
+        if tuning.EFFICIENCY_HINT in prompt:
+            found["prompt"] = prompt  # apply succeeded before the host failed
         raise lifecycle.LifecycleError("still down")
 
-    monkeypatch.setattr(lifecycle, "set_toolsets", broken)
+    monkeypatch.setattr(lifecycle, "_edit_job", broken)
     with pytest.raises(lifecycle.LifecycleError):
         tuning.start("job")
     assert saved["job"].get("needs_restore") and saved["job"]["status"] == "starting"
-    monkeypatch.setattr(lifecycle, "set_toolsets", healthy)
+    assert tuning.EFFICIENCY_HINT in found["prompt"]
+    monkeypatch.setattr(lifecycle, "_edit_job", healthy)
     tuning._finish_restore(saved["job"])
     assert saved["job"]["status"] == "reverted" and not saved["job"].get("needs_restore")
-    assert calls[-2] == ("tools", ["web", "terminal"])
+    assert calls[-2] == ("edit", ("--prompt", "Do it"))
+    assert found["prompt"] == "Do it" and found["reasoning_effort"] == "high"
+    tuning.start("job")
+    assert saved["job"]["status"] == "trial" and tuning.EFFICIENCY_HINT in found["prompt"]
+    tuning.undo("job")
+    assert saved["job"]["status"] == "undone" and found["prompt"] == "Do it"
+    assert found["reasoning_effort"] == "high" and found["enabled_toolsets"] == ["web", "terminal"]
 
 
 def test_a_stage_that_gives_all_tools_back_really_does(job):

@@ -113,11 +113,14 @@ def make_transform_tool_result(ctx: Any) -> Callable[..., Any]:
 
 
 def make_post_api_request(ctx: Any) -> Callable[..., None]:
-    """Keep a running token total for cron runs, for Runaway Brake."""
+    """Observe real Chat usage and keep Cron token totals for Runaway Brake."""
     from . import brake
 
     def after_call(session_id: str = "", usage: Any = None, **_: Any) -> None:
         try:
+            from . import handoffs
+            if ctx.current_cron_execution() is None:
+                handoffs.note_usage(session_id, usage)
             if ctx.current_cron_execution() is not None and brake.enabled():
                 brake.note_usage(session_id, usage)
         except Exception:  # noqa: BLE001 — a hook must never break the run
@@ -127,13 +130,21 @@ def make_post_api_request(ctx: Any) -> Callable[..., None]:
 
 
 def make_pre_tool_call(ctx: Any) -> Callable[..., Any]:
-    """Stop a cron run's tool use once it has gone far past what its job normally uses."""
+    """Check the Cron brake and recover owned text before host tool checks."""
     from . import brake
 
-    def before_tool(session_id: str = "", **_: Any) -> Any:
+    def before_tool(session_id: str = "", args: Any = None, tool_name: str = "", turn_id: str = "", **_: Any) -> Any:
         try:
             run = ctx.current_cron_execution()
-            return brake.check(getattr(run, "job_name", None), session_id) if run is not None else None
+            stopped = brake.check(getattr(run, "job_name", None), session_id) if run is not None else None
+            if stopped:
+                return stopped
+            from . import handoffs
+            try:
+                changed = handoffs.expand_args(args, session_id, turn_id, tool_name)
+                return {"action": "modify", "args": changed} if changed is not None else None
+            except ValueError as exc:
+                return {"action": "block", "message": str(exc)}
         except Exception:  # noqa: BLE001 — a hook must never break the run
             logger.debug("crystallize: Runaway Brake check failed", exc_info=True)
             return None
@@ -142,16 +153,35 @@ def make_pre_tool_call(ctx: Any) -> Callable[..., Any]:
 
 
 def make_llm_request(ctx: Any) -> Callable[..., Any]:
-    """Leave out the tool results you removed in Context Rent. The saved chat doesn't change."""
-    from . import rent
+    """Apply independent, opt-in wire savings. Every layer fails open on its own."""
+    from . import rent, reread
 
     def rewrite(request: Any = None, session_id: str = "", **_: Any) -> Any:
+        current = request
         try:
             changed = rent.apply(request, session_id)
-            return {"request": changed} if changed is not None else None
+            if isinstance(changed, dict):
+                current = changed
         except Exception:  # noqa: BLE001 — a failed saving must never stop the AI call
             logger.debug("crystallize: leaving out removed results failed", exc_info=True)
-            return None
+        try:
+            changed = reread.rewrite(current, session_id)
+            if isinstance(changed, dict):
+                current = changed
+        except Exception:  # noqa: BLE001 — retain a successful earlier projection
+            logger.debug("crystallize: re-read projection failed", exc_info=True)
+        try:
+            run = ctx.current_cron_execution()
+            if run is not None:
+                from . import adaptive
+                job_ref = getattr(run, "job_id", None) or getattr(run, "job_name", None)
+                if job_ref:
+                    changed = adaptive.prune_request(current, job_ref)
+                    if isinstance(changed, dict):
+                        current = changed
+        except Exception:  # noqa: BLE001 — keep all tools on uncertain pruning evidence
+            logger.debug("crystallize: optional cron schema pruning failed", exc_info=True)
+        return {"request": current} if current is not request else None
 
     return rewrite
 
