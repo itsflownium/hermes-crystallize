@@ -62,6 +62,15 @@ CREATE TABLE IF NOT EXISTS chat_savings (
     updated_at  REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS brake_stops (
+    session_id  TEXT PRIMARY KEY,
+    job_name    TEXT NOT NULL,
+    used        INTEGER NOT NULL,
+    limit_tokens INTEGER NOT NULL,
+    normal      INTEGER NOT NULL,
+    at          REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key     TEXT PRIMARY KEY,
     value   TEXT NOT NULL
@@ -331,6 +340,30 @@ def list_chat_savings() -> list[dict[str, Any]]:
         rows = _db().execute("SELECT session_id, chars, results, cheap_tokens, cheap_cost, updated_at "
                              "FROM chat_savings ORDER BY updated_at DESC LIMIT 50").fetchall()
     keys = ("session_id", "chars", "results", "cheap_tokens", "cheap_cost", "updated_at")
+    return [dict(zip(keys, tuple(r))) for r in rows]
+
+
+def add_brake_stop(session_id: str, job_name: str, used: int, limit_tokens: int, normal: int) -> None:
+    """One row per stopped run, keeping its latest total."""
+    with _lock:
+        conn = _db()
+        conn.execute("INSERT INTO brake_stops (session_id, job_name, used, limit_tokens, normal, at) VALUES (?, ?, ?, ?, ?, ?) "
+                     "ON CONFLICT(session_id) DO UPDATE SET used = excluded.used",
+                     (session_id, job_name, used, limit_tokens, normal, time.time()))
+        conn.commit()
+
+
+def brake_stopped_sessions(job_name: str) -> set[str]:
+    with _lock:
+        rows = _db().execute("SELECT session_id FROM brake_stops WHERE job_name = ?", (job_name,)).fetchall()
+    return {r[0] for r in rows}
+
+
+def list_brake_stops(limit: int = 10) -> list[dict[str, Any]]:
+    with _lock:
+        rows = _db().execute("SELECT session_id, job_name, used, limit_tokens, normal, at FROM brake_stops "
+                             "ORDER BY at DESC LIMIT ?", (limit,)).fetchall()
+    keys = ("session_id", "job_name", "used", "limit_tokens", "normal", "at")
     return [dict(zip(keys, tuple(r))) for r in rows]
 
 
