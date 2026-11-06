@@ -304,3 +304,70 @@ def test_new_trial_cost_is_overhead_when_older_kept_settings_overlap(world):
     assert actual["live_run_count"] == 2 and actual["trial_run_count"] == 1
     assert actual["historical_savings_usd"] == 14
     assert actual["net_payback_usd"] == 12
+
+
+@pytest.mark.parametrize("changed", ["model", "provider", "reasoning_effort", "reasoning_config_fingerprint"])
+def test_confounded_settings_never_earn_efficiency_savings(world, changed):
+    run, _ = world
+    rows = [run("b1", 1, 10), run("b2", 2, 10), run("live", 4, 1)]
+    for row in rows:
+        row.model, row.provider, row.reasoning_effort = "m", "p", "high"
+        row.reasoning_config_fingerprint = '{"effort":"high","budget_tokens":8000}'
+    setattr(rows[-1], changed, {"model": "cheaper", "provider": "other", "reasoning_effort": "low",
+                              "reasoning_config_fingerprint": '{"effort":"high","budget_tokens":2000}'}[changed])
+    campaign()
+    receipt = proof.receipt("j1", runs=rows)
+    actual = receipt["cost_bases"]["actual"]
+    assert actual["known_historical_savings_usd"] == 0
+    assert actual["historical_savings_usd"] is None
+    assert actual["net_payback_usd"] is None
+    assert actual["qualified_efficiency_savings_usd"] is None
+    assert not actual["efficiency_savings_proven"]
+    assert actual["excluded_settings_comparison_count"] == 1
+    assert actual["comparisons"][0]["status"] == "no_equivalent_baseline"
+
+
+def test_receipt_matches_each_run_to_same_settings_baseline_cohort(world):
+    run, _ = world
+    rows = [run("expensive", 1, 100), run("equivalent", 2, 10), run("live", 4, 2)]
+    for row in rows:
+        row.model, row.provider, row.reasoning_effort = "m", "p", "high"
+    rows[0].model = "other-model"
+    campaign()
+    actual = proof.receipt("j1", runs=rows)["cost_bases"]["actual"]
+    assert actual["historical_savings_usd"] == 8
+    assert actual["qualified_efficiency_savings_usd"] == 8
+    assert actual["qualified_net_payback_usd"] == 8
+    assert actual["efficiency_savings_proven"]
+    assert actual["comparisons"][0]["baseline_execution_ids"] == ["equivalent"]
+
+
+def test_legacy_receipt_math_exposes_unknown_settings_without_claiming_proof(world):
+    run, _ = world
+    campaign()
+    actual = proof.receipt("j1", runs=[run("before", 1, 10), run("live", 4, 2)])["cost_bases"]["actual"]
+    assert actual["net_payback_usd"] == 8  # Retained legacy counterfactual arithmetic.
+    assert actual["qualified_efficiency_savings_usd"] is None
+    assert not actual["efficiency_savings_proven"]
+    assert actual["unproven_settings_comparison_count"] == 1
+
+
+def test_host_reported_unknown_settings_cannot_fall_back_to_legacy_math(world):
+    run, _ = world
+    rows = [run("before", 1, 10), run("live", 4, 2)]
+    for row in rows:
+        row.identity_attribution_complete = False
+    campaign()
+    actual = proof.receipt("j1", runs=rows)["cost_bases"]["actual"]
+    assert actual["net_payback_usd"] is None
+    assert actual["excluded_settings_comparison_count"] == 1
+    assert actual["comparisons"][0]["status"] == "unknown_settings"
+
+
+def test_unknown_session_chain_cannot_reuse_partial_cached_cost(world):
+    run, infos = world
+    row = run("partial", 1, 5)
+    infos[row.session_id]["usage_totals_complete"] = False
+    receipt = proof.receipt("j1", runs=[row])
+    assert receipt["recorded_spend"]["actual"]["total_usd"] is None
+    assert not receipt["runs"][0]["cost"]["usage_totals_complete"]

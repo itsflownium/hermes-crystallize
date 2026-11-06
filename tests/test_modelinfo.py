@@ -1,4 +1,4 @@
-"""Reasoning levels come from Hermes, whatever the model."""
+"""Offline route, declaration and pricing behavior; no installed credentials needed."""
 
 import sys
 import types
@@ -7,55 +7,82 @@ import pytest
 
 from crystallize import modelinfo
 
-pytest.importorskip("agent.reasoning_effort")
-
 
 @pytest.fixture(autouse=True)
-def _fresh_lookups(monkeypatch):
+def _isolated_host(monkeypatch):
     monkeypatch.setattr(modelinfo, "_lookups", {})
+    monkeypatch.setattr(modelinfo, "_config", lambda: {})
+    monkeypatch.setattr(modelinfo, "_profile", lambda provider: None)
 
 
-def _levels(monkeypatch, caps, current, pin=None):
-    monkeypatch.setattr(modelinfo, "_catalog_caps", lambda r: caps)
-    monkeypatch.setattr(modelinfo, "_config", lambda: {"agent": {"reasoning_effort": current},
-                                                       "model": {"default": "m", "provider": "nous"}})
-    return modelinfo.levels_to_try({"reasoning_effort": pin} if pin else {})
-
-
-@pytest.mark.parametrize("listed,current,want", [
-    (["max", "xhigh", "high", "medium", "low"], "max", ["low", "medium", "high", "xhigh"]),  # weakest first
-    (["high", "medium", "low"], "max", ["low", "medium"]),   # max really runs as high here
-    (["max", "high", "low"], "high", ["low"]),               # only what the model lists
-    (["high", "max"], "high", []),                           # already at its floor
-    (["xhigh", "high", "none"], "max", ["high"]),            # "none" is never a target
+@pytest.mark.parametrize("declared,want", [
+    ((), []),
+    (("high", "low", "max"), ["low", "high", "max"]),
+    (("none", "bespoke-tier"), []),
+    (None, []),
 ])
-def test_levels_follow_the_model(monkeypatch, listed, current, want):
-    assert _levels(monkeypatch, {"supports_reasoning": True, "supported_efforts": listed}, current) == want
+def test_only_explicit_provider_levels_are_reported(monkeypatch, declared, want):
+    profile = types.SimpleNamespace(supported_reasoning_efforts=lambda model: declared)
+    monkeypatch.setattr(modelinfo, "_profile", lambda provider: profile)
+    assert modelinfo.reasoning_levels({"provider": "new-provider", "model": "m"}) == want
 
 
-def test_model_without_reasoning_has_nothing_to_try(monkeypatch):
-    assert _levels(monkeypatch, {"supports_reasoning": False}, "max") == []
+def test_declared_no_reasoning_and_user_override_are_respected(monkeypatch):
+    profile = types.SimpleNamespace(model_capabilities={"m": {"supports_reasoning": False}},
+                                    supported_reasoning_efforts=lambda model: ("low", "high"))
+    monkeypatch.setattr(modelinfo, "_profile", lambda provider: profile)
+    assert modelinfo.reasoning_levels({"provider": "p", "model": "m"}) == []
+    monkeypatch.setattr(modelinfo, "_config", lambda: {"model_overrides": {"p": {"m": {"supports_reasoning": True}}}})
+    assert modelinfo.reasoning_levels({"provider": "p", "model": "m"}) == ["low", "high"]
 
 
-def test_unlisted_or_unknown_model_still_gets_a_try(monkeypatch):
-    assert _levels(monkeypatch, {"supports_reasoning": True, "supported_efforts": None}, "max") == ["low", "medium"]
-    assert _levels(monkeypatch, None, "high") == ["low", "medium"]
-    assert _levels(monkeypatch, None, None) == ["low", "medium"]  # following the provider's default
+@pytest.mark.parametrize("value", [None, False, "none", "low", "medium", "high", "max", "bespoke-tier"])
+def test_no_reasoning_reduction_is_proposed_even_for_known_levels(monkeypatch, value):
+    def unexpected(*args):
+        raise AssertionError("Reasoning policy must not query a cheaper level")
+    monkeypatch.setattr(modelinfo, "reasoning_levels", unexpected)
+    assert modelinfo.levels_to_try({"reasoning_effort": value}) == []
 
 
-def test_job_pin_beats_global_setting(monkeypatch):
-    assert _levels(monkeypatch, None, "max", pin="medium") == ["low"]
+def test_route_prefers_job_then_cron_defaults_without_leaking_another_endpoint(monkeypatch):
+    monkeypatch.setattr(modelinfo, "_config", lambda: {
+        "model": {"default": "main", "provider": "main-provider", "base_url": "https://main", "api_mode": "responses"},
+        "cron": {"model": "scheduled", "model_provider": "cron-provider"}})
+    main = modelinfo.route({})
+    assert main["model"] == "main" and main["base_url"] == "https://main"
+    scheduled = modelinfo.route({"id": "j"})
+    assert scheduled == {"model": "scheduled", "provider": "cron-provider", "base_url": None, "api_mode": None}
+    pinned = modelinfo.route({"id": "j", "model": "pin", "provider": "other", "base_url": "https://other"})
+    assert pinned["model"] == "pin" and pinned["provider"] == "other" and pinned["base_url"] == "https://other"
 
 
-def test_route_prefers_the_job_and_drops_base_url_for_another_provider(monkeypatch):
-    monkeypatch.setattr(modelinfo, "_config", lambda: {"model": {"default": "m", "provider": "nous", "base_url": "u"}})
-    assert modelinfo.route({})["base_url"] == "u"
-    r = modelinfo.route({"model": "x", "provider": "other"})
-    assert r["model"] == "x" and r["provider"] == "other" and r["base_url"] is None
+@pytest.mark.parametrize("value,want", [(False, "none"), ("disabled", "none"), ("high", "high"),
+                                        ({"enabled": False}, "none"), ({"effort": "bespoke"}, "bespoke")])
+def test_explicit_job_reasoning_survives_without_the_host(monkeypatch, value, want):
+    monkeypatch.setitem(sys.modules, "hermes_constants", None)
+    monkeypatch.setattr(modelinfo, "_config", lambda: {"agent": {"reasoning_effort": "max"}})
+    assert modelinfo.current_level({"reasoning_effort": value}) == want
 
 
-def test_unknown_tool_means_leave_the_tools_alone(monkeypatch):
-    # This repo's own tools.py shadows Hermes's tools package when tests run from here.
+def test_per_model_reasoning_off_survives_without_the_host(monkeypatch):
+    monkeypatch.setitem(sys.modules, "hermes_constants", None)
+    monkeypatch.setattr(modelinfo, "_config", lambda: {"model": {"default": "m"},
+        "agent": {"reasoning_effort": "max", "reasoning_overrides": {"m": False}}})
+    assert modelinfo.current_level({}) == "none"
+
+
+def test_public_reasoning_resolver_receives_the_configured_cron_model(monkeypatch):
+    host = types.ModuleType("hermes_constants")
+    host.parse_reasoning_effort = lambda pin: None
+    seen = []
+    host.resolve_reasoning_config = lambda cfg, model: seen.append(model) or {"enabled": True, "effort": "custom"}
+    monkeypatch.setitem(sys.modules, "hermes_constants", host)
+    monkeypatch.setattr(modelinfo, "_config", lambda: {"cron": {"model": "scheduled"}})
+    assert modelinfo.current_level({"id": "j"}) == "custom"
+    assert seen == ["scheduled"]
+
+
+def test_unknown_tool_means_leave_tools_alone(monkeypatch):
     fake = types.ModuleType("tools.registry")
     fake.discover_builtin_tools = lambda: None
     fake.registry = types.SimpleNamespace(get_tool_to_toolset_map=lambda: {"web_extract": "web", "web_search": "web"})
@@ -66,65 +93,47 @@ def test_unknown_tool_means_leave_the_tools_alone(monkeypatch):
     assert modelinfo.toolsets_for({"web_extract", "web_search", "tool_search"}) == ["web"]
 
 
-def test_api_cost_uses_hermes_prices_for_a_subscription_model():
-    pytest.importorskip("agent.usage_pricing")
-    tokens = {"input": 1_000_000, "output": 1_000_000}
-    cost = modelinfo.api_cost("gpt-6-luna", "openai-codex", tokens)
-    assert cost and cost > 0
-    assert modelinfo.api_cost("a-model-nobody-prices", "local-thing", tokens) is None
-    assert modelinfo.api_cost(None, "openai-codex", tokens) is None
-
-
-@pytest.mark.parametrize("declared,want", [
-    ((), []),                                  # the provider says: no reasoning settings at all
-    (("high", "low"), ["low", "high"]),        # its own list, weakest first
-    (("none", "bespoke-tier"), []),            # nothing Crystallize can safely aim for
-    (None, ["low", "medium", "high"]),         # it doesn't say: the widely accepted levels
-])
-def test_any_provider_profile_answer_is_handled(monkeypatch, declared, want):
-    monkeypatch.setattr(modelinfo, "_catalog_caps", lambda r: None)
-    monkeypatch.setattr(modelinfo, "_profile_levels", lambda r: declared)
-    monkeypatch.setattr(modelinfo, "_models_dev_says_no_reasoning", lambda r: False)
-    assert modelinfo.reasoning_levels({"provider": "some-provider", "model": "m"}) == want
-
-
-def test_a_model_known_to_have_no_reasoning_is_skipped(monkeypatch):
-    monkeypatch.setattr(modelinfo, "_catalog_caps", lambda r: None)
-    monkeypatch.setattr(modelinfo, "_profile_levels", lambda r: None)
-    monkeypatch.setattr(modelinfo, "_models_dev_says_no_reasoning", lambda r: True)
-    assert modelinfo.reasoning_levels({"provider": "some-provider", "model": "m"}) == []
-
-
-@pytest.mark.parametrize("provider,model", [(None, None), ("", ""), ("auto", "x"), ("not-a-provider", "a/b/c")])
-def test_odd_routes_never_raise(monkeypatch, provider, model):
-    route = {"provider": provider, "model": model, "base_url": None, "api_mode": None}
-    assert isinstance(modelinfo.reasoning_levels(route), list)
-    assert modelinfo.api_cost(model, provider, {"input": 1}) is None or provider
-    modelinfo.output_price(route)
-    modelinfo.token_prices(model, provider)
-
-
-def test_price_route_finds_the_same_model_elsewhere_by_exact_name(monkeypatch):
-    pytest.importorskip("agent.usage_pricing")
-    monkeypatch.setattr(modelinfo, "_listed_models", lambda: {"some-model": ("vendor/some-model", "nous"), "known": ("v/known", "nous")})
-    priced = {("vendor/some-model", "nous")}
-    monkeypatch.setattr(modelinfo, "_estimate", lambda name, vendor, usage: 0.5 if (name, vendor) in priced else None)
-    assert modelinfo._price_route("some-model", "direct-provider") == ("vendor/some-model", "nous")
-    assert modelinfo._price_route("SOME-MODEL", "direct-provider") == ("vendor/some-model", "nous")
+def test_price_route_uses_only_exact_catalog_name_matches(monkeypatch):
+    monkeypatch.setattr(modelinfo, "_token_usage", lambda tokens: tokens)
+    monkeypatch.setattr(modelinfo, "_listed_models", lambda: {"some-model": ("vendor/some-model", "catalog")})
+    monkeypatch.setattr(modelinfo, "_estimate", lambda name, vendor, usage: .5 if (name, vendor) == ("vendor/some-model", "catalog") else None)
+    assert modelinfo._price_route("SOME-MODEL", "direct-provider") == ("vendor/some-model", "catalog")
     assert modelinfo._price_route("some-model-highspeed", "direct-provider") is None
 
 
-def test_own_vendor_price_comes_first(monkeypatch):
-    pytest.importorskip("agent.usage_pricing")
-    monkeypatch.setattr(modelinfo, "_listed_models", lambda: {"m": ("x/m", "nous")})
-    monkeypatch.setattr(modelinfo, "_estimate", lambda name, vendor, usage: 1.0)
+def test_arbitrary_hyphenated_provider_is_not_rewritten_as_a_vendor(monkeypatch):
+    monkeypatch.setattr(modelinfo, "_token_usage", lambda tokens: tokens)
+    monkeypatch.setattr(modelinfo, "_listed_models", lambda: {})
+    seen = []
+    monkeypatch.setattr(modelinfo, "_estimate", lambda name, vendor, usage: seen.append(vendor) or None)
+    assert modelinfo._price_route("m", "local-thing") is None
+    assert seen and set(seen) == {"local-thing"}
+
+
+def test_declared_provider_pricing_id_works_without_a_named_branch(monkeypatch):
+    monkeypatch.setattr(modelinfo, "_token_usage", lambda tokens: tokens)
+    monkeypatch.setattr(modelinfo, "_profile", lambda provider: types.SimpleNamespace(name="p", models_dev_id="vendor"))
+    monkeypatch.setattr(modelinfo, "_listed_models", lambda: {})
+    monkeypatch.setattr(modelinfo, "_estimate", lambda name, vendor, usage: .1 if vendor == "vendor" else None)
+    assert modelinfo._price_route("m", "p-alias") == ("m", "vendor")
+
+
+def test_known_exact_price_avoids_catalog_fetch_and_preserves_zero(monkeypatch):
+    monkeypatch.setattr(modelinfo, "_token_usage", lambda tokens: tokens)
+    monkeypatch.setattr(modelinfo, "_estimate", lambda *args: 0.0)
+    monkeypatch.setattr(modelinfo, "_listed_models", lambda: pytest.fail("Unnecessary metadata fetch"))
+    assert modelinfo._price_route("m", "p") == ("m", "p")
+
+
+def test_subscription_api_equivalent_mapping_is_explicit_and_separate(monkeypatch):
+    monkeypatch.setattr(modelinfo, "_token_usage", lambda tokens: tokens)
+    monkeypatch.setattr(modelinfo, "_estimate", lambda name, vendor, usage: .1 if vendor == "openai" else None)
     assert modelinfo._price_route("m", "openai-codex") == ("m", "openai")
 
 
-def test_a_missing_token_rate_still_gives_an_estimate(monkeypatch):
-    monkeypatch.setattr(modelinfo, "_lookups", {("price route", "p", "m"): (float("inf"), ("m", "p"))})
-    monkeypatch.setattr(modelinfo, "_LOOKUP_TTL_S", float("inf"))
+def test_missing_cache_rate_fallback_remains_an_estimate(monkeypatch):
+    monkeypatch.setattr(modelinfo, "_price_route", lambda *args: ("m", "p"))
     monkeypatch.setattr(modelinfo, "_token_usage", lambda tokens: None)
-    monkeypatch.setattr(modelinfo, "_estimate", lambda *a: None)
-    monkeypatch.setattr(modelinfo, "token_prices", lambda *a: {"input": 2.0, "output": 3.0, "cache_read": 2.0, "cache_write": 2.0})
+    monkeypatch.setattr(modelinfo, "_estimate", lambda *args: None)
+    monkeypatch.setattr(modelinfo, "token_prices", lambda *args: {"input": 2.0, "output": 3.0, "cache_read": 2.0, "cache_write": 2.0})
     assert modelinfo.api_cost("m", "p", {"input": 1, "output": 1, "cache_read": 1}) == 7.0

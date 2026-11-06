@@ -66,8 +66,6 @@ def register(ctx: Any) -> None:
         ctx.register_auxiliary_task(
             chat_savings.TASK, display_name="Crystallize Chat",
             description="Condenses big tool results in chats where Crystallize Chat is on.",
-            # This is reading, not thinking. Reasoning would make it slow and costly.
-            defaults={"extra_body": {"reasoning": {"effort": "low"}}},
         )
     except Exception:  # noqa: BLE001 — chat condensing stays off; cleaning still works
         logger.warning("crystallize: couldn't register the chat model slot", exc_info=True)
@@ -95,6 +93,10 @@ def register(ctx: Any) -> None:
     )
 
     cli.register(ctx)
+    # Register an optional backend choice; never change the user's active backend.
+    from . import delegation, host_api
+    delegation.register(ctx)
+    host_api.set_context(ctx)
 
     skills_dir = Path(__file__).parent / "skills"
     if skills_dir.is_dir():

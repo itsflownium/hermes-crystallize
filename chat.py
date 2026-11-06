@@ -25,15 +25,27 @@ def _tool_calls(session_id: str) -> list[dict[str, Any]]:
     if conn is None:
         return []
     try:
+        conn.execute("BEGIN")
         cols = history._columns(conn, "messages")
         if not {"session_id", "role", "tool_calls"} <= cols:
             return []
-        order = "timestamp, id" if "timestamp" in cols else "id"
-        rows = conn.execute(
-            f"SELECT tool_calls FROM messages WHERE session_id = ? AND role = 'assistant' "
-            f"AND tool_calls IS NOT NULL ORDER BY {order}",
-            (session_id,),
-        ).fetchall()
+        order = "timestamp, rowid" if "timestamp" in cols else "rowid"
+        chain, uncertainty = history._session_chain(conn, session_id)
+        ids = [row["id"] for row in chain] if chain and not uncertainty else [session_id]
+        rows = []
+        seen_ids: set[str] = set()
+        select = ", ".join(["tool_calls", *(key for key in ("message_uid", "tool_call_uids") if key in cols)])
+        original = " AND COALESCE(_compressed_summary, 0) = 0" if "_compressed_summary" in cols else ""
+        for sid in ids:
+            for row in conn.execute(
+                    f"SELECT {select} FROM messages WHERE session_id = ? AND role = 'assistant' "
+                    f"AND tool_calls IS NOT NULL {original} ORDER BY {order}", (sid,)):
+                uid = row["message_uid"] if "message_uid" in row.keys() else None
+                if uid and uid in seen_ids:
+                    continue
+                if uid:
+                    seen_ids.add(uid)
+                rows.append((sid, row))
     except Exception:  # noqa: BLE001
         logger.debug("crystallize: reading chat messages failed", exc_info=True)
         return []
@@ -41,13 +53,39 @@ def _tool_calls(session_id: str) -> list[dict[str, Any]]:
         conn.close()
 
     calls: list[dict[str, Any]] = []
-    for (raw,) in rows:
+    seen_calls: set[str] = set()
+    for _, row in rows:
+        raw = row["tool_calls"]
         try:
             items = json.loads(raw) if raw else []
         except ValueError:
             continue
+        try:
+            uids = json.loads(row["tool_call_uids"] or "{}") if "tool_call_uids" in row.keys() else {}
+        except (ValueError, TypeError):
+            uids = {}
+        uids = uids if isinstance(uids, dict) else {}
+        occurrences: dict[str, int] = {}
         for item in items if isinstance(items, list) else []:
+            if not isinstance(item, dict):
+                continue
+            # Compression can carry verbatim tail messages forward. Hermes'
+            # durable call UIDs identify those copies. Provider call IDs can be
+            # reused on later responses, so they are never identity by themselves.
+            call_id = item.get("id")
+            if isinstance(call_id, str) and call_id:
+                occurrence = occurrences.get(call_id, 0)
+                occurrences[call_id] = occurrence + 1
+                uid = uids.get(call_id)
+                if isinstance(uid, list):
+                    uid = uid[occurrence] if occurrence < len(uid) else None
+                if isinstance(uid, str) and uid and uid in seen_calls:
+                    continue
+                if isinstance(uid, str) and uid:
+                    seen_calls.add(uid)
             fn = (item or {}).get("function") or {}
+            if not isinstance(fn, dict):
+                continue
             name = fn.get("name") or item.get("name")
             if not name or name in ("crystal_run", "crystal_list"):
                 continue
@@ -163,8 +201,12 @@ def analyse(session_id: Optional[str]) -> Optional[dict[str, Any]]:
     repeats = find_repeats(calls)
     return {
         "session_id": session_id,
-        "spent_usd": info.get("actual_cost_usd") or info.get("estimated_cost_usd"),
+        "spent_usd": info.get("actual_cost_usd") if info.get("actual_cost_usd") is not None else info.get("estimated_cost_usd"),
         "model": info.get("model"),
+        "provider": info.get("billing_provider"),
+        "reasoning_effort": info.get("reasoning_effort"),
+        "session_ids": info.get("session_ids") or [session_id],
+        "attribution_evidence": info.get("attribution_evidence") or {},
         "api_calls": info.get("api_call_count"),
         "tool_calls": len(calls),
         "repeats": repeats[:5],

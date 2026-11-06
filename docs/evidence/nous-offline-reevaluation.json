@@ -1,0 +1,1039 @@
+{
+  "scope": "Post-hoc offline checker correction; zero new provider calls; original answers/results unchanged",
+  "source_report": "nous-frozen-original.json",
+  "source_report_sha256": "98c31717f0b95e767e7375ec301b3f5737a713ccaf3b32967d8db82c75f3fdbf",
+  "checker_revision": "2-analysis-rational-rates",
+  "fixtures": [
+    {
+      "fixture_id": "research-conflicting-sources-v1",
+      "domain": "research",
+      "calls": [
+        {
+          "arm": "baseline",
+          "answer_sha256": "c5358c983085963b930e6d121d5fe4ecb4d613441416fc315d87b6f9c19018d2",
+          "original_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:capacity",
+                "ok": true
+              },
+              {
+                "name": "field:previous_capacity",
+                "ok": true
+              },
+              {
+                "name": "field:effective_date",
+                "ok": true
+              },
+              {
+                "name": "field:source_urls",
+                "ok": true
+              },
+              {
+                "name": "field:currentness",
+                "ok": true
+              },
+              {
+                "name": "field:opening_hour",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "corrected_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:capacity",
+                "ok": true
+              },
+              {
+                "name": "field:previous_capacity",
+                "ok": true
+              },
+              {
+                "name": "field:effective_date",
+                "ok": true
+              },
+              {
+                "name": "field:source_urls",
+                "ok": true
+              },
+              {
+                "name": "field:currentness",
+                "ok": true
+              },
+              {
+                "name": "field:opening_hour",
+                "ok": true
+              }
+            ],
+            "checker_revision": "2-analysis-rational-rates",
+            "semantic_equivalence": "not_established"
+          }
+        },
+        {
+          "arm": "candidate",
+          "answer_sha256": "c5358c983085963b930e6d121d5fe4ecb4d613441416fc315d87b6f9c19018d2",
+          "original_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:capacity",
+                "ok": true
+              },
+              {
+                "name": "field:previous_capacity",
+                "ok": true
+              },
+              {
+                "name": "field:effective_date",
+                "ok": true
+              },
+              {
+                "name": "field:source_urls",
+                "ok": true
+              },
+              {
+                "name": "field:currentness",
+                "ok": true
+              },
+              {
+                "name": "field:opening_hour",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "corrected_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:capacity",
+                "ok": true
+              },
+              {
+                "name": "field:previous_capacity",
+                "ok": true
+              },
+              {
+                "name": "field:effective_date",
+                "ok": true
+              },
+              {
+                "name": "field:source_urls",
+                "ok": true
+              },
+              {
+                "name": "field:currentness",
+                "ok": true
+              },
+              {
+                "name": "field:opening_hour",
+                "ok": true
+              }
+            ],
+            "checker_revision": "2-analysis-rational-rates",
+            "semantic_equivalence": "not_established"
+          }
+        }
+      ]
+    },
+    {
+      "fixture_id": "writing-brief-v1",
+      "domain": "writing",
+      "calls": [
+        {
+          "arm": "candidate",
+          "answer_sha256": "503abc4ff27bee9ae92784c6c711ad4f73266245d5dfb0807589d85eed60461e",
+          "original_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "headline_length",
+                "ok": true
+              },
+              {
+                "name": "body_length",
+                "ok": true
+              },
+              {
+                "name": "brief:12 November 2026",
+                "ok": true
+              },
+              {
+                "name": "brief:18:30",
+                "ok": true
+              },
+              {
+                "name": "brief:Riverside Library",
+                "ok": true
+              },
+              {
+                "name": "brief:24 places",
+                "ok": true
+              },
+              {
+                "name": "brief:free",
+                "ok": true
+              },
+              {
+                "name": "brief:step-free access",
+                "ok": true
+              },
+              {
+                "name": "brief:bring a notebook",
+                "ok": true
+              },
+              {
+                "name": "booking_required",
+                "ok": true
+              },
+              {
+                "name": "no_invented_url",
+                "ok": true
+              },
+              {
+                "name": "no_certification_mention",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "corrected_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "headline_length",
+                "ok": true
+              },
+              {
+                "name": "body_length",
+                "ok": true
+              },
+              {
+                "name": "brief:12 November 2026",
+                "ok": true
+              },
+              {
+                "name": "brief:18:30",
+                "ok": true
+              },
+              {
+                "name": "brief:Riverside Library",
+                "ok": true
+              },
+              {
+                "name": "brief:24 places",
+                "ok": true
+              },
+              {
+                "name": "brief:free",
+                "ok": true
+              },
+              {
+                "name": "brief:step-free access",
+                "ok": true
+              },
+              {
+                "name": "brief:bring a notebook",
+                "ok": true
+              },
+              {
+                "name": "booking_required",
+                "ok": true
+              },
+              {
+                "name": "no_invented_url",
+                "ok": true
+              },
+              {
+                "name": "no_certification_mention",
+                "ok": true
+              }
+            ],
+            "checker_revision": "2-analysis-rational-rates",
+            "semantic_equivalence": "not_established"
+          }
+        },
+        {
+          "arm": "baseline",
+          "answer_sha256": "97b2326f8a1ab975a05c25b84cf448ff0bdb13901c2d7eabe6d56a16a1803893",
+          "original_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "headline_length",
+                "ok": true
+              },
+              {
+                "name": "body_length",
+                "ok": true
+              },
+              {
+                "name": "brief:12 November 2026",
+                "ok": true
+              },
+              {
+                "name": "brief:18:30",
+                "ok": true
+              },
+              {
+                "name": "brief:Riverside Library",
+                "ok": true
+              },
+              {
+                "name": "brief:24 places",
+                "ok": true
+              },
+              {
+                "name": "brief:free",
+                "ok": true
+              },
+              {
+                "name": "brief:step-free access",
+                "ok": true
+              },
+              {
+                "name": "brief:bring a notebook",
+                "ok": true
+              },
+              {
+                "name": "booking_required",
+                "ok": true
+              },
+              {
+                "name": "no_invented_url",
+                "ok": true
+              },
+              {
+                "name": "no_certification_mention",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "corrected_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "headline_length",
+                "ok": true
+              },
+              {
+                "name": "body_length",
+                "ok": true
+              },
+              {
+                "name": "brief:12 November 2026",
+                "ok": true
+              },
+              {
+                "name": "brief:18:30",
+                "ok": true
+              },
+              {
+                "name": "brief:Riverside Library",
+                "ok": true
+              },
+              {
+                "name": "brief:24 places",
+                "ok": true
+              },
+              {
+                "name": "brief:free",
+                "ok": true
+              },
+              {
+                "name": "brief:step-free access",
+                "ok": true
+              },
+              {
+                "name": "brief:bring a notebook",
+                "ok": true
+              },
+              {
+                "name": "booking_required",
+                "ok": true
+              },
+              {
+                "name": "no_invented_url",
+                "ok": true
+              },
+              {
+                "name": "no_certification_mention",
+                "ok": true
+              }
+            ],
+            "checker_revision": "2-analysis-rational-rates",
+            "semantic_equivalence": "not_established"
+          }
+        }
+      ]
+    },
+    {
+      "fixture_id": "data-missing-values-v1",
+      "domain": "data",
+      "calls": [
+        {
+          "arm": "baseline",
+          "answer_sha256": "787afe248fab577f1d2a9300314f4fcda544ca711c8318d9968724b9edc49836",
+          "original_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:row_count",
+                "ok": true
+              },
+              {
+                "name": "field:valid_row_count",
+                "ok": true
+              },
+              {
+                "name": "field:invalid_ids",
+                "ok": true
+              },
+              {
+                "name": "field:net_units_valid",
+                "ok": true
+              },
+              {
+                "name": "field:revenue_total",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "corrected_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:row_count",
+                "ok": true
+              },
+              {
+                "name": "field:valid_row_count",
+                "ok": true
+              },
+              {
+                "name": "field:invalid_ids",
+                "ok": true
+              },
+              {
+                "name": "field:net_units_valid",
+                "ok": true
+              },
+              {
+                "name": "field:revenue_total",
+                "ok": true
+              }
+            ],
+            "checker_revision": "2-analysis-rational-rates",
+            "semantic_equivalence": "not_established"
+          }
+        },
+        {
+          "arm": "candidate",
+          "answer_sha256": "787afe248fab577f1d2a9300314f4fcda544ca711c8318d9968724b9edc49836",
+          "original_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:row_count",
+                "ok": true
+              },
+              {
+                "name": "field:valid_row_count",
+                "ok": true
+              },
+              {
+                "name": "field:invalid_ids",
+                "ok": true
+              },
+              {
+                "name": "field:net_units_valid",
+                "ok": true
+              },
+              {
+                "name": "field:revenue_total",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "corrected_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:row_count",
+                "ok": true
+              },
+              {
+                "name": "field:valid_row_count",
+                "ok": true
+              },
+              {
+                "name": "field:invalid_ids",
+                "ok": true
+              },
+              {
+                "name": "field:net_units_valid",
+                "ok": true
+              },
+              {
+                "name": "field:revenue_total",
+                "ok": true
+              }
+            ],
+            "checker_revision": "2-analysis-rational-rates",
+            "semantic_equivalence": "not_established"
+          }
+        }
+      ]
+    },
+    {
+      "fixture_id": "analysis-observational-rates-v1",
+      "domain": "analysis",
+      "calls": [
+        {
+          "arm": "candidate",
+          "answer_sha256": "02ea5f9ad97a9c5fc59524e49bb0c2e04af306e8ea989e46813f96fa4476909a",
+          "original_quality": {
+            "ok": false,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:a_rate",
+                "ok": false
+              },
+              {
+                "name": "field:b_rate",
+                "ok": false
+              },
+              {
+                "name": "field:difference_pp",
+                "ok": true
+              },
+              {
+                "name": "field:sample_total",
+                "ok": true
+              },
+              {
+                "name": "field:causal_claim_supported",
+                "ok": true
+              },
+              {
+                "name": "field:limitations",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "corrected_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:a_rate",
+                "ok": true
+              },
+              {
+                "name": "field:b_rate",
+                "ok": true
+              },
+              {
+                "name": "field:difference_pp",
+                "ok": true
+              },
+              {
+                "name": "field:sample_total",
+                "ok": true
+              },
+              {
+                "name": "field:causal_claim_supported",
+                "ok": true
+              },
+              {
+                "name": "field:limitations",
+                "ok": true
+              }
+            ],
+            "checker_revision": "2-analysis-rational-rates",
+            "semantic_equivalence": "not_established"
+          }
+        },
+        {
+          "arm": "baseline",
+          "answer_sha256": "d33cd11960076f5357043d0090cc833f71dd55c782f94580c87929332cb8bed9",
+          "original_quality": {
+            "ok": false,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:a_rate",
+                "ok": false
+              },
+              {
+                "name": "field:b_rate",
+                "ok": false
+              },
+              {
+                "name": "field:difference_pp",
+                "ok": true
+              },
+              {
+                "name": "field:sample_total",
+                "ok": true
+              },
+              {
+                "name": "field:causal_claim_supported",
+                "ok": true
+              },
+              {
+                "name": "field:limitations",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "corrected_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:a_rate",
+                "ok": true
+              },
+              {
+                "name": "field:b_rate",
+                "ok": true
+              },
+              {
+                "name": "field:difference_pp",
+                "ok": true
+              },
+              {
+                "name": "field:sample_total",
+                "ok": true
+              },
+              {
+                "name": "field:causal_claim_supported",
+                "ok": true
+              },
+              {
+                "name": "field:limitations",
+                "ok": true
+              }
+            ],
+            "checker_revision": "2-analysis-rational-rates",
+            "semantic_equivalence": "not_established"
+          }
+        }
+      ]
+    },
+    {
+      "fixture_id": "coding-pure-clamp-v1",
+      "domain": "coding",
+      "calls": [
+        {
+          "arm": "baseline",
+          "answer_sha256": "3680b8182f0c2066c4200f91e268404084e9bf1ef81c0c76a12d72cabe290a18",
+          "original_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "restricted_ast_no_execution",
+                "ok": true
+              },
+              {
+                "name": "case_(-1, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(5, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(20, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(0, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(3, 5, 2)",
+                "ok": true
+              },
+              {
+                "name": "case_(2.5, 0.0, 3.0)",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "corrected_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "restricted_ast_no_execution",
+                "ok": true
+              },
+              {
+                "name": "case_(-1, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(5, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(20, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(0, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(3, 5, 2)",
+                "ok": true
+              },
+              {
+                "name": "case_(2.5, 0.0, 3.0)",
+                "ok": true
+              }
+            ],
+            "checker_revision": "2-analysis-rational-rates",
+            "semantic_equivalence": "not_established"
+          }
+        },
+        {
+          "arm": "candidate",
+          "answer_sha256": "3680b8182f0c2066c4200f91e268404084e9bf1ef81c0c76a12d72cabe290a18",
+          "original_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "restricted_ast_no_execution",
+                "ok": true
+              },
+              {
+                "name": "case_(-1, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(5, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(20, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(0, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(3, 5, 2)",
+                "ok": true
+              },
+              {
+                "name": "case_(2.5, 0.0, 3.0)",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "corrected_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "restricted_ast_no_execution",
+                "ok": true
+              },
+              {
+                "name": "case_(-1, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(5, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(20, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(0, 0, 10)",
+                "ok": true
+              },
+              {
+                "name": "case_(3, 5, 2)",
+                "ok": true
+              },
+              {
+                "name": "case_(2.5, 0.0, 3.0)",
+                "ok": true
+              }
+            ],
+            "checker_revision": "2-analysis-rational-rates",
+            "semantic_equivalence": "not_established"
+          }
+        }
+      ]
+    },
+    {
+      "fixture_id": "cron-delta-source-error-v1",
+      "domain": "cron",
+      "calls": [
+        {
+          "arm": "candidate",
+          "answer_sha256": "3d9945ac5aa16fc2e8d36ba00baf2533aaff736c9d4a40a9fa34291686d37437",
+          "original_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:new_ids",
+                "ok": true
+              },
+              {
+                "name": "field:unchanged_ids",
+                "ok": true
+              },
+              {
+                "name": "field:failed_sources",
+                "ok": true
+              },
+              {
+                "name": "field:can_silence",
+                "ok": true
+              },
+              {
+                "name": "field:agent_required",
+                "ok": true
+              },
+              {
+                "name": "field:action_performed",
+                "ok": true
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "corrected_quality": {
+            "ok": true,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:new_ids",
+                "ok": true
+              },
+              {
+                "name": "field:unchanged_ids",
+                "ok": true
+              },
+              {
+                "name": "field:failed_sources",
+                "ok": true
+              },
+              {
+                "name": "field:can_silence",
+                "ok": true
+              },
+              {
+                "name": "field:agent_required",
+                "ok": true
+              },
+              {
+                "name": "field:action_performed",
+                "ok": true
+              }
+            ],
+            "checker_revision": "2-analysis-rational-rates",
+            "semantic_equivalence": "not_established"
+          }
+        },
+        {
+          "arm": "baseline",
+          "answer_sha256": "554180229d6399055552713f024ddc0a31823242fc84228e465df4ad49c8ff66",
+          "original_quality": {
+            "ok": false,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:new_ids",
+                "ok": true
+              },
+              {
+                "name": "field:unchanged_ids",
+                "ok": true
+              },
+              {
+                "name": "field:failed_sources",
+                "ok": true
+              },
+              {
+                "name": "field:can_silence",
+                "ok": true
+              },
+              {
+                "name": "field:agent_required",
+                "ok": true
+              },
+              {
+                "name": "field:action_performed",
+                "ok": false
+              }
+            ],
+            "semantic_equivalence": "not_established"
+          },
+          "corrected_quality": {
+            "ok": false,
+            "checks": [
+              {
+                "name": "json_object",
+                "ok": true
+              },
+              {
+                "name": "field:new_ids",
+                "ok": true
+              },
+              {
+                "name": "field:unchanged_ids",
+                "ok": true
+              },
+              {
+                "name": "field:failed_sources",
+                "ok": true
+              },
+              {
+                "name": "field:can_silence",
+                "ok": true
+              },
+              {
+                "name": "field:agent_required",
+                "ok": true
+              },
+              {
+                "name": "field:action_performed",
+                "ok": false
+              }
+            ],
+            "checker_revision": "2-analysis-rational-rates",
+            "semantic_equivalence": "not_established"
+          }
+        }
+      ]
+    }
+  ],
+  "reason": "The analysis task requested fractions; v1 incorrectly accepted decimal numbers only.",
+  "tally": {
+    "answers": 12,
+    "original_checks_passed": 9,
+    "corrected_checks_passed": 11
+  },
+  "measured_tokens_by_arm": {
+    "baseline": {
+      "input_tokens": 1950,
+      "output_tokens": 4769
+    },
+    "candidate": {
+      "input_tokens": 1805,
+      "output_tokens": 3075
+    }
+  },
+  "savings_claim": null,
+  "limitations": [
+    "Actual billing and effective wire reasoning were unavailable.",
+    "Single synthetic frozen-input pair per domain, not a full agent/tool loop or general quality proof.",
+    "The Cron baseline returned action_performed=\"none\" instead of boolean false; its strict type failure is retained.",
+    "All changed-model handoff results are separate model comparisons, never efficiency proof."
+  ]
+}

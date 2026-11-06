@@ -1,0 +1,329 @@
+"""Offline desktop-control behavior; no Hermes, provider, DOM injection or paid calls.
+
+A small hook runner executes the real plain-ESM components and their event handlers.
+The browser harness under work/ additionally verifies layout with Hermes's React.
+"""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+
+CASES = [
+    "read-only expansion never starts paid work",
+    "anonymous review hides route metadata and records a choice",
+    "explicit reveal disables blind preference",
+    "revealed evidence distinguishes missing checks and served routes",
+    "rhythm preview needs explicit consent and invalidates on edits",
+    "rhythm fallback exports a reviewable command",
+    "rhythm undo uses the current configuration fingerprint",
+    "auction requires connected candidates and a budget preview",
+    "auction sends frozen input and explicit estimated-cap consent",
+    "auction retains failed and skipped routes with unknown cost",
+    "model discovery failure remains distinct from no connections",
+    "reread changes are explicit and chat-scoped",
+    "late reread responses cannot overwrite another chat",
+    "delegation consent is separate and never activates a backend",
+    "blocked rhythm proposals never expose a schedule command",
+    "auction discovery survives edits while it loads",
+    "qualified receipt totals exclude historical counterfactuals",
+    "heatmap keyboard inspection uses one tab stop",
+    "reasoning stays fixed and desktop imports remain public",
+]
+
+JS = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+let active;
+const hooks = {
+  useState(initial) {
+    const owner = active, index = owner.cursor++;
+    if (!(index in owner.slots)) owner.slots[index] = typeof initial === 'function' ? initial() : initial;
+    return [owner.slots[index], value => {
+      const next = typeof value === 'function' ? value(owner.slots[index]) : value;
+      if (!Object.is(next, owner.slots[index])) { owner.slots[index] = next; owner.dirty = true; }
+    }];
+  },
+  useRef(initial) {
+    const index = active.cursor++;
+    if (!(index in active.slots)) active.slots[index] = {current: initial};
+    return active.slots[index];
+  },
+  useEffect(effect, deps) {
+    const owner = active, index = owner.cursor++, previous = owner.slots[index];
+    if (!previous || !deps || deps.some((value, i) => !Object.is(value, previous.deps[i]))) {
+      owner.slots[index] = {deps};
+      owner.effects.push(() => {
+        if (previous && previous.cleanup) previous.cleanup();
+        owner.slots[index].cleanup = effect();
+      });
+    }
+  },
+  useCallback(callback, deps) {
+    const index = active.cursor++, previous = active.slots[index];
+    if (!previous || deps.some((value, i) => !Object.is(value, previous.deps[i]))) active.slots[index] = {deps, callback};
+    return active.slots[index].callback;
+  }
+};
+const jsx = (type, props = {}, key) => ({type, props, key});
+const sdk = {Codicon: () => null, ROUTES_AREA: 'routes', SIDEBAR_NAV_AREA: 'nav', host: {state: {}, notify: () => {}}, useValue: () => null};
+const sandbox = {...hooks, ...sdk, jsx, jsxs: jsx, Intl, Date, URLSearchParams, console};
+vm.createContext(sandbox);
+const code = source.replace(/^import .* from .*\n/gm, '').replace('export default {', 'const desktopPlugin = {');
+vm.runInContext(code + '\nthis.parts={BlindTasteTest,RhythmHeatmap,RhythmControl,ModelAuction,AuctionResult,RereadControls,DelegationControls,JobEvidence,ReceiptSummary,Hero};', sandbox);
+const plain = value => JSON.parse(JSON.stringify(value));
+function mount(name, props) {
+  const owner = {slots: [], effects: [], dirty: true, cursor: 0, tree: null, props};
+  owner.render = () => {
+    let attempts = 0;
+    do {
+      assert.ok(++attempts < 30, `render loop in ${name}`);
+      owner.dirty = false; owner.cursor = 0; active = owner;
+      owner.tree = sandbox.parts[name](owner.props);
+      active = null;
+      const effects = owner.effects.splice(0); effects.forEach(effect => effect());
+    } while (owner.dirty);
+    return owner.tree;
+  };
+  owner.flush = async () => {
+    for (let i = 0; i < 8; i++) { await Promise.resolve(); if (owner.dirty) owner.render(); }
+    await new Promise(resolve => setImmediate(resolve));
+    if (owner.dirty) owner.render();
+  };
+  owner.rerender = props => {owner.props = props; owner.dirty = true; owner.render();};
+  owner.dispose = () => owner.slots.forEach(slot => {if (slot && slot.cleanup) slot.cleanup();});
+  owner.render();
+  return owner;
+}
+function nodes(value, found = []) {
+  if (Array.isArray(value)) value.forEach(child => nodes(child, found));
+  else if (value && typeof value === 'object') {found.push(value); if (value.props) nodes(value.props.children, found);}
+  return found;
+}
+function text(value) {
+  if (Array.isArray(value)) return value.map(text).join(' ');
+  if (value && typeof value === 'object') return text(value.props && value.props.children);
+  return value == null || value === false ? '' : String(value);
+}
+const all = owner => nodes(owner.tree);
+const button = (owner, name) => all(owner).find(node => node.type === 'button' && text(node) === name);
+const click = (owner, name) => {
+  const control = button(owner, name); assert.ok(control, `Missing button: ${name}`);
+  assert.equal(!!control.props.disabled, false, `Disabled button: ${name}`);
+  control.props.onClick(); owner.render();
+};
+const input = (owner, title) => {
+  const label = all(owner).find(node => node.type === 'label' && text(node).trim().startsWith(title));
+  assert.ok(label, `Missing field: ${title}`);
+  const field = nodes(label).find(node => ['input', 'select', 'textarea'].includes(node.type));
+  assert.ok(field, `Missing input: ${title}`); return field;
+};
+const change = (owner, title, value) => {
+  const control = input(owner, title); assert.equal(!!control.props.disabled, false, `Disabled field: ${title}`);
+  control.props.onChange({target: {value, checked: value}}); owner.render();
+};
+function deferred() {let resolve; const promise = new Promise(done => {resolve = done;}); return {promise, resolve};}
+const basePolicy = {enabled:false,writes:false,results:false,batching:false,reasoning_unchanged:true};
+const inventory = {providers:[{slug:'cloud-one',name:'Cloud One',models:[{id:'model/a'},{id:'model/b'},{id:'model/c'}]},{slug:'cloud-two',name:'Cloud Two',models:[{id:'another/route'}]}]};
+const rhythm = {ok:true,job_id:'job-a',timezone:'UTC',config_fingerprint:'fingerprint-current',current_interval_minutes:30,
+  heatmap:[],evidence:{complete_observations:14,comparisons:13,span_days:8},recommendation:{interval_minutes:60,reason:'Review a longer interval.'},control:{supported:true,can_undo:true}};
+function makeContext(overrides = {}) {
+  const calls = [];
+  const ctx = {rest(path, options = {}) {
+    const base = path.split('?')[0], call = {path, base, method:options.method || 'GET', body:options.body}; calls.push(call);
+    if (overrides[`${call.method} ${base}`]) return Promise.resolve(overrides[`${call.method} ${base}`](call));
+    if (base === '/chat-models') return Promise.resolve(inventory);
+    if (base === '/auction') return Promise.resolve({ok:true,auctions:[]});
+    if (base === '/reread') return Promise.resolve({ok:true,policy:{...basePolicy}});
+    if (base === '/rhythm') return Promise.resolve({...rhythm});
+    if (base === '/delegation') return Promise.resolve({ok:true,enabled:false});
+    if (base === '/receipt') return Promise.resolve({sample_count:0});
+    if (base === '/compare') return Promise.resolve({available:true,execution_id:'run-a',latest_blind:null});
+    if (base === '/contract') return Promise.resolve({ok:true,contract:{}});
+    return Promise.resolve({ok:true});
+  }};
+  return {ctx,calls,posts:() => calls.filter(call => call.method === 'POST')};
+}
+const answers = {id:'comparison-a',status:'completed',samples:[{sample_index:0,A:{answer:'Answer alpha',status:'completed'},B:{answer:'Answer beta',status:'completed'}}],can_choose:true,choice:null,revealed:false};
+const results = [];
+async function test(name, run) {try {await run();results.push({name,ok:true});} catch(error) {results.push({name,ok:false,error:error.stack});}}
+(async () => {
+await test('read-only expansion never starts paid work', async () => {
+  for (const [name, title] of [['JobEvidence','▸ Evidence and controls'],['RhythmControl','▸ Rhythm · schedule frequency'],['ModelAuction','▸ Model auction · compare connected routes']]) {
+    const api = makeContext(); const view = mount(name, {ctx:api.ctx,jobId:'job-a',item:{job_id:'job-a'},onChanged:() => {}});
+    await view.flush(); assert.equal(api.calls.length,0); click(view,title); await view.flush(); assert.ok(api.calls.length); assert.equal(api.posts().length,0); view.dispose();
+  }
+});
+await test('anonymous review hides route metadata and records a choice', async () => {
+  const revealed = {...answers,choice:'A',revealed:true,can_choose:false,reveal:{experiment_label:'Model comparison',samples:[]}};
+  const api = makeContext({'POST /blind-choice':() => ({ok:true,comparison:revealed})});
+  const view = mount('BlindTasteTest',{ctx:api.ctx,comparison:{...answers,reveal:{private_model:'DO-NOT-REVEAL'}}});
+  await view.flush(); assert.ok(text(view.tree).includes('Answer alpha')); assert.ok(text(view.tree).includes('Answer beta'));
+  assert.ok(!text(view.tree).includes('DO-NOT-REVEAL')); assert.equal(api.posts().length,0);
+  click(view,'Prefer A'); await view.flush(); assert.deepEqual(plain(api.posts()[0].body),{comparison_id:'comparison-a',choice:'A'});
+  assert.ok(text(view.tree).includes('Your choice: Prefer A')); assert.equal(button(view,'Prefer B'),undefined); view.dispose();
+});
+await test('explicit reveal disables blind preference', async () => {
+  const api = makeContext({'POST /blind-reveal':() => ({ok:true,comparison:{...answers,revealed:true,can_choose:false,choice_eligible:false,reveal:{samples:[]}}})});
+  const view = mount('BlindTasteTest',{ctx:api.ctx,comparison:answers}); await view.flush();
+  click(view,'Reveal models, costs and checks'); await view.flush();
+  assert.deepEqual(plain(api.posts()[0].body),{comparison_id:'comparison-a'});
+  assert.ok(text(view.tree).includes('does not count as a blind preference')); assert.equal(button(view,'Prefer A'),undefined); view.dispose();
+});
+await test('revealed evidence distinguishes missing checks and served routes', async () => {
+  const view = mount('BlindTasteTest',{ctx:makeContext().ctx,comparison:{...answers,revealed:true,can_choose:false,reveal:{experiment_label:'Model comparison',samples:[{A:{requested:{route:'main'},answered_by:{provider:'actual-provider',model:'actual-model'},cost:{actual_usd:0},validation:{ok:true,configured:false}},B:{cost:{actual_usd:null,estimated_usd:null},validation:{ok:false,configured:true}}}]}}});
+  await view.flush(); const content = text(view.tree);
+  assert.ok(content.includes('actual-provider / actual-model')); assert.ok(content.includes('No task-specific checks configured'));
+  assert.ok(content.includes('$0.00 recorded')); assert.ok(content.includes('Unknown cost')); view.dispose();
+});
+await test('rhythm preview needs explicit consent and invalidates on edits', async () => {
+  const api = makeContext({'POST /rhythm-preview':call => ({...rhythm,interval_minutes:call.body.interval_minutes,can_apply:true,projection:{horizon_days:30,current_scheduled_invocations:1440,proposed_scheduled_invocations:720,estimated_avoided_usd:0.5}}),'POST /rhythm':() => ({ok:true,applied:true,message:'Applied.'})});
+  const view = mount('RhythmControl',{ctx:api.ctx,jobId:'job-a'}); click(view,'▸ Rhythm · schedule frequency'); await view.flush();
+  assert.equal(input(view,'This job is a noncritical').props.checked,false); change(view,'This job is a noncritical',true); change(view,'Maximum acceptable delay','120');
+  click(view,'Preview frequency change'); await view.flush(); assert.equal(button(view,'Apply this schedule').props.disabled,true);
+  change(view,'I approve running this job',true); change(view,'Proposed frequency',6); assert.equal(button(view,'Apply this schedule'),undefined);
+  click(view,'Preview frequency change'); await view.flush(); assert.equal(button(view,'Apply this schedule').props.disabled,true);
+  change(view,'I approve running this job',true); click(view,'Apply this schedule'); await view.flush();
+  const body = api.posts().find(call => call.base === '/rhythm').body;
+  assert.equal(body.confirmed,true); assert.equal(body.noncritical,true); assert.equal(body.allowed_staleness_minutes,120); assert.equal(body.expected_config_fingerprint,'fingerprint-current');
+  assert.equal(api.posts().filter(call => call.base === '/rhythm').length,1); view.dispose();
+});
+await test('rhythm fallback exports a reviewable command', async () => {
+  const report = {...rhythm,control:{supported:false,can_undo:false,mode:'export_only',reason:'No verified CLI.'}};
+  const api = makeContext({'GET /rhythm':() => report,'POST /rhythm-preview':() => ({...report,can_apply:false,can_export:true,projection:{horizon_days:30},export:{argv:['hermes','cron','edit','job-a','--schedule','every 60m']}})});
+  const view = mount('RhythmControl',{ctx:api.ctx,jobId:'job-a'}); click(view,'▸ Rhythm · schedule frequency'); await view.flush(); click(view,'Preview frequency change'); await view.flush();
+  assert.equal(button(view,'Apply this schedule'),undefined); assert.ok(text(view.tree).includes("hermes cron edit job-a --schedule 'every 60m'"));
+  assert.ok(text(view.tree).includes('has not changed the job')); assert.equal(api.posts().some(call => call.base === '/rhythm'),false); view.dispose();
+});
+await test('rhythm undo uses the current configuration fingerprint', async () => {
+  const api = makeContext({'POST /rhythm-undo':() => ({ok:true,undone:true})});
+  const view = mount('RhythmControl',{ctx:api.ctx,jobId:'job-a'}); click(view,'▸ Rhythm · schedule frequency'); await view.flush(); click(view,'Undo Rhythm schedule change'); await view.flush();
+  assert.deepEqual(plain(api.posts()[0].body),{job_id:'job-a',confirmed:true,expected_config_fingerprint:'fingerprint-current'}); view.dispose();
+});
+async function auctionView(api) {
+  const view = mount('ModelAuction',{ctx:api.ctx,jobId:'job-a'}); click(view,'▸ Model auction · compare connected routes'); await view.flush();
+  change(view,'model/a',true); change(view,'model/b',true); change(view,'Total cost cap','1'); return view;
+}
+const auctionPreview = {ok:true,available:true,models:[{},{}],execution_id:'execution-frozen',input_sha256:'sha-frozen',cost_cap_usd:1,estimated_reservation_usd:0.1};
+await test('auction requires connected candidates and a budget preview', async () => {
+  const api = makeContext({'POST /auction-preview':() => auctionPreview}); const view = mount('ModelAuction',{ctx:api.ctx,jobId:'job-a'});
+  click(view,'▸ Model auction · compare connected routes'); await view.flush();
+  assert.equal(button(view,'Preview auction budget').props.disabled,true); assert.equal(input(view,'Use an estimated cap').props.checked,false);
+  change(view,'model/a',true); change(view,'model/b',true); assert.equal(button(view,'Preview auction budget').props.disabled,true);
+  change(view,'Total cost cap','1'); click(view,'Preview auction budget'); await view.flush();
+  assert.equal(button(view,'Run paid model auction').props.disabled,true); change(view,'I approve paid calls',true);
+  change(view,'Total cost cap','2'); assert.equal(button(view,'Run paid model auction'),undefined);
+  assert.equal(api.posts().filter(call => call.base === '/auction').length,0); assert.equal(api.posts()[0].body.accept_estimated_cap,false); view.dispose();
+});
+await test('auction sends frozen input and explicit estimated-cap consent', async () => {
+  const api = makeContext({'POST /auction-preview':() => auctionPreview,'POST /auction':() => ({ok:true,auction:{id:'auction-a',status:'completed',scoreboard:[],calls:[]}})});
+  const view = await auctionView(api); change(view,'Use an estimated cap',true); click(view,'Preview auction budget'); await view.flush(); change(view,'I approve paid calls',true); click(view,'Run paid model auction'); await view.flush();
+  const body = api.posts().find(call => call.base === '/auction').body;
+  assert.deepEqual(plain(body),{job_id:'job-a',models:[{provider:'cloud-one',model:'model/a'},{provider:'cloud-one',model:'model/b'}],cost_cap_usd:1,max_tokens:1024,accept_estimated_cap:true,confirmed:true,execution_id:'execution-frozen',expected_input_sha256:'sha-frozen'});
+  assert.equal(api.posts().filter(call => call.base === '/auction').length,1); view.dispose();
+});
+await test('auction retains failed and skipped routes with unknown cost', async () => {
+  const record = {id:'auction-failed',status:'stopped_unknown_spend',scoreboard:[{index:0,provider:'cloud-one',model:'model/a',status:'failed',cost:{actual_usd:null,estimated_usd:null},structural_checks:{ok:false,configured:true}},{index:1,provider:'cloud-one',model:'model/b',status:'skipped',cost:null}],calls:[{index:0,status:'failed',error:'Failure retained',requested:{provider:'cloud-one',model:'model/a'}}]};
+  const api = makeContext({'POST /auction-preview':() => auctionPreview,'POST /auction':() => ({ok:false,auction:record,message:'Stopped.'})});
+  const view = await auctionView(api); click(view,'Preview auction budget'); await view.flush(); change(view,'I approve paid calls',true); click(view,'Run paid model auction'); await view.flush();
+  const result = all(view).find(node => node.type === sandbox.parts.AuctionResult); assert.ok(result); assert.deepEqual(plain(result.props.auction),record);
+  const receipt = mount('AuctionResult',{auction:result.props.auction,ctx:api.ctx}); await receipt.flush(); const content=text(receipt.tree);
+  assert.ok(content.includes('failed')); assert.ok(content.includes('skipped')); assert.ok(content.includes('Unknown cost')); assert.ok(content.includes('Calls already made may still be charged'));
+  assert.equal(api.posts().filter(call => call.base === '/auction').length,1); view.dispose(); receipt.dispose();
+});
+await test('model discovery failure remains distinct from no connections', async () => {
+  const api = makeContext({'GET /chat-models':() => Promise.reject(new Error('offline'))});
+  const view = mount('ModelAuction',{ctx:api.ctx,jobId:'job-a'}); click(view,'▸ Model auction · compare connected routes'); await view.flush();
+  assert.ok(text(view.tree).includes('Connected model discovery failed')); assert.ok(!text(view.tree).includes('No connected models were returned')); assert.equal(api.posts().length,0); view.dispose();
+});
+await test('reread changes are explicit and chat-scoped', async () => {
+  const api = makeContext({'POST /reread':call => ({ok:true,policy:call.body})});
+  const view = mount('RereadControls',{ctx:api.ctx,sessionId:'chat-a',chatEnabled:true}); await view.flush();
+  assert.equal(input(view,'Enable re-read').props.checked,false); change(view,'Enable re-read',true); change(view,'Completed file-write',true); change(view,'Suggest batching',true);
+  assert.equal(api.posts().length,0); click(view,'Save re-read choices'); await view.flush();
+  assert.deepEqual(plain(api.posts()[0].body),{session_id:'chat-a',enabled:true,writes:true,results:false,batching:true});
+  assert.ok(text(view.tree).includes('Reasoning text is preserved in full')); assert.equal(button(view,'Save re-read choices').props.disabled,true); view.dispose();
+});
+await test('late reread responses cannot overwrite another chat', async () => {
+  const slow = deferred();
+  const api = makeContext({'GET /reread':call => call.path.includes('chat-a') ? slow.promise : {ok:true,policy:{...basePolicy}}});
+  const view = mount('RereadControls',{ctx:api.ctx,sessionId:'chat-a',chatEnabled:true});
+  view.rerender({ctx:api.ctx,sessionId:'chat-b',chatEnabled:false}); await view.flush();
+  slow.resolve({ok:true,policy:{enabled:true,writes:true,results:true,batching:true}}); await view.flush();
+  assert.equal(input(view,'Enable re-read').props.checked,false); change(view,'Enable re-read',true); click(view,'Save re-read choices'); await view.flush();
+  assert.equal(api.posts()[0].body.session_id,'chat-b'); assert.equal(api.posts()[0].body.writes,false); view.dispose();
+});
+await test('delegation consent is separate and never activates a backend', async () => {
+  const api = makeContext({'POST /delegation':call => ({ok:true,...call.body})});
+  const view = mount('DelegationControls',{ctx:api.ctx,picked:{provider:'cloud-one',model:'model/a'}}); await view.flush(); assert.equal(api.calls.length,0);
+  click(view,'▸ Optional delegation backend'); await view.flush(); change(view,'Permit this selected helper',true);
+  assert.equal(button(view,'Save profile delegation consent').props.disabled,true); assert.equal(api.posts().length,0);
+  change(view,'I approve saving this profile-wide',true); click(view,'Save profile delegation consent'); await view.flush();
+  assert.deepEqual(plain(api.posts()[0].body),{enabled:true,provider:'cloud-one',model:'model/a',confirmed:true});
+  assert.ok(text(view.tree).includes('Saving consent does not select the backend')); assert.equal(api.posts().length,1); view.dispose();
+});
+
+await test('blocked rhythm proposals never expose a schedule command', async () => {
+  const api = makeContext({'POST /rhythm-preview':() => ({...rhythm,can_apply:false,can_export:false,blockers:['This action job is excluded.'],projection:{horizon_days:30},export:{argv:['hermes','cron','edit','job-a','--schedule','every 60m']}})});
+  const view = mount('RhythmControl',{ctx:api.ctx,jobId:'job-a'}); click(view,'▸ Rhythm · schedule frequency'); await view.flush(); click(view,'Preview frequency change'); await view.flush();
+  assert.ok(text(view.tree).includes('This action job is excluded.')); assert.ok(!text(view.tree).includes('hermes cron edit')); assert.equal(button(view,'Apply this schedule'),undefined); view.dispose();
+});
+await test('auction discovery survives edits while it loads', async () => {
+  const slow = deferred(); const api = makeContext({'GET /chat-models':() => slow.promise});
+  const view = mount('ModelAuction',{ctx:api.ctx,jobId:'job-a'}); click(view,'▸ Model auction · compare connected routes');
+  change(view,'Total cost cap','1'); slow.resolve(inventory); await view.flush();
+  assert.ok(input(view,'model/a')); assert.equal(input(view,'Total cost cap').props.value,'1'); assert.equal(api.posts().length,0); view.dispose();
+});
+await test('qualified receipt totals exclude historical counterfactuals', async () => {
+  const view = mount('ReceiptSummary',{receipt:{sample_count:4,preferred_basis:'estimated',net_payback_usd:999,historical_savings_usd:1000,qualified_efficiency_savings_usd:null,qualified_net_payback_usd:null,efficiency_savings_proven:false,cost_bases:{estimated:{historical_savings_usd:1000,overhead_usd:1,unproven_settings_comparison_count:4}}}});
+  await view.flush(); const tiles=all(view).filter(node=>node.type && node.type.name==='Tile');
+  assert.equal(tiles.find(node=>node.props.title==='Qualified reduction').props.value,'Unknown');
+  assert.equal(tiles.find(node=>node.props.title==='Qualified net').props.value,'Unknown');
+  assert.ok(text(view.tree).includes('Historical counterfactual: $1000.00')); assert.ok(text(view.tree).includes('Efficiency savings are not established')); view.dispose();
+});
+await test('heatmap keyboard inspection uses one tab stop', async () => {
+  const view = mount('RhythmHeatmap',{timezone:'UTC',heatmap:[{weekday:1,hour:1,observations:3,comparisons:2,changes:1}]});
+  const group=all(view).find(node=>node.type==='div' && node.props.role==='group'); assert.equal(group.props.tabIndex,0);
+  assert.ok(all(view).filter(node=>node.type==='button').every(node=>node.props.tabIndex===-1));
+  const press=key=>{const current=all(view).find(node=>node.type==='div' && node.props.role==='group');current.props.onKeyDown({key,preventDefault:()=>{}});view.render();};
+  press('ArrowDown'); press('ArrowRight'); assert.ok(text(view.tree).includes('Tue 01:00: 3 observations, 2 comparisons, 1 changes')); view.dispose();
+});
+await test('reasoning stays fixed and desktop imports remain public', async () => {
+  assert.equal(source.includes('/reasoning-setting'),false); assert.equal(source.includes('Reasoning: also try lower'),false);
+  assert.ok(source.includes('Trials keep your main model’s reasoning setting'));
+  const imports = [...source.matchAll(/^import .* from '([^']+)'/gm)].map(match => match[1]);
+  assert.deepEqual(imports,['@hermes/plugin-sdk','react','react/jsx-runtime']);
+  for (const forbidden of ['dangerouslySetInnerHTML','querySelector','MutationObserver','createElement(','innerHTML']) assert.equal(source.includes(forbidden),false,forbidden);
+});
+process.stdout.write(JSON.stringify(results));
+})().catch(error => {console.error(error);process.exitCode=1;});
+"""
+
+
+@pytest.fixture(scope="module")
+def ui_results():
+    node = os.environ.get("CRYSTALLIZE_TEST_NODE") or shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required for the offline desktop behavior checks")
+    completed = subprocess.run(
+        [node, "-e", JS, str(ROOT / "desktop" / "plugin.js")],
+        capture_output=True, text=True, timeout=25, check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    results = json.loads(completed.stdout)
+    assert [result["name"] for result in results] == CASES
+    return {result["name"]: result for result in results}
+
+
+@pytest.mark.parametrize("case", CASES)
+def test_completion_controls(case, ui_results):
+    result = ui_results[case]
+    assert result["ok"], result.get("error", case)

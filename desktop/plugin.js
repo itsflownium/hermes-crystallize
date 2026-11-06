@@ -105,7 +105,7 @@ const field = (title, input) => jsxs('label', {
 
 const actionButton = (text, onClick, disabled = false) => jsx('button', {
   type: 'button', onClick, disabled,
-  style: { ...fieldStyle, width: 'auto', cursor: disabled ? 'wait' : 'pointer', color: disabled ? C.muted : C.accent },
+  style: { ...fieldStyle, width: 'auto', cursor: disabled ? 'not-allowed' : 'pointer', color: disabled ? C.muted : C.accent },
   children: text
 })
 
@@ -114,6 +114,499 @@ const rawDetails = (title, value) => value ? jsxs('details', {
   children: [jsx('summary', { style: { cursor: 'pointer' }, children: title }),
     jsx('pre', { style: { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 260, overflowY: 'auto', fontSize: '0.625rem' }, children: JSON.stringify(value, null, 2) })]
 }) : null
+
+// All completion controls use public React and the plugin REST bridge.
+const panelStyle = { display: 'flex', flexDirection: 'column', gap: 7 }
+const buttonsStyle = { display: 'flex', flexWrap: 'wrap', gap: 6 }
+const statusLine = (text, color = C.soft) => jsx('div', { role: 'status', 'aria-live': 'polite', children: small(text, color) })
+const checkField = (title, checked, onChange, disabled = false, detail = null) => jsxs('label', {
+  style: { display: 'flex', alignItems: 'flex-start', gap: 7, color: disabled ? C.muted : C.soft, fontSize: '0.75rem', cursor: disabled ? 'default' : 'pointer' },
+  children: [jsx('input', { type: 'checkbox', checked, disabled, onChange: e => onChange(e.target.checked), style: { margin: '2px 0 0', flexShrink: 0 } }),
+    jsxs('span', { children: [title, detail ? small(detail) : null] })]
+})
+const sectionButton = (title, open, onClick) => jsx('button', {
+  type: 'button', 'aria-expanded': open, onClick,
+  style: { border: 'none', background: 'none', padding: '3px 0', textAlign: 'left', color: C.accent, cursor: 'pointer', fontSize: '0.75rem' },
+  children: `${open ? '▾' : '▸'} ${title}`
+})
+const errorText = (res, fallback) => res && (res.message || res.error || res.why) || fallback
+const blindValue = res => res && (res.comparison || res.blind || res)
+const intervalText = minutes => minutes >= 1440 && minutes % 1440 === 0 ? `${minutes / 1440} day${minutes === 1440 ? '' : 's'}`
+  : minutes >= 60 && minutes % 60 === 0 ? `${minutes / 60} hour${minutes === 60 ? '' : 's'}` : `${minutes} min`
+const costText = cost => cost && cost.actual_usd != null ? `${money(cost.actual_usd)} recorded`
+  : cost && cost.estimated_usd != null ? `${money(cost.estimated_usd)} estimated` : 'Unknown cost'
+function localTimezone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } catch { return 'UTC' }
+}
+
+// Never derive A/B identities from the original/candidate preview. The backend
+// persists the randomized mapping and sends only anonymous fields until reveal.
+function BlindTasteTest({ ctx, comparison: incoming, onChanged = () => {} }) {
+  const id = incoming && incoming.id
+  const [comparison, setComparison] = useState(incoming)
+  const [pending, setPending] = useState(null)
+  const [error, setError] = useState(null)
+  const scope = useRequestScope(id)
+  const running = useRef(false)
+  useEffect(() => { setComparison(incoming); setError(null) }, [incoming])
+  if (!comparison || !id) return null
+  const save = (path, choice = null) => {
+    if (running.current) return
+    running.current = true
+    setPending(choice || 'reveal')
+    setError(null)
+    ctx.rest(path, { method: 'POST', body: { comparison_id: id, ...(choice ? { choice } : {}) } }).then(res => {
+      if (scope.current.scope !== id) return
+      const next = blindValue(res)
+      if (!res || res.ok === false || !next || next.id !== id) setError(errorText(res, 'Could not save this review.'))
+      else { setComparison(next); onChanged(next) }
+    }).catch(() => { if (scope.current.scope === id) setError('Could not save this review. Try again when the backend is available.') })
+      .finally(() => { running.current = false; if (scope.current.scope === id) setPending(null) })
+  }
+  const choices = [['A', 'Prefer A'], ['B', 'Prefer B'], ['tie', 'About equal'], ['neither', 'Neither works']]
+  const selected = choices.find(([key]) => key === comparison.choice)
+  const canChoose = comparison.can_choose === true && !comparison.revealed && !comparison.choice
+  const reveal = comparison.revealed === true ? comparison.reveal : null
+  return jsxs('div', {
+    style: { ...panelStyle, padding: 9, border: `0.5px solid ${C.stroke}`, borderRadius: 9 },
+    children: [
+      row('Side-by-side taste test', chip(comparison.revealed ? 'Revealed' : 'Anonymous A / B', comparison.revealed ? C.muted : C.accent)),
+      small('Read both answers from the same captured input, then choose what works better for your task. A preference is your judgment; recorded checks assess specific requirements.', C.soft),
+      ...(comparison.samples || []).map((sample, i) => jsxs('div', { key: sample.sample_index ?? i, style: panelStyle, children: [
+        (comparison.samples || []).length > 1 ? label(`Sample ${i + 1}`) : null,
+        jsx('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7 }, children: ['A', 'B'].map(side => {
+          const answer = sample[side] || {}
+          return jsxs('article', { key: side, 'aria-label': `Answer ${side}, sample ${i + 1}`, style: { minWidth: 0, border: `0.5px solid ${C.stroke}`, borderRadius: 7, padding: 8, display: 'flex', flexDirection: 'column', gap: 5 }, children: [
+            jsx('strong', { style: { color: C.text, fontSize: '0.8125rem' }, children: side }),
+            jsx('pre', { tabIndex: 0, 'aria-label': `Full answer ${side}, sample ${i + 1}`, style: { margin: 0, color: C.text, fontFamily: 'inherit', fontSize: '0.75rem', lineHeight: 1.55, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 360, overflowY: 'auto' }, children: answer.answer || `Answer unavailable${answer.status ? ` (${answer.status})` : ''}.` })
+          ] })
+        }) })
+      ] })),
+      selected ? statusLine(`Your choice: ${selected[1]}. ${comparison.revealed ? '' : 'Reveal when you are ready.'}`, C.green) : null,
+      canChoose ? jsx('div', { style: buttonsStyle, children: choices.map(([choice, title]) => jsx('button', {
+        key: choice, type: 'button', onClick: () => save('/blind-choice', choice), disabled: !!pending,
+        style: { ...fieldStyle, width: 'auto', cursor: pending ? 'wait' : 'pointer', color: C.accent }, children: pending === choice ? 'Saving choice…' : title
+      })) }) : null,
+      !comparison.revealed ? actionButton(pending === 'reveal' ? 'Revealing…' : 'Reveal models, costs and checks', () => save('/blind-reveal'), !!pending) : null,
+      !comparison.choice && !comparison.revealed ? small('Revealing before a choice records this as an unblinded review.') : null,
+      comparison.revealed && !comparison.choice ? small('Revealed before a choice. This review does not count as a blind preference.', C.yellow) : null,
+      comparison.notice ? small(comparison.notice) : null,
+      reveal ? jsxs('div', { style: { ...panelStyle, borderTop: `0.5px solid ${C.stroke}`, paddingTop: 6 }, children: [
+        label('Revealed evidence'),
+        reveal.experiment_label ? small(reveal.experiment_label, C.soft) : reveal.experiment_kind ? small(String(reveal.experiment_kind).replaceAll('_', ' '), C.soft) : null,
+        ...(reveal.samples || []).map((sample, i) => jsx('div', { key: sample.sample_index ?? i, style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7 }, children: ['A', 'B'].map(side => {
+          const entry = sample[side] || {}
+          const requested = entry.requested || {}
+          const served = entry.answered_by || {}
+          const route = [served.provider || requested.provider, served.model || requested.model].filter(Boolean).join(' / ') || 'Route identity unavailable'
+          const validation = entry.validation || {}
+          return jsxs('div', { key: side, style: panelStyle, children: [
+            small(`${side}: ${route}`, C.text), small(costText(entry.cost), C.soft),
+            small(validation.task_checks_configured === false || validation.configured === false || validation.check_count === 0 ? 'No task-specific checks configured' : validation.ok === true || validation.pass === true ? 'Recorded structural checks passed' : validation.ok === false || validation.pass === false ? 'Recorded checks failed' : 'Check outcome unavailable', validation.ok === false || validation.pass === false ? C.yellow : C.soft)
+          ] })
+        }) })),
+        small('Answer-only evidence. A taste test does not verify tool execution or every future input.'),
+        rawDetails('Full revealed receipt and audit', reveal)
+      ] }) : null,
+      error ? statusLine(error, C.yellow) : null
+    ]
+  })
+}
+
+function RhythmHeatmap({ heatmap = [], timezone }) {
+  const [picked, setPicked] = useState(null)
+  const [focusedCell, setFocusedCell] = useState(0)
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const cells = new Map(heatmap.map(cell => [`${cell.weekday}:${cell.hour}`, cell]))
+  const max = Math.max(1, ...heatmap.map(cell => Number(cell.changes) || 0))
+  const describe = (cell, day, hour) => `${days[day]} ${String(hour).padStart(2, '0')}:00: ${cell.observations || 0} observations, ${cell.comparisons || 0} comparisons, ${cell.changes || 0} changes`
+  const inspect = index => {
+    setFocusedCell(index)
+    const day = Math.floor(index / 24), hour = index % 24
+    setPicked(describe(cells.get(`${day}:${hour}`) || {}, day, hour))
+  }
+  const navigate = event => {
+    const next = { ArrowLeft: Math.max(0, focusedCell - 1), ArrowRight: Math.min(167, focusedCell + 1),
+      ArrowUp: Math.max(0, focusedCell - 24), ArrowDown: Math.min(167, focusedCell + 24),
+      Home: Math.floor(focusedCell / 24) * 24, End: Math.floor(focusedCell / 24) * 24 + 23 }[event.key]
+    if (next != null) { event.preventDefault(); inspect(next) }
+  }
+  return jsxs('div', { style: panelStyle, children: [
+    small(`Recorded change activity · ${timezone || 'UTC'}`, C.soft),
+    jsx('div', { style: { overflowX: 'auto' }, children: jsxs('div', { role: 'group', tabIndex: 0, 'aria-label': 'Change activity by weekday and hour. Use arrow keys to inspect cells; Home and End move within a day.', onKeyDown: navigate, onFocus: event => { if (event.target === event.currentTarget) inspect(focusedCell) }, style: { display: 'grid', gridTemplateColumns: '28px repeat(24, minmax(8px, 1fr))', gap: 2, minWidth: 286 }, children: [
+      jsx('span', {}), ...Array.from({ length: 24 }, (_, hour) => jsx('span', { key: `hour-${hour}`, 'aria-hidden': true, style: { color: C.muted, fontSize: '0.5rem', textAlign: 'center' }, children: hour % 6 === 0 ? String(hour) : '' })),
+      ...days.flatMap((day, index) => [jsx('span', { key: day, style: { color: C.muted, fontSize: '0.5625rem', lineHeight: '12px' }, children: day }),
+        ...Array.from({ length: 24 }, (_, hour) => {
+          const cell = cells.get(`${index}:${hour}`) || {}
+          const observed = cell.observations > 0
+          const text = describe(cell, index, hour)
+          const changed = cell.changes > 0
+          return jsx('button', { key: `${day}-${hour}`, type: 'button', tabIndex: -1, title: text, 'aria-label': text,
+            onFocus: () => inspect(index * 24 + hour), onMouseEnter: () => inspect(index * 24 + hour), onClick: () => inspect(index * 24 + hour),
+            style: { padding: 0, height: 12, minWidth: 8, border: `0.5px ${observed ? 'solid' : 'dashed'} ${C.stroke}`, borderRadius: 2, background: changed ? C.green : observed ? C.stroke : 'transparent', opacity: changed ? 0.4 + 0.6 * (cell.changes / max) : observed ? 0.65 : 0.35, cursor: 'help' } })
+        })])
+    ] }) }),
+    statusLine(picked || 'Use arrow keys on the grid, or hover a cell, for its recorded counts.'),
+    small('Dashed: no observations · Gray: observed · Green: changes. Empty cells provide no evidence about activity.')
+  ] })
+}
+
+function RhythmControl({ ctx, jobId, onChanged = () => {} }) {
+  const [open, setOpen] = useState(false)
+  const [data, setData] = useState(null)
+  const [interval, setIntervalMinutes] = useState(60)
+  const [staleness, setStaleness] = useState('60')
+  const [noncritical, setNoncritical] = useState(false)
+  const [preview, setPreview] = useState(null)
+  const [confirmed, setConfirmed] = useState(false)
+  const [pending, setPending] = useState(null)
+  const [error, setError] = useState(null)
+  const [message, setMessage] = useState(null)
+  const [timezone] = useState(localTimezone)
+  const scope = useRequestScope(jobId)
+  const running = useRef(false)
+  const load = useCallback(() => {
+    if (!open || !jobId) return
+    const version = ++scope.current.version
+    setPreview(null); setConfirmed(false)
+    return ctx.rest(`/rhythm?job_id=${encodeURIComponent(jobId)}&timezone=${encodeURIComponent(timezone)}`).then(res => {
+      if (scope.current.scope !== jobId || scope.current.version !== version) return
+      if (!res || res.ok === false || res.error) { setData(null); setError(errorText(res, 'Could not load Rhythm.')); return }
+      setData(res); setError(null)
+      const initial = res.recommendation && res.recommendation.interval_minutes || res.current_interval_minutes || 60
+      setIntervalMinutes(initial); setStaleness(String(initial))
+    }).catch(() => { if (scope.current.scope === jobId && scope.current.version === version) { setData(null); setError('Could not load Rhythm. Retry when the backend is available.') } })
+  }, [ctx, open, jobId, timezone])
+  useEffect(() => { load(); return () => { scope.current.version += 1 } }, [load])
+  const invalidate = () => { setPreview(null); setConfirmed(false); setMessage(null); scope.current.version += 1 }
+  const submit = path => {
+    if (running.current || !data) return
+    if (path === '/rhythm' && (!preview || !preview.can_apply || !confirmed)) return
+    const minutes = Number(staleness)
+    if (!Number.isFinite(minutes) || minutes <= 0) { setError('Enter the maximum acceptable delay in minutes.'); return }
+    running.current = true
+    scope.current.version += 1
+    const version = scope.current.version
+    const fingerprint = preview && preview.config_fingerprint || data.config_fingerprint
+    const body = { job_id: jobId, interval_minutes: interval, timezone, noncritical,
+      allowed_staleness_minutes: minutes, ...(path === '/rhythm-preview' ? {} : { confirmed: true, expected_config_fingerprint: fingerprint }) }
+    setPending(path); setError(null); setMessage(null)
+    ctx.rest(path, { method: 'POST', body }).then(res => {
+      if (scope.current.scope !== jobId || scope.current.version !== version) return
+      if (!res || res.ok === false || res.error) { setError(errorText(res, 'Could not update this schedule.')); return }
+      if (path === '/rhythm-preview') { setData(res); setPreview(res); setConfirmed(false) }
+      else { setMessage(res.message || 'Schedule updated.'); setPreview(null); setConfirmed(false); onChanged(); return load() }
+    }).catch(() => { if (scope.current.scope === jobId && scope.current.version === version) setError('Could not finish this request. Refresh the schedule before trying again.') })
+      .finally(() => { running.current = false; if (scope.current.scope === jobId) setPending(null) })
+  }
+  const undo = () => {
+    if (running.current || !data || !data.control || !data.control.can_undo) return
+    running.current = true; setPending('/rhythm-undo'); setError(null)
+    const version = ++scope.current.version
+    ctx.rest('/rhythm-undo', { method: 'POST', body: { job_id: jobId, confirmed: true, expected_config_fingerprint: data.config_fingerprint } }).then(res => {
+      if (scope.current.scope !== jobId || scope.current.version !== version) return
+      if (!res || res.ok === false) setError(errorText(res, 'Could not restore this schedule.'))
+      else { setMessage(res.message || 'Previous schedule restored.'); setPreview(null); setConfirmed(false); onChanged(); return load() }
+    }).catch(() => { if (scope.current.scope === jobId && scope.current.version === version) setError('Could not restore the schedule. Refresh before trying again.') })
+      .finally(() => { running.current = false; if (scope.current.scope === jobId) setPending(null) })
+  }
+  const choices = [...new Set([5, 10, 15, 30, 60, 120, 240, 360, 720, 1440, 10080, interval, data && data.current_interval_minutes].filter(v => Number.isFinite(v) && v > 0))].sort((a, b) => a - b)
+  const projection = preview && preview.projection
+  const control = data && data.control || {}
+  return jsxs('div', { style: { ...panelStyle, borderTop: `0.5px solid ${C.stroke}`, paddingTop: 5 }, children: [
+    sectionButton('Rhythm · schedule frequency', open, () => setOpen(v => !v)),
+    ...(open ? [
+      small('Use observed changes to propose how often this job runs. Fewer checks can delay new information; the projection does not predict future changes.', C.soft),
+      !data && !error ? statusLine('Loading recorded activity…') : null,
+      data ? jsx(RhythmHeatmap, { heatmap: data.heatmap || [], timezone: data.timezone }) : null,
+      data ? small(`${data.evidence && data.evidence.complete_observations || 0} complete observations · ${data.evidence && data.evidence.comparisons || 0} comparisons · ${data.evidence && data.evidence.span_days || 0} days`, C.soft) : null,
+      data && data.recommendation ? small(`Suggested: every ${intervalText(data.recommendation.interval_minutes)}. ${data.recommendation.reason || ''}`, C.accent) : data ? small('No automatic frequency suggestion for this job. Review the evidence and any restrictions below.') : null,
+      ...(data && data.eligibility && data.eligibility.blockers || []).map((text, i) => jsx('div', { key: `eligibility-${i}`, children: small(text, C.yellow) })),
+      data ? field(`Proposed frequency: every ${intervalText(interval)}`, jsx('input', { type: 'range', min: 0, max: choices.length - 1, step: 1, value: choices.indexOf(interval), disabled: !!pending,
+        'aria-label': 'Proposed schedule frequency', 'aria-valuetext': `Every ${intervalText(interval)}`, onChange: e => { invalidate(); setIntervalMinutes(choices[Number(e.target.value)]) }, style: { width: '100%', accentColor: C.accent } })) : null,
+      data && data.current_interval_minutes ? small(`Current schedule: every ${intervalText(data.current_interval_minutes)}`) : null,
+      data ? checkField(data.acknowledgement || 'This job is a noncritical latest-state snapshot. It does not require every transient event, notification, deadline or action, and the maximum delay below is acceptable.', noncritical, value => { invalidate(); setNoncritical(value) }, !!pending) : null,
+      data ? field('Maximum acceptable delay (minutes)', jsx('input', { type: 'number', min: 1, max: 525600, step: 1, value: staleness, disabled: !!pending, style: fieldStyle, onChange: e => { invalidate(); setStaleness(e.target.value) } })) : null,
+      data ? actionButton(pending === '/rhythm-preview' ? 'Calculating projection…' : 'Preview frequency change', () => submit('/rhythm-preview'), !!pending) : null,
+      projection ? jsxs('div', { style: { ...panelStyle, padding: 8, borderRadius: 7, background: C.tile }, children: [
+        label(`Projection · next ${projection.horizon_days || 30} days`),
+        small(`${projection.current_scheduled_invocations ?? 'Unknown'} → ${projection.proposed_scheduled_invocations ?? 'Unknown'} scheduled checks`, C.text),
+        projection.avoided_scheduled_invocations != null ? small(`${Math.abs(projection.avoided_scheduled_invocations)} ${projection.avoided_scheduled_invocations < 0 ? 'more' : 'fewer'} scheduled invocations in this projection.`, C.soft) : null,
+        small(`${money(projection.estimated_avoided_usd)} estimated cost reduction. Actual changes, run costs and savings may differ.`, C.soft),
+        ...(preview.blockers || []).map((text, i) => jsx('div', { key: i, children: small(text, C.yellow) })),
+        preview.can_apply ? checkField(`I approve running this job every ${intervalText(interval)} with up to ${staleness} minutes of delay`, confirmed, setConfirmed, !!pending) : null,
+        preview.can_apply ? actionButton(pending === '/rhythm' ? 'Applying…' : 'Apply this schedule', () => submit('/rhythm'), !!pending || !confirmed) : null,
+        !preview.can_apply && preview.can_export === true && preview.export && preview.export.argv ? jsxs('div', { style: panelStyle, children: [
+          small('Schedule suggestion for review in Hermes. This preview has not changed the job.', C.soft),
+          jsx('pre', { tabIndex: 0, 'aria-label': 'Exported schedule command', style: { ...fieldStyle, margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: '0.6875rem' }, children: preview.export.argv.map(arg => /^[A-Za-z0-9_./:=@-]+$/.test(String(arg)) ? arg : `'${String(arg).replaceAll("'", "'\\''")}'`).join(' ') })
+        ] }) : null,
+        control.concurrency_limit ? small(control.concurrency_limit, C.yellow) : null
+      ] }) : null,
+      control.reason && !control.supported ? small(control.reason, C.soft) : null,
+      control.can_undo ? actionButton(pending === '/rhythm-undo' ? 'Restoring…' : 'Undo Rhythm schedule change', undo, !!pending) : null,
+      data && data.evidence ? rawDetails('Activity evidence and limitations', data.evidence) : null,
+      error ? jsxs('div', { style: panelStyle, children: [statusLine(error, C.yellow), actionButton('Refresh Rhythm', load, !!pending)] }) : null,
+      message ? statusLine(message, C.green) : null
+    ] : [])
+  ] })
+}
+
+function AuctionResult({ auction, ctx }) {
+  const [blind, setBlind] = useState(null)
+  const [error, setError] = useState(null)
+  const [pending, setPending] = useState(false)
+  const scope = useRequestScope(auction.id)
+  const status = String(auction.status || 'unknown').replaceAll('_', ' ')
+  const review = id => {
+    if (pending) return
+    setPending(true); setError(null)
+    ctx.rest(`/blind?comparison_id=${encodeURIComponent(id)}`).then(res => {
+      if (scope.current.scope !== auction.id) return
+      const value = blindValue(res)
+      if (!res || res.ok === false || !value || !value.id) setError(errorText(res, 'Could not load the anonymous review.'))
+      else setBlind(value)
+    }).catch(() => { if (scope.current.scope === auction.id) setError('Could not load the anonymous review.') })
+      .finally(() => { if (scope.current.scope === auction.id) setPending(false) })
+  }
+  return jsxs('div', { style: { ...panelStyle, border: `0.5px solid ${C.stroke}`, borderRadius: 8, padding: 8 }, children: [
+    row('Auction receipt', chip(status, auction.status === 'completed' ? C.green : C.yellow)),
+    auction.status === 'stopped_unknown_spend' ? statusLine('Stopped because billed spend is unknown. Calls already made may still be charged; remaining routes were skipped.', C.yellow) : null,
+    auction.budget ? small(`Budget mode: ${String(auction.budget.cap_mode || auction.cap_mode || 'recorded in receipt').replaceAll('_', ' ')} · ${auction.budget.actual_spend_complete === true ? 'actual spend complete' : 'actual spend may be incomplete'}`, C.soft) : null,
+    small('The scoreboard includes failed and skipped routes. Recorded checks describe specific requirements; answer quality still needs your review.', C.soft),
+    jsx('div', { style: { overflowX: 'auto' }, children: jsxs('table', { 'aria-label': 'Model auction scoreboard', style: { width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.6875rem' }, children: [
+      jsx('thead', { children: jsx('tr', { children: ['Candidate', 'State / checks', 'Cost'].map(title => jsx('th', { key: title, scope: 'col', style: { padding: '4px 5px', color: C.muted, fontWeight: 500, borderBottom: `0.5px solid ${C.stroke}` }, children: title })) }) }),
+      jsx('tbody', { children: (auction.scoreboard || []).map((score, i) => {
+        const call = (auction.calls || []).find(call => call.index === score.index) || {}
+        const route = call.requested || score.requested || score
+        const name = route.model || `Candidate ${(score.index ?? i) + 1}`
+        const checks = score.structural_checks
+        const noChecks = checks && (checks.task_checks_configured === false || checks.configured === false || checks.check_count === 0)
+        const pass = checks === true || checks && !noChecks && (checks.ok === true || checks.pass === true)
+        const fail = checks === false || checks && (checks.ok === false || checks.pass === false)
+        return jsxs('tr', { key: score.index ?? i, children: [
+          jsxs('td', { style: { padding: '6px 5px', borderBottom: `0.5px solid ${C.stroke}`, maxWidth: 150, overflowWrap: 'anywhere' }, children: [small(name, C.text), route.provider ? small(route.provider) : null] }),
+          jsxs('td', { style: { padding: '6px 5px', borderBottom: `0.5px solid ${C.stroke}` }, children: [small(String(score.status || call.status || 'unknown').replaceAll('_', ' '), C.soft), small(noChecks ? 'No task checks' : pass ? 'Checks passed' : fail ? 'Checks failed' : 'Checks unavailable', fail ? C.yellow : C.muted)] }),
+          jsx('td', { style: { padding: '6px 5px', borderBottom: `0.5px solid ${C.stroke}`, fontVariantNumeric: 'tabular-nums' }, children: small(costText(score.cost || call.cost), C.soft) })
+        ] })
+      }) })
+    ] }) }),
+    ...(auction.blind_pairs || []).map((pair, i) => jsx('div', { key: pair.comparison_id || i, children: actionButton(`Taste-test candidates ${(pair.left_index ?? 0) + 1} and ${(pair.right_index ?? 1) + 1}`, () => review(pair.comparison_id), pending) })),
+    blind ? jsx(BlindTasteTest, { key: blind.id, ctx, comparison: blind, onChanged: setBlind }) : null,
+    error ? statusLine(error, C.yellow) : null,
+    rawDetails('Full auction outputs, failed calls and cost provenance', auction)
+  ] })
+}
+
+function ModelAuction({ ctx, jobId, onChanged = () => {} }) {
+  const [open, setOpen] = useState(false)
+  const [providers, setProviders] = useState(null)
+  const [providerId, setProviderId] = useState('')
+  const [search, setSearch] = useState('')
+  const [models, setModels] = useState([])
+  const [cap, setCap] = useState('')
+  const [acceptEstimatedCap, setAcceptEstimatedCap] = useState(false)
+  const [maxTokens, setMaxTokens] = useState('1024')
+  const [preview, setPreview] = useState(null)
+  const [confirmed, setConfirmed] = useState(false)
+  const [auctions, setAuctions] = useState([])
+  const [pending, setPending] = useState(null)
+  const [error, setError] = useState(null)
+  const [inventoryError, setInventoryError] = useState(null)
+  const scope = useRequestScope(jobId)
+  const running = useRef(false)
+  const load = useCallback(() => {
+    if (!open || !jobId) return
+    const version = ++scope.current.version
+    setPreview(null); setConfirmed(false)
+    Promise.allSettled([ctx.rest('/chat-models'), ctx.rest(`/auction?job_id=${encodeURIComponent(jobId)}`)]).then(results => {
+      if (scope.current.scope !== jobId || scope.current.version !== version) return
+      const [inventory, history] = results.map(result => result.status === 'fulfilled' ? result.value : null)
+      if (!inventory || inventory.error || inventory.ok === false) setInventoryError(errorText(inventory, 'Connected model discovery failed.'))
+      else { setProviders(inventory.providers || []); setInventoryError(null) }
+      if (!history || history.error || history.ok === false) setError(errorText(history, 'Could not load auction history.'))
+      else { setAuctions(history.auctions || []); setError(null) }
+    })
+  }, [ctx, open, jobId])
+  useEffect(() => { load(); return () => { scope.current.version += 1 } }, [load])
+  const invalidate = () => { setPreview(null); setConfirmed(false); setError(null) }
+  const selected = route => models.some(model => model.provider === route.provider && model.model === route.model)
+  const toggle = route => { invalidate(); setModels(old => selected(route) ? old.filter(model => model.provider !== route.provider || model.model !== route.model) : old.length < 6 ? [...old, route] : old) }
+  const budget = Number(cap)
+  const tokens = Number(maxTokens)
+  const valid = models.length >= 2 && models.length <= 6 && Number.isFinite(budget) && budget > 0 && budget <= 100 && Number.isInteger(tokens) && tokens >= 1 && tokens <= 4096
+  const request = path => {
+    if (running.current || !valid) return
+    if (path === '/auction' && (!preview || !preview.available || !confirmed)) return
+    running.current = true; setPending(path); setError(null)
+    const version = ++scope.current.version
+    const body = { job_id: jobId, models, cost_cap_usd: budget, max_tokens: tokens, accept_estimated_cap: acceptEstimatedCap,
+      ...(path === '/auction' ? { confirmed: true, execution_id: preview.execution_id, expected_input_sha256: preview.input_sha256 } : {}) }
+    ctx.rest(path, { method: 'POST', body }).then(res => {
+      if (scope.current.scope !== jobId || scope.current.version !== version) return
+      if (path === '/auction-preview') {
+        if (!res || res.ok === false || res.error) setError(errorText(res, 'Could not preview this auction.'))
+        else { setPreview(res); setConfirmed(false) }
+      } else {
+        if (res && res.auction) setAuctions(old => [res.auction, ...old.filter(auction => auction.id !== res.auction.id)])
+        if (!res || !res.ok) setError(errorText(res, 'Auction stopped. Review its receipt before trying again.'))
+        setPreview(null); setConfirmed(false); onChanged()
+      }
+    }).catch(() => { if (scope.current.scope === jobId && scope.current.version === version) setError(path === '/auction' ? 'Auction connection lost. Calls may have been charged. Refresh its receipt before starting again.' : 'Could not preview this auction.') })
+      .finally(() => { running.current = false; if (scope.current.scope === jobId) setPending(null) })
+  }
+  const provider = (providers || []).find(provider => provider.slug === providerId) || (providers || [])[0]
+  const term = search.trim().toLowerCase()
+  const matching = (provider && provider.models || []).filter(model => !term || model.id.toLowerCase().includes(term))
+  return jsxs('div', { style: { ...panelStyle, borderTop: `0.5px solid ${C.stroke}`, paddingTop: 5 }, children: [
+    sectionButton('Model auction · compare connected routes', open, () => setOpen(v => !v)),
+    ...(open ? [
+      small('Choose 2–6 connected routes to answer the same captured input. This is a paid, answer-only comparison; review quality and spend before choosing any model for future work.', C.soft),
+      !providers && !inventoryError ? statusLine('Discovering connected models…') : null,
+      inventoryError ? jsxs('div', { style: panelStyle, children: [statusLine(inventoryError, C.yellow), actionButton('Retry connected model discovery', load, !!pending)] }) : null,
+      providers && !providers.length ? small('No connected models were returned. Connect a provider in Hermes and refresh this panel.', C.soft) : null,
+      provider ? field('Connected provider', jsx('select', { style: fieldStyle, value: provider.slug, disabled: !!pending, onChange: e => { setProviderId(e.target.value); setSearch('') }, children: providers.map(provider => jsx('option', { key: provider.slug, value: provider.slug, children: provider.name || provider.slug })) })) : null,
+      provider ? field('Find a model', jsx('input', { style: fieldStyle, value: search, disabled: !!pending, onChange: e => setSearch(e.target.value), placeholder: `Search ${provider.name || provider.slug}`, type: 'search' })) : null,
+      provider ? jsx('div', { role: 'group', 'aria-label': 'Connected candidate models', style: { ...panelStyle, maxHeight: 180, overflowY: 'auto', padding: 7, border: `0.5px solid ${C.stroke}`, borderRadius: 7 }, children: matching.length ? matching.slice(0, 80).map(model => {
+        const route = { provider: provider.slug, model: model.id }
+        const checked = selected(route)
+        return jsx('div', { key: model.id, children: checkField(model.id, checked, () => toggle(route), !!pending || !checked && models.length >= 6) })
+      }) : small('No models match this search.') }) : null,
+      matching.length > 80 ? small(`${matching.length} matches. Refine your search to see more.`) : null,
+      label(`Selected candidates · ${models.length} / 6`),
+      ...models.map(route => jsx('div', { key: `${route.provider}:${route.model}`, children: row(`${route.provider} / ${route.model}`, actionButton('Remove', () => toggle(route), !!pending)) })),
+      !models.length ? small('Select candidates from your connected providers. No model is selected automatically.') : null,
+      jsx('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7 }, children: [
+        field('Total cost cap (USD)', jsx('input', { type: 'number', min: 0.0001, max: 100, step: 'any', value: cap, disabled: !!pending, placeholder: 'Set a cap', style: fieldStyle, onChange: e => { invalidate(); setCap(e.target.value) } })),
+        field('Max output tokens per route', jsx('input', { type: 'number', min: 1, max: 4096, step: 1, value: maxTokens, disabled: !!pending, style: fieldStyle, onChange: e => { invalidate(); setMaxTokens(e.target.value) } }))
+      ] }),
+      checkField('Use an estimated cap when actual billed cost is unavailable', acceptEstimatedCap, value => { invalidate(); setAcceptEstimatedCap(value) }, !!pending, 'Optional. Uses listed prices and recorded token usage; it cannot guarantee your provider bill.'),
+      small(acceptEstimatedCap ? 'Estimated-cap mode: calls may continue using known prices and recorded usage. Missing prices or usage stop further calls.' : 'Strict mode: unknown billed spend stops further calls. The cap reserves estimated cost before each call; it is not a provider billing limit.'),
+      actionButton(pending === '/auction-preview' ? 'Checking routes and budget…' : 'Preview auction budget', () => request('/auction-preview'), !!pending || !valid),
+      preview ? jsxs('div', { style: { ...panelStyle, background: C.tile, borderRadius: 7, padding: 8 }, children: [
+        label('Auction preview · no calls made'),
+        small(`${(preview.models || []).length} routes · ${money(preview.estimated_reservation_usd)} estimated reservation · ${money(preview.cost_cap_usd)} cap`, C.text),
+        preview.cap_mode ? small(`Budget mode: ${String(preview.cap_mode).replaceAll('_', ' ')}`, C.soft) : null,
+        preview.cap_notice ? small(preview.cap_notice, C.soft) : null,
+        !preview.available ? small(preview.why || 'This auction cannot start with the selected routes and budget.', C.yellow) : null,
+        preview.available ? checkField(`I approve paid calls for these ${models.length} routes within the ${money(budget)} estimated budget`, confirmed, setConfirmed, !!pending) : null,
+        preview.available ? actionButton(pending === '/auction' ? 'Running paid comparison…' : 'Run paid model auction', () => request('/auction'), !!pending || !confirmed) : null,
+        rawDetails('Budget assumptions and input fingerprint', preview)
+      ] }) : null,
+      pending === '/auction' ? statusLine('Paid calls are in progress. A failed or interrupted call may still incur cost. The receipt retains its state.', C.soft) : null,
+      error ? statusLine(error, C.yellow) : null,
+      auctions.length ? label('Recorded auctions') : null,
+      ...auctions.slice(0, 5).map(auction => jsx(AuctionResult, { key: auction.id, auction, ctx })),
+      actionButton('Refresh auction receipts', load, !!pending)
+    ] : [])
+  ] })
+}
+
+function RereadControls({ ctx, sessionId, chatEnabled }) {
+  const [data, setData] = useState(null)
+  const [draft, setDraft] = useState(null)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState(null)
+  const [message, setMessage] = useState(null)
+  const scope = useRequestScope(sessionId)
+  const running = useRef(false)
+  const load = useCallback(() => {
+    const version = ++scope.current.version
+    return ctx.rest(`/reread?session_id=${encodeURIComponent(sessionId)}`).then(res => {
+      if (scope.current.scope !== sessionId || scope.current.version !== version) return
+      if (!res || res.ok === false || res.error || !res.policy) { setError(errorText(res, 'Could not load re-read controls.')); return }
+      setData(res); setDraft(res.policy); setError(null)
+    }).catch(() => { if (scope.current.scope === sessionId && scope.current.version === version) setError('Could not load re-read controls.') })
+  }, [ctx, sessionId])
+  useEffect(() => { load(); return () => { scope.current.version += 1 } }, [load])
+  const edit = (key, value) => { setDraft(old => ({ ...old, [key]: value })); setMessage(null) }
+  const save = () => {
+    if (running.current || !draft) return
+    running.current = true; setPending(true); setError(null)
+    const version = ++scope.current.version
+    const body = { session_id: sessionId, enabled: !!draft.enabled, writes: !!draft.writes, results: !!draft.results, batching: !!draft.batching }
+    ctx.rest('/reread', { method: 'POST', body }).then(res => {
+      if (scope.current.scope !== sessionId || scope.current.version !== version) return
+      if (!res || !res.ok || !res.policy) setError(errorText(res, 'Could not save re-read controls.'))
+      else { setData(res); setDraft(res.policy); setMessage('Re-read choices saved for this chat.'); return load() }
+    }).catch(() => { if (scope.current.scope === sessionId && scope.current.version === version) setError('Could not save re-read controls.') })
+      .finally(() => { running.current = false; if (scope.current.scope === sessionId) setPending(false) })
+  }
+  const dirty = draft && data && ['enabled', 'writes', 'results', 'batching'].some(key => !!draft[key] !== !!data.policy[key])
+  const summary = data && (data.summary || data)
+  return bubble([
+    row('Re-read controls', chip('This chat', C.muted)),
+    small('Opt in to smaller, recoverable views of newly repeated text. Existing history stays fixed; reductions apply only when the cost estimate pays back.', C.soft),
+    small('Main model and reasoning stay unchanged. Reasoning text is preserved in full.', C.text),
+    !chatEnabled ? small('These choices take effect after you turn on Crystallize Chat for this chat.') : null,
+    !draft && !error ? statusLine('Loading re-read choices…') : null,
+    ...(draft ? [
+      checkField('Enable re-read savings for this chat', !!draft.enabled, value => edit('enabled', value), pending),
+      checkField('Completed file-write payloads', !!draft.writes, value => edit('writes', value), pending, 'Keep recoverable excerpts when completed write payloads are read again. Future file reads stay exact.'),
+      checkField('Eligible text tool results', !!draft.results, value => edit('results', value), pending, 'Use recoverable excerpts for eligible repeated text. File reads, errors, small results and first reads stay exact.'),
+      checkField('Suggest batching independent reads', !!draft.batching, value => edit('batching', value), pending, 'Adds guidance for future independent reads; dependencies and approvals still apply.'),
+      !draft.enabled ? small('Re-read savings are off. Individual choices are saved but inactive.') : !draft.writes && !draft.results && !draft.batching ? small('Choose at least one option to make this opt-in useful.') : null,
+      actionButton(pending ? 'Saving…' : 'Save re-read choices', save, pending || !dirty),
+      summary && summary.active_projections != null ? small(`${summary.active_projections} active recoverable projections · ${tokensText(summary.estimated_avoided_input_tokens || 0)} estimated input tokens avoided per read`, C.soft) : null,
+      rawDetails('Re-read evidence and recovery details', summary && { projected_messages: summary.projected_messages, active_projections: summary.active_projections, expired_projections: summary.expired_projections, reduced_chars: summary.reduced_chars, estimated_avoided_input_tokens: summary.estimated_avoided_input_tokens, estimate_scope: summary.estimate_scope, observed_requests: summary.observed_requests, recovery: summary.recovery })
+    ] : []),
+    error ? jsxs('div', { style: panelStyle, children: [statusLine(error, C.yellow), actionButton('Retry re-read controls', load, pending)] }) : null,
+    message ? statusLine(message, C.green) : null
+  ].filter(Boolean), 'reread')
+}
+
+// Delegation consent is deliberately separate from the chat's local controls.
+function DelegationControls({ ctx, picked }) {
+  const [open, setOpen] = useState(false)
+  const [data, setData] = useState(null)
+  const [enabled, setEnabled] = useState(false)
+  const [confirmed, setConfirmed] = useState(false)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState(null)
+  const [message, setMessage] = useState(null)
+  const scope = useRequestScope('delegation')
+  const running = useRef(false)
+  const provider = picked && picked.provider
+  const model = picked && picked.model
+  useEffect(() => { setConfirmed(false); setMessage(null) }, [provider, model])
+  const load = useCallback(() => {
+    if (!open) return
+    const version = ++scope.current.version
+    ctx.rest('/delegation').then(res => {
+      if (scope.current.scope !== 'delegation' || scope.current.version !== version) return
+      if (!res || res.ok === false || res.error) { setError(errorText(res, 'Could not load delegation consent.')); return }
+      setData(res); setEnabled(res.enabled === true); setConfirmed(false); setError(null)
+    }).catch(() => { if (scope.current.scope === 'delegation' && scope.current.version === version) setError('Could not load delegation consent.') })
+  }, [ctx, open])
+  useEffect(() => { load(); return () => { scope.current.version += 1 } }, [load])
+  const save = () => {
+    if (running.current || !confirmed || enabled && (!provider || !model)) return
+    running.current = true; setPending(true); setError(null)
+    const version = ++scope.current.version
+    ctx.rest('/delegation', { method: 'POST', body: { enabled, provider: provider || data && data.provider || '', model: model || data && data.model || '', confirmed: true } }).then(res => {
+      if (scope.current.scope !== 'delegation' || scope.current.version !== version) return
+      if (!res || !res.ok) setError(errorText(res, 'Could not save delegation consent.'))
+      else { setData(res); setEnabled(res.enabled === true); setConfirmed(false); setMessage('Profile consent saved. Choose the delegation backend in Hermes separately when you want to use it.') }
+    }).catch(() => { if (scope.current.scope === 'delegation' && scope.current.version === version) setError('Could not save delegation consent.') })
+      .finally(() => { running.current = false; if (scope.current.scope === 'delegation') setPending(false) })
+  }
+  return bubble([
+    sectionButton('Optional delegation backend', open, () => setOpen(v => !v)),
+    ...(open ? [
+      chip('Profile-wide consent', C.yellow),
+      small('This separate setting permits a helper route for explicit delegated subtasks across this Hermes profile. Each task must request the helper. Regular tasks inherit their configured route and reasoning.', C.soft),
+      !data && !error ? statusLine('Loading profile consent…') : null,
+      data ? small(data.enabled ? `Saved helper: ${data.provider} / ${data.model}` : 'Profile helper consent is off.', C.soft) : null,
+      provider && model ? small(`Selected helper to save: ${provider} / ${model}`, C.text) : small('Choose a connected helper model above before enabling this option.'),
+      data ? checkField('Permit this selected helper for explicit delegated subtasks', enabled, value => { setEnabled(value); setConfirmed(false); setMessage(null) }, pending || !model && !data.enabled) : null,
+      data ? checkField('I approve saving this profile-wide delegation consent', confirmed, setConfirmed, pending) : null,
+      data ? actionButton(pending ? 'Saving…' : 'Save profile delegation consent', save, pending || !confirmed || enabled && (!provider || !model)) : null,
+      small('After saving, select /delegation crystallize yourself in Hermes for the sessions where you want it. Saving consent does not select the backend.'),
+      small('Use the helper for a complete, self-contained subtask when its quality and cost fit. A model switch is compared separately from efficiency savings.'),
+      error ? jsxs('div', { style: panelStyle, children: [statusLine(error, C.yellow), actionButton('Retry profile consent', load, pending)] }) : null,
+      message ? statusLine(message, C.green) : null
+    ] : [])
+  ].filter(Boolean), 'delegation')
+}
 
 // ---------------------------------------------------------------- pieces
 
@@ -409,14 +902,14 @@ function JobBubble({ item, status, trialRuns, act, exp, ctx }) {
     const week = plan ? plan.per_week : item.saving_per_week
     const total = plan ? plan.saved : item.saved_usd
     headline = !measured ? big('Measuring…', C.soft)
-      : limited ? big(`${money(total)} saved`, C.green)
-        : big(perWeek(week), C.green)
+      : limited ? big(money(total), C.soft)
+        : big(perWeek(week), C.soft)
     const skipped = (item.after && item.after.skipped) || 0
     sub = measured
-      ? [limited ? null : perMonth(week), limited ? null : `saved ${money(total)} so far`,
+      ? ['Historical comparison estimate', limited ? null : perMonth(week), limited ? null : `${money(total)} reduction before overhead`,
         `over ${item.after.runs} runs`, plan ? (plan.included ? 'at API prices, included in your plan' : 'estimated at API prices') : null,
         skipped ? `${skipped} skipped, nothing changed` : null].filter(Boolean).join(' · ')
-      : 'Savings show after its first live run.'
+      : 'Historical comparisons appear after its first live run; qualified totals are in the receipt.'
     action = pill('Undo', () => act('/undo', { routine_id: item.routine_id }), C.muted)
   } else if (status === 'testing') {
     headline = big(perWeek(item.saving_per_week))
@@ -476,7 +969,7 @@ function Hero({ data, act }) {
       key: 'score',
       style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' },
       children: [
-        label('Savings score'),
+        label('Optimization coverage'),
         jsxs('div', {
           style: { fontSize: '1.75rem', lineHeight: 1, color: C.text, fontVariantNumeric: 'tabular-nums' },
           children: [data.score === null ? '—' : data.score, jsx('span', { style: { fontSize: '0.6875rem', color: C.muted }, children: '/100' })]
@@ -491,15 +984,13 @@ function Hero({ data, act }) {
       key: 'stats',
       style: { display: 'flex', gap: 8, marginTop: 4 },
       children: [
-        stat('Saved so far', money(data.saved_usd), C.green),
-        stat('Saving now', perWeek(data.live_saving_usd_per_week), C.green),
-        stat('Could still save', perWeek(data.could_save_usd_per_week))
+        stat('Qualified reduction', money(data.qualified_efficiency_savings_usd), C.soft),
+        stat('Qualified net', money(data.qualified_net_payback_usd), C.soft),
+        stat('Projected potential', perWeek(data.could_save_usd_per_week))
       ]
     }),
-    data.saved_api_usd != null ? small(`On plans: ${money(data.saved_api_usd)} less at API prices so far` +
-      (data.api_saving_usd_per_week != null ? `, ${perWeek(data.api_saving_usd_per_week)} at this rate` : ''), C.soft) : null,
-    jsx('div', { key: 'reasoning', children: pill(data.lower_reasoning ? 'Reasoning: also try lower' : 'Reasoning: keep my setting',
-      () => act('/reasoning-setting', { on: !data.lower_reasoning }), data.lower_reasoning ? C.accent : C.muted) }),
+    small('Qualified totals need comparable runs with matching model, provider and full reasoning settings. Potential rates are projections; review each receipt for costs and uncertainty.', C.soft),
+    small('Reasoning preserved. Trials keep your main model’s reasoning setting.', C.soft),
     ready > 0 ? jsx('div', { key: 'all', children: pill(`Make ${ready === 1 ? '1 job' : `all ${ready} jobs`} cheaper`, () => act('/tune-all', {}), C.accent) }) : null,
     jsx(Periods, { key: 'periods', periods: data.periods })
   ], 'hero')
@@ -540,7 +1031,7 @@ function HowItWorks({ onHide }) {
   return bubble([
     row('How Crystallize Cron saves', pill('Got it', onHide, C.muted)),
     small('A cron job costs roughly its prompt size times its AI calls, plus reasoning. Crystallize shows where each job\'s money goes and works on all of it.', C.soft),
-    small('Settings trials try fewer AI calls, narrower tool access and safe result cleanup. Lower reasoning is optional. A stage stays when its recorded checks pass and its measured cost falls; failed stages restore the prior settings.', C.soft),
+    small('Settings trials try fewer AI calls, narrower tool access and safe result cleanup. Your main reasoning setting is preserved. A stage stays when its recorded checks pass and its measured cost falls; failed stages restore the prior settings.', C.soft),
     small('A job that repeats the same steps can also get a routine that fetches its data before the AI starts, after matching test runs. If nothing changed, the run can skip the AI, or repeat its last answer if someone expects a message.', C.soft)
   ], 'how')
 }
@@ -575,7 +1066,7 @@ function PeriodFigures({ row }) {
     ['Runs', String(row.runs)],
     row.spent_usd != null && ['Spent', money(row.spent_usd)],
     row.api_cost_usd != null && ['At API prices', money(row.api_cost_usd)],
-    row.saved_usd != null && ['Saved', money(row.saved_usd), C.green],
+    row.saved_usd != null && ['Reduction estimate', money(row.saved_usd), C.soft],
     row.tokens != null && ['Tokens', tokensText(row.tokens)],
     row.seconds != null && ['Typical run', secs(row.seconds)],
     row.free_runs != null && ['Free runs', String(row.free_runs), C.green]
@@ -690,6 +1181,7 @@ function JobEvidence({ item, ctx, onChanged }) {
       const [r, p, c] = results.map(result => result.status === 'fulfilled' ? result.value : { error: "Couldn't load this part of the job's evidence." })
       setReceipt(r && !r.error ? r : null)
       setPreview(p && !p.error ? p : { available: false, why: p && p.error })
+      if (p && p.latest_blind) setComparison(p.latest_blind)
       if (c && !c.error) setContract(JSON.stringify(c.contract || {}, null, 2))
       if (c && c.error || r && r.error) setError(c && c.error || r && r.error)
       else if (!preserveError) setError(null)
@@ -740,15 +1232,13 @@ function JobEvidence({ item, ctx, onChanged }) {
         error ? jsx('div', { role: 'status', children: small(error, C.yellow) }) : null,
         receipt ? jsx(ReceiptSummary, { receipt }) : small('Loading evidence…'),
         preview ? jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 }, children: [
-          label('Same-input comparison'),
+          label('Same-input taste test'),
           small(preview.cost_notice || 'Runs two answer-only model calls using the same saved input. Both routes may charge.', C.soft),
           small('Uses frozen recorded evidence for two answers. It does not replay tools or run the scheduled job.', C.soft),
-          preview.original && preview.candidate ? small(`${preview.original.route_label || preview.original.configured_model || preview.original.model || 'Original route'} → ${preview.candidate.route_label || preview.candidate.configured_model || preview.candidate.model || 'Candidate route'}`) : null,
           !preview.available ? small(preview.why || 'Record a complete run and choose a helper model first.', C.yellow) : null,
           actionButton(pending === 'compare' ? 'Comparing two answers…' : 'Compare same input', compare, !!pending || !preview.available),
           pending === 'compare' ? jsx('div', { role: 'status', 'aria-live': 'polite', children: small('Two model calls are in progress. Their cost is included in the receipt; the job settings stay as they are.', C.soft) }) : null,
-          rawDetails('Comparison scope and routes', preview),
-          rawDetails('Comparison result, checks and answer diff', comparison)
+          comparison ? jsx(BlindTasteTest, { key: comparison.id, ctx, comparison, onChanged: setComparison }) : null
         ] }) : null,
         jsxs('details', { children: [
           jsx('summary', { style: { color: C.soft, fontSize: '0.6875rem', cursor: 'pointer' }, children: 'Validation requirements' }),
@@ -762,7 +1252,9 @@ function JobEvidence({ item, ctx, onChanged }) {
             actionButton(pending === 'save' ? 'Saving…' : 'Save requirements', save, !!pending)
           ] })
         ] }),
-        rawDetails('Full receipt and cost provenance', receipt)
+        rawDetails('Full receipt and cost provenance', receipt),
+        jsx(RhythmControl, { key: 'rhythm', ctx, jobId, onChanged }),
+        jsx(ModelAuction, { key: 'auction', ctx, jobId, onChanged })
       ] : [])
     ]
   })
@@ -771,17 +1263,21 @@ function JobEvidence({ item, ctx, onChanged }) {
 function ReceiptSummary({ receipt }) {
   const basis = receipt.preferred_basis
   const costs = basis && receipt.cost_bases && receipt.cost_bases[basis]
-  const net = receipt.net_payback_usd
+  const net = receipt.qualified_net_payback_usd ?? (costs && costs.qualified_net_payback_usd) ?? null
+  const qualified = receipt.qualified_efficiency_savings_usd ?? (costs && costs.qualified_efficiency_savings_usd) ?? null
   return jsxs('div', { style: { display: 'flex', flexDirection: 'column', gap: 3 }, children: [
     label('Receipt'),
     small(`${receipt.sample_count || 0} recorded runs · ${receipt.comparison_call_count || 0} comparison calls · ${receipt.helper_call_count || 0} helper calls`, C.soft),
     jsx('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 5 }, children: [
-      jsx(Tile, { title: 'Gross reduction', value: money(costs && costs.historical_savings_usd) }),
-      jsx(Tile, { title: 'Trial/helper cost', value: money(costs && costs.overhead_usd) }),
-      jsx(Tile, { title: 'Net payback', value: money(net), color: net == null ? C.soft : net >= 0 ? C.green : C.yellow })
+      jsx(Tile, { title: 'Qualified reduction', value: money(qualified) }),
+      jsx(Tile, { title: 'Recorded overhead', value: money(costs && costs.overhead_usd) }),
+      jsx(Tile, { title: 'Qualified net', value: money(net), color: net == null ? C.soft : net >= 0 ? C.green : C.yellow })
     ] }),
-    small(basis === 'actual' ? 'Uses recorded actual costs.' : basis === 'estimated' ? 'Uses estimated costs at listed prices.' : 'Net payback is unknown until comparable costs are recorded.'),
-    receipt.estimated_break_even_remaining_runs != null ? small(`About ${receipt.estimated_break_even_remaining_runs} more comparable runs to repay measured overhead.`) : null,
+    small(basis === 'actual' ? 'Uses recorded actual costs with matching comparison settings.' : basis === 'estimated' ? 'Uses listed-price estimates with matching comparison settings.' : 'Qualified net is unknown until comparable costs and settings are recorded.'),
+    receipt.efficiency_savings_proven !== true ? small('Efficiency savings are not established by the available evidence. A model switch or missing reasoning identity cannot qualify as same-settings efficiency savings.', C.yellow) : null,
+    costs && (costs.unproven_settings_comparison_count || costs.excluded_settings_comparison_count) ? small(`${costs.unproven_settings_comparison_count || 0} comparisons lack complete settings evidence · ${costs.excluded_settings_comparison_count || 0} excluded from matching-settings savings.`) : null,
+    costs && costs.historical_savings_usd != null && qualified == null ? small(`Historical counterfactual: ${money(costs.historical_savings_usd)} reduction before overhead. This unqualified estimate is separate from the qualified totals.`) : null,
+    net != null && receipt.estimated_break_even_remaining_runs != null ? small(`About ${receipt.estimated_break_even_remaining_runs} more comparable runs to repay recorded overhead.`) : null,
     Array.isArray(receipt.uncertainty) && receipt.uncertainty.length ? small(receipt.uncertainty.join(' '), C.yellow) : null
   ] })
 }
@@ -814,7 +1310,7 @@ function TuneRow({ tune, trialRuns, act }) {
         style: { display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start' },
         children: [
           pill('Try cheaper settings', () => act('/tune', { job }), C.accent),
-          small(`Tests fewer tools and AI calls, with lower reasoning only when allowed. After ${trialRuns} answers it keeps a stage only when the recorded checks pass and its cost falls.`)
+          small(`Tests fewer tools and AI calls while preserving your main reasoning setting. After ${trialRuns} answers it keeps a stage only when the recorded checks pass and its cost falls.`)
         ]
       }) : null
     ]
@@ -856,9 +1352,9 @@ function tunedHeadline(item) {
     key: 'tuned',
     style: { display: 'flex', flexDirection: 'column', gap: 2 },
     children: [
-      tuned.per_week && !(item.cron && item.cron.runs_total) ? big(perWeek(tuned.per_week), C.green)
-        : tuned.saved ? big(`${money(tuned.saved)} saved`, C.green) : null,
-      small(`${show(tuned.before)} → ${show(tuned.after)} a run${plan ? ' at API prices' : ''} over ${tuned.runs} run${tuned.runs === 1 ? '' : 's'}`, C.green)
+      tuned.per_week && !(item.cron && item.cron.runs_total) ? big(perWeek(tuned.per_week), C.soft)
+        : tuned.saved != null ? big(money(tuned.saved), C.soft) : null,
+      small(`Historical comparison estimate · ${show(tuned.before)} → ${show(tuned.after)} a run${plan ? ' at API prices' : ''} over ${tuned.runs} run${tuned.runs === 1 ? '' : 's'}. Review the receipt for matching-settings evidence.`, C.soft)
     ]
   })
 }
@@ -890,8 +1386,8 @@ function FinishedRow({ item, exp }) {
   const cron = item.cron || {}
   const open = isOpen(exp, item.job_id, { status: 'finished' })
   const header = jsx(JobHeader, { item, open, toggle: exp.toggle, hide: exp.hide, muted: true })
-  const summary = [item.was_live && item.saved_usd ? `saved ${money(item.saved_usd)}` : null,
-    item.plan_saved_usd ? `${money(item.plan_saved_usd)} less at API prices` : null, cronLine(cron)].filter(Boolean).join(' · ')
+  const summary = [item.was_live && item.saved_usd ? `historical reduction estimate ${money(item.saved_usd)}` : null,
+    item.plan_saved_usd ? `${money(item.plan_saved_usd)} estimated reduction at API prices` : null, cronLine(cron)].filter(Boolean).join(' · ')
   if (!open) return bubble([header, small(summary)], item.job_id)
   return bubble([
     header,
@@ -1072,18 +1568,18 @@ function ModelPicker({ ctx, picked, onPicked }) {
     setError(null)
     ctx.rest('/chat-models').then(res => {
       if (!active) return
-      if (!res || res.error) { setError(res && res.error || "Couldn't read connected subscriptions."); return }
+      if (!res || res.error) { setError(res && res.error || "Couldn't read connected providers."); return }
       setProviders(res.providers || [])
-    }).catch(() => { if (active) setError("Couldn't read connected subscriptions.") })
+    }).catch(() => { if (active) setError("Couldn't read connected providers.") })
     return () => { active = false }
   }, [ctx, retry])
 
   if (error) return bubble([label('Helper model'), small(error, C.yellow), actionButton('Retry model discovery', () => setRetry(v => v + 1))], 'picker')
   if (!open) return bubble([row('Helper model', actionButton('Change', () => setOpen(true))), small(picked && picked.model || 'None picked', C.soft)], 'picker')
 
-  if (!providers) return bubble([label('Cheap model'), small('Loading your connected subscriptions…')], 'picker')
+  if (!providers) return bubble([label('Helper model'), small('Loading your connected providers…')], 'picker')
   if (!providers.length) {
-    return bubble([label('Cheap model'), small('No connected subscriptions found. Connect one in Hermes first, and it will show up here.')], 'picker')
+    return bubble([label('Helper model'), small('No connected models found. Connect a provider in Hermes first, then refresh the model picker.')], 'picker')
   }
   const slug = active || (picked && picked.provider) || providers[0].slug
   const provider = providers.find(p => p.slug === slug) || providers[0]
@@ -1387,12 +1883,15 @@ function ChatSession({ ctx, sessionId, focused }) {
       !current && !error ? small('Loading…') : null,
       current ? jsx(ThisChat, { key: 'this', state: current, onToggle: toggle, pending, heading: focused ? 'This chat' : `Your last chat${current.title ? `: ${current.title}` : ''}` }) : null,
       current && sessionId ? jsx(ChatControls, { key: `controls:${sessionId}`, ctx, sessionId, policy: current.policy || { default_mode: 'clean', focus: '', tools: {} }, observedTools: current.tool_names || observedTools, onSaved: policy => { requests.current.version += 1; setState(old => old && old.session_id === sessionId ? { ...old, policy } : old) } }) : null,
+      current && sessionId ? jsx(RereadControls, { key: `reread:${sessionId}`, ctx, sessionId, chatEnabled: current.enabled }) : null,
       current && sessionId ? jsx(ContextRent, { key: `rent:${sessionId}`, ctx, sessionId, refresh: current, onTools: setObservedTools }) : null,
       current ? jsx(ModelPicker, { key: 'picker', ctx, picked: current.model, onPicked: load }) : null,
+      current ? jsx(DelegationControls, { key: 'delegation', ctx, picked: current.model }) : null,
       current ? jsxs('details', { key: 'how', children: [
         jsx('summary', { style: { color: C.soft, cursor: 'pointer', fontSize: '0.6875rem' }, children: 'How Chat saves' }),
         small('Your main model can route explicit routine tasks to the selected helper. Tool-result controls determine which results may be cleaned or summarized. Files and failed results stay exact.', C.soft),
-        small('Context Rent shows what old results cost to read again and the cache payback before removing one. Tokens and prices are estimates.', C.soft),
+        small('For a large artifact, route one whole-text subtask with input_files and save_to, then let the main model review the saved output. Main reasoning and decisions stay with your chosen model.', C.soft),
+        small('Re-read controls are an additional opt-in for repeated text and batching guidance. Context Rent shows later read estimates and cache payback. Global tool settings require a separate choice in Hermes.', C.soft),
         small(current.why_not_first, C.soft)
       ] }) : null
     ]
@@ -1428,10 +1927,10 @@ const NOTES = [
     ['Crystallize Chat', 'Makes the chat you\'re in cheaper. You turn it on for each chat, and your main model sends routine work to a cheap model you pick.']
   ]],
   ['How Cron saves', [
-    ['Make cheaper', 'Starts a measured trial of fewer AI calls, narrower tools and safe cleanup. Lower reasoning is tried only when allowed. Each stage needs fresh checks and lower cost before it stays.'],
+    ['Make cheaper', 'Starts a measured trial of fewer AI calls, narrower tools and safe cleanup. Your main reasoning setting is preserved. Each stage needs fresh checks and lower cost before it stays.'],
     ['Routine', 'Steps a job repeats, saved so they run before the AI starts. It needs matching test runs first, and you choose when to promote it.'],
     ['Live routine', 'The routine is in use. If it fails, the AI does the whole task, and two failures in a row switch it off.'],
-    ['Savings score', 'How much of your active scheduled work uses lower-cost settings. Review each trial and its evidence below.'],
+    ['Optimization coverage', 'How much of your active scheduled work uses lower-cost settings. Qualified savings require matching model, provider and full reasoning identity; review each receipt.'],
     ['Runaway Brake', 'Off until you turn it on. Each job gets a token limit from its own recent runs: at least 3 times a normal run and 1.5 times its largest. A run past that limit is told to stop using tools and answer with what it has, and to say it stopped early. Jobs that send or change things are never stopped, and jobs with fewer than 5 finished runs have no limit yet.']
   ]],
   ['When nothing has changed', [
@@ -1447,6 +1946,15 @@ const NOTES = [
     ['Full results', 'When a result is noticeably reduced, the exact original is kept for 7 days. Your main model can read it, or ask the cheap model about it.'],
     ['Context Rent', 'Every AI call re-reads the whole chat, so each old tool result costs a little on every call after it. This shows what each one costs. Remove leaves a result out of what is sent to the AI, while your chat stays the same and the AI can still read the original. It works without turning on Crystallize Chat. Removing can reset the provider\'s cache once, so each result shows how many calls that takes to pay back.'],
     ['Why not from the start', 'Hermes creates the chat when your first prompt is sent, and savings come from tool results, which don\'t exist until the work starts.']
+  ]],
+  ['Review and control', [
+    ['Taste test', 'Compare anonymous A/B answers from the same captured input. Choose before revealing models, costs and recorded checks. The preference is your judgment; answer-only evidence does not test tool execution.'],
+    ['Rhythm', 'Review real observations by weekday and hour, then preview a different frequency. Savings are projections. Applying requires explicit consent to a noncritical job and an acceptable delay; unsupported hosts offer a command to review.'],
+    ['Model auction', 'Choose 2–6 connected routes and an explicit cost cap, preview the estimate, then confirm paid calls. Failed calls and unknown spend remain in the receipt. No winner or future model change is automatic.'],
+    ['Reasoning', 'Your main model, its reasoning setting and reasoning text are preserved. Cheaper execution comes from explicit subtasks, fewer repeated reads and measured trials.'],
+    ['Whole-text subtasks', 'For large artifacts, ask the helper for one complete subtask using input_files and save_to. The main model reviews the saved result and keeps decisions and the final answer.'],
+    ['Global settings', 'Chat controls apply to one chat; Cron controls apply to the selected job. Any global tool configuration is a separate, explicit choice in Hermes.'],
+    ['Compatibility', 'Model lists come from your connected providers. Availability and returned identity are checked for each request; support has not been verified on every model or host version.']
   ]],
   ['Reading the numbers', [
     ['Spent', 'What Hermes recorded as the real cost.'],

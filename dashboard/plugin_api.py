@@ -112,10 +112,10 @@ async def _serve(call: Callable[[], dict[str, Any]], *, message: str) -> dict[st
     except LookupError as exc:
         return {"ok": False, "code": "not_found", "error": str(exc), "message": str(exc)}
     except ValueError as exc:
-        code = "action_blocked" if type(exc).__name__ in {"ExperimentError", "ComparisonError"} else "invalid_request"
+        code = "action_blocked" if type(exc).__name__ in {"ExperimentError", "ComparisonError", "AuctionError", "BlindError"} else "invalid_request"
         return {"ok": False, "code": code, "error": str(exc), "message": str(exc)}
     except Exception as exc:  # noqa: BLE001 — preserve friendly domain errors, hide internals
-        if type(exc).__name__ in {"LifecycleError", "ExperimentError", "ComparisonError"}:
+        if type(exc).__name__ in {"LifecycleError", "ExperimentError", "ComparisonError", "RhythmError", "AuctionError", "BlindError"}:
             return {"ok": False, "code": "action_blocked", "error": str(exc), "message": str(exc)}
         logger.warning("crystallize: %s: %s", message, exc, exc_info=True)
         return {"ok": False, "code": "internal_error", "error": message, "message": message}
@@ -293,8 +293,10 @@ async def chat_restore(body: dict) -> dict[str, Any]:
 async def reasoning_setting(body: dict) -> dict[str, Any]:
     def apply():
         on = _boolean(body, "on")
-        _module("store").set_setting("lower_reasoning", on)
-        return {"ok": True, "message": "Settings trials may also try lower reasoning." if on else "Jobs keep your reasoning setting."}
+        if on:
+            raise ValueError("Crystallize preserves reasoning settings. Lowering reasoning is not an efficiency saving.")
+        _module("store").set_setting("lower_reasoning", False)
+        return {"ok": True, "message": "Jobs keep your reasoning setting."}
     return await _serve(apply, message="Couldn't change the reasoning preference.")
 
 
@@ -335,8 +337,14 @@ async def receipt(job_id: str) -> dict[str, Any]:
 @router.get("/compare")
 async def compare_preview(job_id: str) -> dict[str, Any]:
     """Read-only readiness and cost notice. This never starts model calls."""
-    return await _serve(lambda: _module("experiments").preview(_identifier(job_id, "job")),
-                        message="Couldn't prepare the same-input comparison.")
+    def read():
+        experiments = _module("experiments")
+        job = _identifier(job_id, "job")
+        result = experiments.preview(job)
+        latest = experiments.comparisons(job, limit=1)
+        result["latest_blind"] = _module("blind").present(latest[0]["id"]) if latest else None
+        return result
+    return await _serve(read, message="Couldn't prepare the same-input comparison.")
 
 
 @router.post("/compare")
@@ -351,5 +359,121 @@ async def compare_job(body: dict) -> dict[str, Any]:
         ok = result.get("status") == "completed" if "status" in result else result.get("ok") is True
         return {"ok": ok, "code": "completed" if ok else "comparison_failed",
                 "message": "Comparison finished. Review its checks and costs." if ok else "Comparison has failed calls. Review the receipt and costs before trying again.",
-                "comparison": result}
+                "comparison": _module("blind").present(result["id"])}
     return await _serve(apply, message="Couldn't complete the same-input comparison.")
+
+
+@router.get("/blind")
+async def blind_comparison(comparison_id: str) -> dict[str, Any]:
+    return await _serve(lambda: _module("blind").present(_identifier(comparison_id, "comparison")),
+                        message="Couldn't load the anonymous comparison.")
+
+
+@router.post("/blind-choice")
+async def blind_choice(body: dict) -> dict[str, Any]:
+    return await _serve(lambda: _module("blind").choose(_identifier(body.get("comparison_id"), "comparison"),
+                        _choice(body, "choice", ("A", "B", "tie", "neither"))),
+                        message="Couldn't save the answer preference.")
+
+
+@router.post("/blind-reveal")
+async def blind_reveal(body: dict) -> dict[str, Any]:
+    return await _serve(lambda: _module("blind").reveal(_identifier(body.get("comparison_id"), "comparison")),
+                        message="Couldn't reveal the comparison.")
+
+
+@router.get("/reread")
+async def reread_policy(session_id: str) -> dict[str, Any]:
+    return await _serve(lambda: {"ok": True, "policy": _module("reread").policy(_identifier(session_id, "chat")),
+                                "summary": _module("reread").summary(session_id)},
+                        message="Couldn't load re-read controls.")
+
+
+@router.post("/reread")
+async def set_reread_policy(body: dict) -> dict[str, Any]:
+    def apply():
+        sid = _identifier(body.get("session_id"), "chat")
+        keys = ("enabled", "writes", "results", "batching")
+        settings = {k: _boolean(body, k) for k in keys if k in body}
+        return {"ok": True, "policy": _module("reread").configure(sid, **settings)}
+    return await _serve(apply, message="Couldn't save re-read controls.")
+
+
+@router.get("/rhythm")
+async def rhythm_report(job_id: str, timezone: str = "UTC") -> dict[str, Any]:
+    return await _serve(lambda: _module("rhythm").report(_job_id(job_id), timezone=timezone),
+                        message="Couldn't load schedule evidence.")
+
+
+def _rhythm_args(body: dict) -> dict:
+    return {"noncritical": _boolean(body, "noncritical"),
+            "allowed_staleness_minutes": body.get("allowed_staleness_minutes")}
+
+
+@router.post("/rhythm-preview")
+async def rhythm_preview(body: dict) -> dict[str, Any]:
+    return await _serve(lambda: _module("rhythm").preview(_job_id(body.get("job_id")),
+        body.get("interval_minutes"), timezone=body.get("timezone", "UTC"), **_rhythm_args(body)),
+        message="Couldn't preview the schedule recommendation.")
+
+
+@router.post("/rhythm")
+async def rhythm_apply(body: dict) -> dict[str, Any]:
+    return await _serve(lambda: _module("rhythm").apply(_job_id(body.get("job_id")),
+        body.get("interval_minutes"), expected_config_fingerprint=body.get("expected_config_fingerprint"),
+        confirmed=_boolean(body, "confirmed"), timezone=body.get("timezone", "UTC"), **_rhythm_args(body)),
+        message="Couldn't change the schedule.")
+
+
+@router.post("/rhythm-undo")
+async def rhythm_undo(body: dict) -> dict[str, Any]:
+    return await _serve(lambda: _module("rhythm").undo(_job_id(body.get("job_id")),
+        expected_config_fingerprint=body.get("expected_config_fingerprint"), confirmed=_boolean(body, "confirmed")),
+        message="Couldn't restore the schedule.")
+
+
+def _auction_args(body: dict) -> dict:
+    return {"models": body.get("models"), "cost_cap_usd": body.get("cost_cap_usd"),
+            "max_tokens": body.get("max_tokens", 1024),
+            "execution_id": _identifier(body.get("execution_id"), "recorded run", optional=True),
+            "accept_estimated_cap": body.get("accept_estimated_cap", False)}
+
+
+@router.get("/auction")
+async def auction_history(job_id: str) -> dict[str, Any]:
+    return await _serve(lambda: {"ok": True, "auctions": _module("auction").history(_identifier(job_id, "job"))},
+                        message="Couldn't load model comparisons.")
+
+
+@router.post("/auction-preview")
+async def auction_preview(body: dict) -> dict[str, Any]:
+    return await _serve(lambda: {"ok": True, **_module("auction").preview(_job_id(body.get("job_id")), **_auction_args(body))},
+                        message="Couldn't prepare the model scoreboard.")
+
+
+@router.post("/auction")
+async def run_auction(body: dict) -> dict[str, Any]:
+    def run():
+        result = _module("auction").run(_job_id(body.get("job_id")), confirmed=_boolean(body, "confirmed"),
+            expected_input_sha256=body.get("expected_input_sha256"), **_auction_args(body))
+        return {"ok": result.get("status") == "completed", "auction": result,
+                "message": "Review quality and cost evidence. Model comparisons do not establish efficiency savings."}
+    return await _serve(run, message="Couldn't finish the model scoreboard.")
+
+
+@router.get("/delegation")
+async def delegation_summary() -> dict[str, Any]:
+    return await _serve(lambda: {"ok": True, **_module("delegation").summary()},
+                        message="Couldn't load delegation consent.")
+
+
+@router.post("/delegation")
+async def delegation_consent(body: dict) -> dict[str, Any]:
+    return await _serve(lambda: {"ok": True, **_module("delegation").configure(
+        _boolean(body, "enabled"), body.get("provider", ""), body.get("model", ""), confirmed=_boolean(body, "confirmed"))},
+        message="Couldn't save profile-wide delegation consent.")
+
+
+@router.get("/compatibility")
+async def compatibility() -> dict[str, Any]:
+    return await _serve(lambda: _module("host_api").report(), message="Couldn't inspect public SDK compatibility.")

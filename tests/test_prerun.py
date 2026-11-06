@@ -20,35 +20,30 @@ def test_json_keeps_every_field_and_long_value():
     assert out == issue
 
 
-def test_json_lists_are_one_item_per_line():
+def test_json_lists_keep_all_items_with_compact_serialization():
     text = prerun.clean_text(json.dumps([{"title": "a"}, {"title": "b"}]))
-    assert text.splitlines() == ['[', '{"title":"a"},', '{"title":"b"}', ']']
+    assert text == '[{"title":"a"},{"title":"b"}]'
     assert json.loads(text) == [{"title": "a"}, {"title": "b"}]
 
 
-def test_rss_becomes_short_items():
+def test_rss_keeps_the_complete_original():
     feed = ("<?xml version='1.0'?><rss><channel><title>Feed</title>"
             "<item><title><![CDATA[First post]]></title><link>https://e.com/1</link>"
             "<pubDate>Thu, 05 Nov 2026 12:00:00 +0000</pubDate><description>&lt;p&gt;Hello there&lt;/p&gt;</description></item>"
             "<item><title>Second</title><link>https://e.com/2</link></item></channel></rss>")
-    lines = prerun.clean_text(feed).splitlines()
-    assert lines[0].startswith("First post | https://e.com/1 | Thu, 05 Nov 2026")
-    assert "Hello there" in lines[1]
-    assert lines[2] == "Second | https://e.com/2"
+    assert prerun.clean_text(feed) == feed
 
 
-def test_markdown_feed_markers_are_tidied():
-    text = prerun.clean_text("<!\\[CDATA\\[Title one\\]\\]>Points: 5 \\# Comments [https://a.b/c](https://a.b/c)")
-    assert "CDATA" not in text and "Title one" in text and "# Comments" in text
-    assert "[https://a.b/c](https://a.b/c)" not in text and "https://a.b/c" in text
+def test_markdown_feed_markers_remain_exact():
+    text = "<!\\[CDATA\\[Title one\\]\\]>Points: 5 \\# Comments [https://a.b/c](https://a.b/c)"
+    assert prerun.clean_text(text) == text
 
 
-def test_every_source_gets_a_share(tmp_path):
+def test_every_source_remains_complete_past_the_legacy_limit(tmp_path):
     pages = [{"url": f"https://f{i}.com", "title": f"Feed {i}", "content": f"line {i}\n" * 20000} for i in range(3)]
     block = prerun.step_block({"args": {}}, {"output": json.dumps({"results": pages})})
-    for i in range(3):
-        assert f"### Feed {i}" in block  # no feed is pushed out by an earlier long one
-    assert len(block) < prerun.MAX_STEP_CHARS + 1000
+    assert json.loads(block) == {"results": pages}
+    assert len(block) > prerun.MAX_STEP_CHARS
 
 
 def test_files_written_by_a_step_are_included(tmp_path):
@@ -222,10 +217,11 @@ def test_script_uses_the_python_hermes_started_it_on(monkeypatch, tmp_path):
 
 def test_clean_result_keeps_the_shape_and_shrinks():
     page = "# Title\n\n\n" + "\\[item\\]   with   spaces\n\n" * 200
-    out = prerun.clean_result("web_extract", json.dumps({"results": [{"url": "https://e.com", "title": "T", "content": page}]}))
+    original = {"results": [{"url": "https://e.com", "title": "T", "content": page}]}
+    out = prerun.clean_result("web_extract", json.dumps(original, indent=100))
     data = json.loads(out)
-    assert data["results"][0]["url"] == "https://e.com" and len(out) < len(page)
-    assert "[item] with spaces" in data["results"][0]["content"]
+    assert data == original
+    assert data["results"][0]["content"] == page
 
 
 def test_clean_result_keeps_long_text_whole():
@@ -270,17 +266,18 @@ def test_new_only_sends_everything_when_only_the_text_changed():
     assert prerun._new_only_text(_feed(1, 2, 3, 4, 5, 6), seen, "My answer") is None
 
 
-def test_summary_and_failures_survive_collapsing():
+def test_passing_status_names_and_failures_remain_exact():
     log = "\n".join([f"tests/a.py::t{i} PASSED [ 10%]" for i in range(30)] +
                     ["tests/a.py::bad FAILED", "=== 1 failed, 30 passed in 2.1s ==="])
     out = prerun.collapse_passing(log)
-    assert "30 passing" in out and "tests/a.py::bad FAILED" in out and "1 failed, 30 passed" in out
+    assert out == log
 
 
 def test_failed_commands_and_code_keep_their_shape():
     code = "def f():\n" + "    return 1   # keep\n" * 200
-    ok = json.loads(prerun.clean_result("terminal", json.dumps({"output": code + "   \n" * 300, "exit_code": 0})))
-    assert "    return 1   # keep" in ok["output"]
+    original = json.dumps({"output": code + "   \n" * 300, "exit_code": 0})
+    ok = json.loads(prerun.clean_result("terminal", original) or original)
+    assert ok["output"] == code + "   \n" * 300
     assert prerun.clean_result("terminal", json.dumps({"output": "x  y\n" * 900, "exit_code": 1})) is None
 
 
@@ -369,7 +366,7 @@ def test_a_no_ai_routine_crash_is_reported_as_a_failure(monkeypatch, tmp_path):
     assert out.returncode == 7 and "Do the whole task" not in out.stdout
 
 
-def test_a_link_poor_run_keeps_the_remembered_items(monkeypatch):
+def test_a_link_poor_run_keeps_remembered_items_and_all_current_data(monkeypatch):
     saved = _fake_store(monkeypatch, _routine({"when_unchanged": "run", "new_only": True}))
     monkeypatch.setattr(prerun, "_recent_answers", lambda name: ["An answer"])
     outputs = [_feed(1, 2, 3, 4, 5, 6), "No links in this format", _feed(1, 2, 3, 4, 5, 7)]
@@ -377,14 +374,16 @@ def test_a_link_poor_run_keeps_the_remembered_items(monkeypatch):
     prerun.run("cr_1", dispatch)
     assert "No links" in prerun.run("cr_1", dispatch)[0]
     assert len(saved["r"]["meta"]["last_items"]) == 6
-    assert "Title 7" in prerun.run("cr_1", dispatch)[0]
+    current = prerun.run("cr_1", dispatch)[0]
+    assert "Title 7" in current and "Title 3" in current
 
 
-def test_long_test_logs_lose_only_passing_lines():
+def test_long_test_logs_keep_every_passing_line_and_failure():
     passing = [f"test_{i} (tests.test_a.T) ... ok" for i in range(300)]
     failure = ["test_x (tests.test_a.T) ... FAIL", "FAIL: test_x", "AssertionError: 2 != 4", "FAILED (failures=1)"]
-    out = json.loads(prerun.clean_result("terminal", json.dumps({"output": "\n".join(passing + failure), "exit_code": 1, "error": None})))
-    assert "300 passing test lines removed" in out["output"] and "test_5 " not in out["output"]
+    original = json.dumps({"output": "\n".join(passing + failure), "exit_code": 1, "error": None})
+    out = json.loads(prerun.clean_result("terminal", original) or original)
+    assert out["output"] == "\n".join(passing + failure)
     for line in failure:
         assert line in out["output"]
     assert out["exit_code"] == 1

@@ -1,15 +1,15 @@
 name: crystallize
-version: 0.3.0
+version: 0.4.0
 manifest_version: 2
 api_version: 1
 description: >-
-  Makes Hermes cron jobs cheaper on any cloud model. Trims the tools, AI calls, tool
-  results and reasoning each job pays for, turns repeated work into proven step lists,
-  and keeps a change only if the job's answers hold up and its cost really fell.
+  Helps normal chats and cron jobs spend less on repeated context and tool work.
+  Preserves reasoning settings, keeps recoverable originals, and shows quality
+  checks, uncertainty and comparable-settings receipts across cloud providers.
 author: itsflownium
 license: MIT
 homepage: https://github.com/itsflownium/hermes-crystallize
-tags: [automation, cost, cron, reliability]
+tags: [automation, cost, cron, chat, reliability]
 requires_hermes: ">=0.22.7"
 
 provides_tools:

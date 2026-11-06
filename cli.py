@@ -229,7 +229,7 @@ def _print_tune_job(name: str) -> None:
         return
     print(f"{name}: {tuning.status_text(t)}")
     answers = tuning.sample_answers(name, t)
-    for label, text in (("Before", answers.get("before")), ("With lower reasoning", answers.get("after"))):
+    for label, text in (("Before", answers.get("before")), ("With input savings", answers.get("after"))):
         if text:
             print(f"\n--- {label} ---\n{text[:1500]}")
 
@@ -240,9 +240,10 @@ def _tune(args: Any) -> None:
     job = getattr(args, "job", None)
     if getattr(args, "reasoning", None):
         from . import store
-
-        store.set_setting("lower_reasoning", args.reasoning == "lower")
-        print("Make cheaper will also try lower reasoning." if args.reasoning == "lower" else "Jobs keep your reasoning setting.")
+        if args.reasoning == "lower":
+            raise SystemExit("Crystallize preserves reasoning. Lowering thinking is not an efficiency saving.")
+        store.set_setting("lower_reasoning", False)
+        print("Jobs keep your reasoning setting.")
         return
     if getattr(args, "all", False):
         result = tuning.start_all()
@@ -256,13 +257,13 @@ def _tune(args: Any) -> None:
     try:
         if getattr(args, "undo", False):
             tuning.undo(job)
-            print(f"{job} is back to its previous reasoning setting.")
+            print(f"{job} is back to its previous settings.")
         elif getattr(args, "status", False):
             tuning.refresh()
             _print_tune_job(job)
         else:
             t = tuning.start(job, args.level)
-            later = " If its answers suffer, it gives back tools and reasoning a step at a time." if t["stages"] else ""
+            later = " If its checks fail, previous input settings are restored; reasoning stays unchanged." if t["stages"] else ""
             print(f"Trying {tuning._settings(t)} on {t['job_name']}. After {tuning.TRIAL_RUNS} answers it's compared "
                   f"with earlier runs and kept only if they hold up and it costs less.{later}")
     except lifecycle.LifecycleError as exc:
@@ -271,6 +272,9 @@ def _tune(args: Any) -> None:
 
 def _handle(args: Any) -> None:
     sub = getattr(args, "crystal_command", None)
+    if sub in ("reread", "blind", "rhythm", "auction", "delegation", "tool-defer", "compatibility"):
+        _completion_action(sub, args)
+        return
     if sub in ("contract", "compare", "receipt", "recipe", "cache", "chat-policy"):
         _improvement_action(sub, args)
         return
@@ -341,6 +345,7 @@ def _improvement_action(sub: str, args: Any) -> None:
 
 
 def _setup(subparser: Any) -> None:
+    import argparse
     subs = subparser.add_subparsers(dest="crystal_command")
     h = subs.add_parser("history", help="Show recorded cron runs and what they cost")
     h.add_argument("job", nargs="?", help="Job name or id to show run by run")
@@ -366,8 +371,8 @@ def _setup(subparser: Any) -> None:
     md.add_argument("mode", choices=("ai", "no-ai"))
     tn = subs.add_parser("tune", help="Trim a job's tools and reasoning, and keep that only if its answers hold up and it costs less")
     tn.add_argument("job", nargs="?", help="Job name or id. Leave out to list every job")
-    tn.add_argument("--level", help="Try only this level (default: the levels the job's model takes, weakest first)")
-    tn.add_argument("--reasoning", choices=("keep", "lower"), help="For all jobs: keep your reasoning setting (default), or also try lower")
+    tn.add_argument("--level", help="Legacy option; rejected because reasoning settings are preserved")
+    tn.add_argument("--reasoning", choices=("keep", "lower"), help="Use keep; the legacy lower option is refused")
     tn.add_argument("--all", action="store_true", help="Start on every job that can have it")
     tn.add_argument("--undo", action="store_true", help="Put the job's previous setting back")
     tn.add_argument("--status", action="store_true", help="Show the result, with an answer from before and after")
@@ -399,7 +404,92 @@ def _setup(subparser: Any) -> None:
     ch.add_argument("--tool", default="*", help="Tool name, or * for this chat's default")
     ch.add_argument("--mode", choices=("exact", "clean", "summary"))
     ch.add_argument("--focus", help="User-provided facts this chat's summaries must preserve")
+    rr = subs.add_parser("reread", help="Opt into cache-aware text replay savings; reasoning is untouched")
+    rr.add_argument("session_id")
+    for option in ("enabled", "writes", "results", "batching"):
+        rr.add_argument("--" + option, action=argparse.BooleanOptionalAction, default=None)
+    bl = subs.add_parser("blind", help="Inspect anonymous answers, vote, then reveal routes and cost")
+    bl.add_argument("comparison_id")
+    bl.add_argument("--choice", choices=("A", "B", "tie", "neither"))
+    bl.add_argument("--reveal", action="store_true", help="Reveal without voting; ends eligibility for a blind vote")
+    rh = subs.add_parser("rhythm", help="Preview observed change rhythm and explicitly change a noncritical schedule")
+    rh.add_argument("job")
+    rh.add_argument("--minutes", type=int)
+    rh.add_argument("--timezone", default="UTC")
+    rh.add_argument("--noncritical", action="store_true")
+    rh.add_argument("--allowed-staleness-minutes", type=int)
+    rh.add_argument("--apply", action="store_true")
+    rh.add_argument("--undo", action="store_true")
+    rh.add_argument("--fingerprint", default="")
+    rh.add_argument("--confirm", action="store_true")
+    au = subs.add_parser("auction", help="Explicitly compare models on frozen real evidence, with a request budget")
+    au.add_argument("job")
+    au.add_argument("--models", required=True, help="JSON array of explicit provider/model objects")
+    au.add_argument("--cap-usd", type=float, required=True)
+    au.add_argument("--max-tokens", type=int, default=1024)
+    au.add_argument("--execution")
+    au.add_argument("--run", action="store_true")
+    au.add_argument("--confirm", action="store_true")
+    au.add_argument("--accept-estimated-cap", action="store_true", help="Use an estimated request ledger; not a provider billing guarantee")
+    de = subs.add_parser("delegation", help="Explicit profile-wide helper consent; never selects the active backend")
+    flag = de.add_mutually_exclusive_group()
+    flag.add_argument("--enable", action="store_true")
+    flag.add_argument("--disable", action="store_true")
+    de.add_argument("--provider", default="")
+    de.add_argument("--model", default="")
+    de.add_argument("--confirm", action="store_true")
+    td = subs.add_parser("tool-defer", help="Preview or explicitly add profile-wide deferred tools; clarify stays direct")
+    td.add_argument("--session-id", default="")
+    td.add_argument("--tools", nargs="+")
+    td.add_argument("--fingerprint", default="")
+    td.add_argument("--confirm", action="store_true")
+    subs.add_parser("compatibility", help="Report public SDK support and remaining marketplace blockers")
     subparser.set_defaults(func=_handle)
+
+
+def _completion_action(sub: str, args: Any) -> None:
+    import json
+    from . import auction, blind, delegation, host_api, lifecycle, reread, rhythm, tool_discovery
+    try:
+        if sub == "reread":
+            values = {k: getattr(args, k) for k in ("enabled", "writes", "results", "batching") if getattr(args, k) is not None}
+            result = reread.configure(args.session_id, **values) if values else reread.policy(args.session_id)
+        elif sub == "blind":
+            if args.choice and args.reveal:
+                raise ValueError("Choose a blind answer or reveal without voting, not both.")
+            result = blind.choose(args.comparison_id, args.choice) if args.choice else blind.reveal(args.comparison_id) if args.reveal else blind.present(args.comparison_id)
+        elif sub == "delegation":
+            result = delegation.configure(args.enable, args.provider, args.model, confirmed=args.confirm) if args.enable or args.disable else delegation.summary()
+        elif sub == "tool-defer":
+            result = tool_discovery.configure(args.tools, confirmed=args.confirm, expected_config_fingerprint=args.fingerprint) if args.tools else tool_discovery.preview(args.session_id)
+        elif sub == "compatibility":
+            result = host_api.report()
+        else:
+            job = lifecycle.cron_job(args.job)
+            if not job:
+                raise ValueError("No such job.")
+            job_id = job["id"]
+            if sub == "rhythm":
+                if args.apply and args.undo:
+                    raise ValueError("Choose Apply or Undo.")
+                if args.undo:
+                    result = rhythm.undo(job_id, expected_config_fingerprint=args.fingerprint, confirmed=args.confirm)
+                elif args.apply:
+                    result = rhythm.apply(job_id, args.minutes, expected_config_fingerprint=args.fingerprint,
+                        noncritical=args.noncritical, allowed_staleness_minutes=args.allowed_staleness_minutes, confirmed=args.confirm)
+                elif args.minutes is not None:
+                    result = rhythm.preview(job_id, args.minutes, timezone=args.timezone,
+                        noncritical=args.noncritical, allowed_staleness_minutes=args.allowed_staleness_minutes)
+                else:
+                    result = rhythm.report(job_id, timezone=args.timezone)
+            elif sub == "auction":
+                values = {"models": _read_json(args.models), "max_tokens": args.max_tokens,
+                          "cost_cap_usd": args.cap_usd, "execution_id": args.execution,
+                          "accept_estimated_cap": args.accept_estimated_cap}
+                result = auction.run(job_id, confirmed=args.confirm, **values) if args.run else auction.preview(job_id, **values)
+        print(json.dumps(result, indent=2, default=str))
+    except (ValueError, OSError, RuntimeError) as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def register(ctx: Any) -> None:

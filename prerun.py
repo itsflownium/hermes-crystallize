@@ -26,9 +26,9 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-from . import history, lifecycle, runner, store
+from . import adaptive, history, lifecycle, runner, store
 
-MAX_STEP_CHARS = 40000      # per step, after cleaning; cut only at a line (item) boundary
+MAX_STEP_CHARS = 40000      # legacy API value; complete output is never cut to this value
 MAX_STRING_CHARS = 800      # retained for compatibility; semantic strings are never cut here
 MAX_FILE_BYTES = 2_000_000  # files a step wrote that we read back
 SKIP_GATE = '{"wakeAgent": false}'
@@ -55,6 +55,26 @@ def _json_text(value: Any) -> str:
         # Valid JSON, with one item per line so presentation cuts have boundaries.
         return "[\n" + ",\n".join(json.dumps(v, ensure_ascii=False, separators=(",", ":"), default=str) for v in value) + "\n]"
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
+
+
+def _compact_json(text: str) -> str:
+    """Remove only JSON's insignificant whitespace, preserving numeric tokens too."""
+    inside, escaped, out = False, False, []
+    for char in text:
+        if inside:
+            out.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                inside = False
+        elif char == '"':
+            inside = True
+            out.append(char)
+        elif char not in " \t\r\n":
+            out.append(char)
+    return "".join(out)
 
 
 _TAG = re.compile(r"<[^>]+>")
@@ -110,26 +130,18 @@ def _tidy(text: str) -> str:
 
 
 def clean_text(text: str) -> str:
-    """Make one piece of tool output small and easy to read."""
-    s = text.strip("\r\n")
-    if not s:
-        return ""
-    if s.lstrip()[:1] in ("[", "{"):
+    """Compact JSON presentation without discarding any fields or string content.
+
+    Plain text, markup, feeds, code, status and test logs remain exact. Their
+    formatting or apparently repetitive values can be part of the task.
+    """
+    if text.lstrip()[:1] in ("[", "{"):
         try:
-            return _json_text(json.loads(s))
+            json.loads(text)
+            return _compact_json(text)
         except ValueError:
             pass
-    head = s[:2000].lower()
-    if "<rss" in head or "<feed" in head or ("<item" in s.lower() and "<?xml" in head):
-        feed = _feed_text(s)
-        if feed:
-            return feed
-    if "<html" in head or "<body" in head or len(_TAG.findall(s[:5000])) > 30:
-        return _tidy(_strip_html(s))
-    if "CDATA" in s and ("<![" in s or "<!\\[" in s):
-        return _tidy(s)
-    # Plain output may be source code, tabular data, or an exact diagnostic.
-    return _trim_lines(s)
+    return text
 
 
 def _unwrap(result: str) -> tuple[str, list[tuple[str, str]]]:
@@ -174,7 +186,7 @@ def written_files(args: Any, started: float) -> list[Path]:
             st = p.stat()
         except (OSError, ValueError, RuntimeError):
             continue
-        if p.is_file() and st.st_mtime >= started - 1 and st.st_size <= MAX_FILE_BYTES and p not in found:
+        if p.is_file() and st.st_mtime >= started - 1 and p not in found:
             found.append(p)
     return found
 
@@ -187,29 +199,33 @@ def _cap(text: str, limit: int = MAX_STEP_CHARS) -> str:
     return text[:cut] + f"\n… ({len(text) - cut} more characters not shown)"
 
 
-def step_block(step: dict, output: dict, *, limit: Optional[int] = MAX_STEP_CHARS) -> str:
-    """One step's data. Every page and file gets a fair share of the space, so
-    no source is ever left out because an earlier one was long."""
-    main, pages = _unwrap(output.get("output") or "")
-    sources = [(f"### {title}", body) for title, body in pages]
+def step_block(step: dict, output: dict, *, limit: Optional[int] = None) -> str:
+    """Complete step data and artifact contents; a learned budget is advisory.
+
+    Oversized or unfamiliar data falls back to the whole original, so the model
+    can inspect every source without guessing what a display limit omitted.
+    """
+    raw = output.get("output")
+    main = raw if isinstance(raw, str) else _json_text(raw) if raw is not None else ""
+    sources = []
     for artifact in output.get("artifacts") or []:
-        if isinstance(artifact, dict) and isinstance(artifact.get("content"), str):
-            sources.append((f"### File {artifact.get('name') or 'artifact'}", artifact["content"]))
+        if (not isinstance(artifact, dict) or not isinstance(artifact.get("content"), str)
+                or artifact.get("truncated") or artifact.get("omitted")):
+            raise ValueError("An artifact lacks complete current contents; Hermes must finish the whole task.")
+        sources.append((f"### File {artifact.get('name') or 'artifact'}", artifact["content"]))
     for path in written_files(output.get("args", step.get("args")), output.get("started") or 0):
-        try:
-            sources.append((f"### File {path.name}", path.read_text(errors="replace")))
-        except OSError:
-            continue
+        if path.stat().st_size > MAX_FILE_BYTES:
+            raise ValueError(f"File {path.name} exceeds the complete-result limit; Hermes must finish the whole task.")
+        sources.append((f"### File {path.name}", path.read_bytes().decode("utf-8")))
     parts = []
     if main.strip():
-        # When the step saved its data to a file, what it printed is only a preview.
-        cleaned = clean_text(main)
-        parts.append(cleaned if limit is None else _cap(cleaned, min(1500, limit) if sources else limit))
-    share = limit // max(1, len(sources)) if limit is not None else None
+        parts.append(clean_text(main))
     for heading, body in sources:
-        cleaned = clean_text(body)
-        parts.append(f"{heading}\n{cleaned if share is None else _cap(cleaned, share)}")
-    return "\n\n".join(p for p in parts if p)
+        parts.append(f"{heading}\n{clean_text(body)}")
+    text = "\n\n".join(p for p in parts if p)
+    if limit is not None and len(text) > limit:
+        return f"[Crystallize: learned presentation budget {limit} characters exceeded; complete output follows.]\n{text}"
+    return text
 
 
 # ---------------------------------------------------------------- cleaning a live tool result
@@ -252,22 +268,15 @@ MIN_PASSING_LINES = 20      # fewer than this isn't a long test log
 
 
 def collapse_passing(text: str) -> str:
-    """Remove the passing lines from a long test log and say how many went. Failures, errors
-    and everything else stay exactly as they were. Uses no AI."""
-    lines = text.split("\n")
-    kept = [line for line in lines if not _PASSING_LINE.search(line)]
-    removed = len(lines) - len(kept)
-    if removed < MIN_PASSING_LINES:
-        return text
-    return f"[{removed} passing test lines removed]\n" + "\n".join(kept)
+    """Compatibility helper: test names, status and timing are semantic evidence."""
+    return text
 
 
 def clean_result(tool: str, result: Any) -> Optional[str]:
     """A smaller version of a tool result, in its original shape, or None to leave it.
 
-    Removes markup and repeated whitespace, which every later AI call
-    would otherwise pay to re-read. Uses no AI, and fails safe: anything unexpected
-    leaves the result untouched.
+    Only JSON serialization changes. Every key, nested value and exact string
+    remains available; no status, number, timestamp or passing line is suppressed.
     """
     if tool not in CLEANED_TOOLS or not isinstance(result, str) or len(result) < MIN_CLEAN_CHARS:
         return None
@@ -275,28 +284,11 @@ def clean_result(tool: str, result: Any) -> Optional[str]:
         try:
             data = json.loads(result)
         except ValueError:
-            cleaned = _clean_for_agent(result)
+            return None
         else:
-            if not isinstance(data, dict):
-                cleaned = _clean_for_agent(result)
-            elif data.get("error"):
+            if isinstance(data, dict) and data.get("error"):
                 return None  # the exact error may matter
-            else:
-                changed = False
-                for page in data.get("results") or []:
-                    if isinstance(page, dict):
-                        for key in ("content", "text", "markdown", "raw_content", "description"):
-                            if isinstance(page.get(key), str):
-                                page[key], changed = _clean_for_agent(page[key], prose=True), True
-                failed = data.get("exit_code") not in (None, 0)
-                for key in ("output", "content", "result", "text"):
-                    if isinstance(data.get(key), str):
-                        # A failed command keeps everything except lines that say a test passed.
-                        short = collapse_passing(data[key])
-                        data[key], changed = (short if failed else _clean_for_agent(short)), True
-                if not changed:
-                    return None
-                cleaned = json.dumps(data, ensure_ascii=False)
+            cleaned = _compact_json(result)
     except Exception:  # noqa: BLE001 — never break a run over a saving
         return None
     return cleaned if len(cleaned) <= len(result) * (1 - MIN_CLEAN_GAIN) else None
@@ -307,13 +299,31 @@ def clean_result(tool: str, result: Any) -> Optional[str]:
 _VOLATILE: list[re.Pattern[str]] = []  # fields are meaningful unless a contract explicitly says otherwise
 
 
+class _ExactNumber(str):
+    pass
+
+
+class _ExactObject(list):
+    pass
+
+
 def _canonical_content(text: str) -> str:
     """Normalize JSON presentation while keeping values, order and plain-text indentation."""
     try:
-        value = json.loads(text)
+        value = json.loads(text, parse_int=_ExactNumber, parse_float=_ExactNumber, object_pairs_hook=_ExactObject)
     except (ValueError, TypeError):
-        return text.replace("\r\n", "\n").strip("\r\n")
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return text
+
+    def exact(value):
+        if isinstance(value, _ExactNumber):
+            return ["number", str(value)]
+        if isinstance(value, _ExactObject):
+            return ["object", [[key, exact(child)] for key, child in sorted(value, key=lambda pair: pair[0])]]
+        if isinstance(value, list):
+            return ["array", [exact(child) for child in value]]
+        return [type(value).__name__, value]
+
+    return json.dumps(exact(value), ensure_ascii=False, separators=(",", ":"))
 
 
 def fingerprint(text: str) -> str:
@@ -514,11 +524,20 @@ def _run(routine_id: str, dispatch: runner.Dispatch) -> tuple[str, int]:
                 "Do the whole task yourself.", 1 if no_ai else 0)
 
     steps = routine["steps"]["steps"]
+    campaign = store.get_tuning(routine["name"])
+    if campaign and (campaign.get("job_id") != routine.get("source_ref") or campaign.get("status") not in {"trial", "kept"}):
+        campaign = None
+    learned = (campaign or {}).get("presentation_budgets")
+    if not learned:
+        learned = adaptive.presentation_budgets(history.load_runs(routine.get("source_ref") or routine["name"]))
+    budgets = learned.get("by_tool", {}) if learned.get("ready") else {}
     blocks, full_blocks, semantic = [], [], []
     for step, out in zip(steps, result["outputs"]):
         complete_body = step_block(step, out, limit=None)
         full_blocks.append(complete_body if no_ai else f"## Step {out['step']}: {step['tool']}\n{complete_body}")
-        blocks.append(complete_body if no_ai else f"## Step {out['step']}: {step['tool']}\n{step_block(step, out)}")
+        limit = (budgets.get(step["tool"]) or {}).get("chars")
+        presented = step_block(step, out, limit=limit) if isinstance(limit, int) and limit > 0 else complete_body
+        blocks.append(complete_body if no_ai else f"## Step {out['step']}: {step['tool']}\n{presented}")
         semantic.append({"tool": step["tool"], "output": _canonical_content(out.get("output") or ""),
                          "artifacts": out.get("artifacts") or []})
     data = "\n\n".join(blocks)
@@ -556,18 +575,13 @@ def _run(routine_id: str, dispatch: runner.Dispatch) -> tuple[str, int]:
     if items_now is None or len(items_now) >= MIN_ITEMS:  # a link-poor run says nothing about the items
         meta["last_items"] = items_now or {}
     store.update_routine(routine_id, meta=meta)
-    if meta.get("new_only") and not no_ai:
-        recent = _recent_answers(routine["name"])
-        shorter = _new_only_text(full_data, seen, recent[-1] if recent else "")
-        # An oversized delta is passed as current data; silently cutting a delta could
-        # hide an update while instructing the model to retain the old answer.
-        if shorter and len(shorter) <= MAX_STEP_CHARS:
-            return shorter, 0
+    # Changed input always presents complete current evidence. A historical
+    # new_only flag cannot omit an item the current task may need to reconsider.
     if no_ai:
         _record_skip(store.get_routine(routine_id) or routine, "no_ai_runs")
         return data, 0
     return (f"Collected by Crystallize routine {routine_id} at {time.strftime('%Y-%m-%d %H:%M')} "
-            f"in {time.time() - t0:.1f}s. Captured data follows; any display limits are marked.\n\n{data}"), 0
+            f"in {time.time() - t0:.1f}s. Complete captured data follows.\n\n{data}"), 0
 
 
 def run(routine_id: str, dispatch: runner.Dispatch) -> tuple[str, int]:

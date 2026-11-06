@@ -1,52 +1,39 @@
-"""Make any AI cron job cheaper, on any cloud model, with or without a routine.
+"""Reduce repeated Cron input while preserving its model and reasoning settings.
 
-Cost is roughly prompt size x AI calls, plus reasoning. A trial changes all of it at once:
-  - Instruction. A short line asks the AI to use only the tools the task needs, once each.
-    It often cuts the number of AI calls, the biggest multiplier of all.
-  - Tools. Every model pays to read every tool definition on every call. The job starts
-    with only the toolsets its cheapest good run used.
-  - Results. Tool results are cleaned before the AI reads them (see prerun.clean_result),
-    so no later call pays to re-read markup and API link fields.
-  - Reasoning. The weakest level the job's model takes, asked of Hermes (see modelinfo.py).
-  - New items only. A live routine sends what changed plus its last answer to update.
-
-  start    Apply the first stage, remembering what the job had before.
-  refresh  After TRIAL_RUNS answers, compare with earlier runs. Kept if the job still does
-           what it did, the answers hold up and it got cheaper. If the answers suffer, the
-           next stage gets a turn: every tool the job has ever used, then more reasoning. If
-           nothing works, or it wasn't cheaper, the old settings go back by themselves.
-  undo     Put the old settings back from the terminal.
-
-The comparison is a set of plain checks (see `evaluate`). It catches broken, empty or
-much thinner answers and regular actions that stopped happening. It can't catch subtle
-mistakes, or an action a job only takes now and then, so `hermes crystal tune <job> --status`
-shows an answer from before and after to read for yourself.
+Trials compare only the same recorded model, provider and reasoning configuration.
+Complete observations set advisory presentation budgets and safe read-schema choices;
+uncertain evidence always leaves full output and original host tool definitions.
+Observable contracts and actions remain required; structural checks are not a proof
+of factual accuracy or semantic equivalence.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 import re
 import statistics
 import time
 from typing import Any, Optional
 
-from . import analyze, contracts, history, lifecycle, modelinfo, store
+from . import adaptive, analyze, contracts, history, lifecycle, modelinfo, store
 
 logger = logging.getLogger(__name__)
 
 TRIAL_RUNS = 2
 MAX_TRIAL_RUNS = 6  # a job that had always answered gets this long to say something again
 STALE_FAILURES = 3  # kept settings that fail this many runs in a row go back by themselves
-CLOSE_CALL = 0.15   # a result within this of "no saving" gets more runs before it's judged
-EFFICIENCY_HINT = ("\n\nWork efficiently: use only the tools this task needs, once each. Don't load skills, "
+LEGACY_EFFICIENCY_HINT = ("\n\nWork efficiently: use only the tools this task needs, once each. Don't load skills, "
                    "re-check results or research beyond what the task asks. Still do every action it asks "
                    "for, on every run, and keep every detail it asks for, such as links. Then answer.")
+EFFICIENCY_HINT = ("\n\nReuse complete, current evidence when it already answers this task. Use every tool, skill, "
+                   "verification and research step needed for the best answer. Still do every action it asks "
+                   "for, on every run, and keep every detail it asks for, such as links. Preserve the task's "
+                   "quality, model and reasoning settings.")
 MIN_BEFORE_RUNS = 2
 BEFORE_WINDOW = 8
 MIN_LENGTH_RATIO = 0.5
 MIN_LINES_RATIO = 0.6
-MIN_COST_DROP = 0.1  # below 10% cheaper isn't worth a lower level
 _URL = re.compile(r"https?://")
 _SILENT = "[SILENT]"
 STALE_START = 300           # a change still "starting" after this many seconds was cut short
@@ -75,18 +62,26 @@ def _measure(before: list[history.Run], trial: list[history.Run]) -> tuple[str, 
     routes have no price, so those compare the cost at listed API prices. A model on no price
     list compares all the tokens it used, since prompt tokens are usually most of the saving,
     then time."""
+    if not history.comparable_runs(before, trial):
+        return "nothing", None, None
     fields = (("cost", lambda r: r.cost_usd), ("api cost", lambda r: r.api_cost_usd),
               ("tokens", lambda r: r.total_tokens), ("seconds", lambda r: r.duration_s))
     for name, field in fields:
         if name == "api cost" and any(getattr(r, "pricing_uncertain", False) for r in before + trial):
             continue  # aggregate session totals cannot establish request-tier savings
-        if name in ("cost", "api cost") and any(field(r) is None for r in before + trial):
-            continue  # an unpriced run must not disappear from a monetary comparison
+        if any(not isinstance(field(r), (int, float)) or isinstance(field(r), bool)
+               or not math.isfinite(field(r)) or field(r) < 0 for r in before + trial):
+            continue  # an unmeasured run must not disappear from a comparison
         old = _mid([field(r) for r in before if field(r) is not None])
         new = _mid([field(r) for r in trial if field(r) is not None])
         if old is not None and old > 0 and new is not None:
             return name, old, new
     return "nothing", None, None
+
+
+def _measurements(runs: list[history.Run], metric: str) -> list[float]:
+    field = {"cost": "cost_usd", "api cost": "api_cost_usd", "tokens": "total_tokens", "seconds": "duration_s"}.get(metric)
+    return [getattr(run, field) for run in runs] if field and all(getattr(run, field) is not None for run in runs) else []
 
 
 def _amount(metric: Optional[str], value: Optional[float]) -> str:
@@ -144,9 +139,14 @@ def evaluate(before: list[history.Run], trial: list[history.Run],
         if linked * 2 > len(real_old) and not all(_URL.search(t) for t in real_new):
             return fail("its answers stopped including links")
     if old_value is None or new_value is None:
+        if not history.comparable_runs(before, trial):
+            return fail("model, provider and reasoning evidence must be known and identical to compare savings", "identity")
         return fail("there were no numbers to compare", "saving")
-    if new_value > old_value * (1 - MIN_COST_DROP):
-        return fail(f"it wasn't cheaper ({_amount(metric, new_value)} vs {_amount(metric, old_value)} a run)", "saving")
+    uncertainty = adaptive.savings_evidence(_measurements(before, metric), _measurements(trial, metric))
+    result["saving_evidence"] = uncertainty
+    if not uncertainty.get("ok"):
+        return fail(f"it wasn't cheaper beyond observed variation and sample uncertainty "
+                    f"({_amount(metric, new_value)} vs {_amount(metric, old_value)} a run)", "saving")
     return {**result, "ok": True, "why": "structural checks passed and it got cheaper",
             "quality": {**result["quality"], "ok": True, "why": "structural checks passed"}}
 
@@ -203,13 +203,8 @@ def _save(name: str, data: dict[str, Any]) -> None:
     receipts.snapshot_tuning(data)
 
 
-def _score(run: history.Run) -> float:
-    return run.cost_usd or run.api_cost_usd or float(run.total_tokens or 0)
-
-
 def _tool_choices(found: dict[str, Any], name: str) -> tuple[Optional[list[str]], Optional[list[str]]]:
-    """(narrow, wide) toolsets: what the job's cheapest good run used, and all it has ever used.
-    The cheapest run proves those tools were enough. None means leave the tools alone."""
+    """Compatibility planner retaining the union of every observed job branch."""
     runs = [r for r in history.load_runs(name) if r.scheduled and r.steps]
     if not runs:
         return None, None
@@ -218,17 +213,12 @@ def _tool_choices(found: dict[str, Any], name: str) -> tuple[Optional[list[str]]
     routine = store.routine_for_job(found["id"])
     for step in ((routine or {}).get("steps") or {}).get("steps", []) if routine else []:
         fixed.add(step["tool"])  # needed for the full task if the routine fails
-    good = [r for r in runs if r.outcome in (None, "completed") and r.finished]
-    answers = history.final_answers([r.session_id for r in good if r.session_id])
-    good = [r for r in good if answers.get(r.session_id or "", "").strip()]
-    cheapest = {s.tool_name for s in min(good, key=_score).steps} if good else used
+    # An uncommon branch still belongs to the job. Cost never justifies losing it.
+    cheapest = used
     wide = modelinfo.toolsets_for(used | fixed)
     narrow = modelinfo.toolsets_for(cheapest | fixed)
     if wide is None:
         return None, None
-    attached = found.get("skills") or found.get("skill")
-    if narrow is not None and not attached and "skills" in narrow:
-        narrow = [t for t in narrow if t != "skills"]  # browsing skills costs calls; it's restored if missed
     current = found.get("enabled_toolsets")
     if current is not None:
         if set(wide) - set(current):
@@ -239,18 +229,16 @@ def _tool_choices(found: dict[str, Any], name: str) -> tuple[Optional[list[str]]
 
 
 def plan_stages(levels: list[str], narrow: Optional[list[str]], wide: Optional[list[str]]) -> list[dict[str, Any]]:
-    """The settings to try in order, cheapest first, each one giving a little more back."""
-    first = levels[0] if levels else None
-    stages = [{"level": first, "toolsets": narrow}]
+    """Compatible stage shape; reasoning levels are deliberately ignored."""
+    stages = [{"level": None, "toolsets": narrow}]
     if narrow != wide:
-        stages.append({"level": first, "toolsets": wide})
-    stages += [{"level": level, "toolsets": wide} for level in levels[1:]]
+        stages.append({"level": None, "toolsets": wide})
     return stages
 
 
 def _apply_stage(job_id: str, stage: dict[str, Any], t: Optional[dict[str, Any]] = None) -> None:
     if stage.get("level"):
-        lifecycle._edit_job(job_id, "--reasoning-effort", stage["level"])
+        raise lifecycle.LifecycleError("Crystallize preserves reasoning; legacy reasoning stages must be restored first.")
     if stage.get("toolsets") is not None:
         lifecycle.set_toolsets(job_id, stage["toolsets"])
     elif t and t.get("tools_changed"):  # this stage gives all the tools back
@@ -275,11 +263,14 @@ def _set_new_only(job_id: str, on: bool) -> bool:
 
 
 def lowers_reasoning() -> bool:
-    return bool(store.get_setting("lower_reasoning", False))
+    """Retained for API compatibility; stale settings cannot reduce capability."""
+    return False
 
 
 def start(job: str, level: Optional[str] = None) -> dict[str, Any]:
-    """Start a trial. With a level, reasoning tries only that one."""
+    """Start an input-efficiency trial at exactly the job's configured reasoning."""
+    if level is not None:
+        raise lifecycle.LifecycleError("Reasoning changes are disabled. Tune preserves your model and reasoning settings.")
     found = _job_or_error(job)
     name = found.get("name") or found["id"]
     if found.get("no_agent"):
@@ -287,6 +278,8 @@ def start(job: str, level: Optional[str] = None) -> dict[str, Any]:
     if found.get("state") == "completed":
         raise lifecycle.LifecycleError(f"{name} has finished.")
     current = lifecycle._tuning_for_job(found)
+    if current and _migrate_legacy(current):
+        found = _job_or_error(found["id"])
     if current:
         from . import receipts
 
@@ -301,14 +294,11 @@ def start(job: str, level: Optional[str] = None) -> dict[str, Any]:
     if len(before) < MIN_BEFORE_RUNS:
         raise lifecycle.LifecycleError(
             f"{name} needs {MIN_BEFORE_RUNS} finished runs to compare with first (has {len(before)}).")
-    # Your reasoning setting stays yours unless you asked to try lower, for all jobs or this one.
-    levels = [level] if level else modelinfo.levels_to_try(found) if lowers_reasoning() else []
-    if levels and found.get("reasoning_effort") == levels[0]:
-        levels = levels[1:]
-    narrow, wide = _tool_choices(found, found["id"])
-    stages = plan_stages(levels, narrow, wide)
-    if upgrade:  # kept settings from before these savings existed: keep them unless narrower is known
-        stages = [{"level": stage["level"] or current.get("level"),
+    # Keep the host toolsets intact. Per-request pruning only hides unused
+    # host-declared read schemas, retaining all action/unknown/recovery tools.
+    stages = plan_stages([], None, None)
+    if upgrade:  # a capability-preserving campaign can add the new presentation checks
+        stages = [{"level": None,
                    "toolsets": stage["toolsets"] if stage["toolsets"] is not None else current.get("toolsets")}
                   for stage in stages]
     # What the job did before any trial stays required through every later trial.
@@ -319,7 +309,9 @@ def start(job: str, level: Optional[str] = None) -> dict[str, Any]:
             "required_actions": required, "tools_changed": stages[0]["toolsets"] is not None,
             "previous": found.get("reasoning_effort"), "started_at": now, "first_started_at": now, "baseline_until": now,
             "previous_toolsets": found.get("enabled_toolsets"), "clean": True, "hint": True,
-            "hint_added": EFFICIENCY_HINT not in (found.get("prompt") or ""), "new_only": True,
+            "hint_added": EFFICIENCY_HINT not in (found.get("prompt") or ""), "new_only": False,
+            "reasoning_preserved": True, "policy_version": 2, "schema_pruning": True,
+            "presentation_budgets": adaptive.presentation_budgets(before),
             "baseline_run_ids": [r.execution_id for r in before]}
     if upgrade:
         # Judged against its kept settings, and put back to them if it doesn't help.
@@ -333,7 +325,6 @@ def start(job: str, level: Optional[str] = None) -> dict[str, Any]:
         prompt = found.get("prompt") or ""
         if EFFICIENCY_HINT not in prompt:
             lifecycle._edit_job(found["id"], "--prompt", prompt + EFFICIENCY_HINT)
-        data["new_only"] = _set_new_only(found["id"], True)
     except Exception as exc:
         _roll_back(name, data, current if upgrade else None)
         raise lifecycle.LifecycleError(f"Couldn't change {name}, so its old settings are back: {exc}") from exc
@@ -370,7 +361,41 @@ def start_all() -> dict[str, Any]:
 
 def cleans_results(name: str) -> bool:
     t = status(name)
-    return bool(t and t.get("clean") and t["status"] in ("trial", "kept"))
+    return bool(t and t.get("clean") and not _legacy_campaign(t) and t["status"] in ("trial", "kept"))
+
+
+def _legacy_campaign(t: dict[str, Any]) -> bool:
+    return bool(t.get("level") or any(stage.get("level") for stage in t.get("stages") or [])
+                or (t.get("policy_version", 0) < 2 and (t.get("toolsets") is not None or any(t.get(key) for key in
+                    ("hint", "tools_changed", "clean", "new_only")))))
+
+
+def _migrate_legacy(t: dict[str, Any]) -> bool:
+    """Restore our installed legacy changes, without overwriting later user edits."""
+    if t.get("status") not in {"starting", "trial", "kept"} or not _legacy_campaign(t):
+        return False
+    if t.get("status") == "kept":
+        t.setdefault("kept_at", t.get("finished_at"))
+        t.setdefault("trial_finished_at", t.get("finished_at"))
+    t.setdefault("legacy_settings", {"level": t.get("level"), "previous": t.get("previous"),
+                                     "stages": t.get("stages") or []})
+    try:
+        _restore(t)
+    except Exception:  # noqa: BLE001 — retain recovery data and retry next refresh
+        t["needs_restore"] = True
+        _save(t["job_name"], t)
+        logger.warning("crystallize: legacy settings still need restoration for %s", t["job_name"], exc_info=True)
+        return True
+    now = time.time()
+    t.pop("needs_restore", None)
+    t.update({"status": "revalidation", "revalidation_at": now, "reverted_at": now, "finished_at": now,
+              "level": None, "stages": [], "reasoning_preserved": True, "policy_version": 2,
+              "schema_pruning": False, "new_only": False,
+              "result": {"ok": False, "kind": "reasoning", "why": "legacy efficiency settings restored; "
+                         "fresh baseline runs at the original model and reasoning are required",
+                         "quality": {"ok": False, "stale": True, "semantic_equivalence_proven": False}}})
+    _save(t["job_name"], t)
+    return True
 
 
 def _restore(t: dict[str, Any]) -> None:
@@ -380,11 +405,17 @@ def _restore(t: dict[str, Any]) -> None:
     # Every part is tried, so one failure doesn't leave the others changed. Each is safe to repeat.
     parts = []
     if t.get("level") and lifecycle._same_level(found.get("reasoning_effort"), t["level"]):
-        parts.append(lambda: lifecycle._edit_job(found["id"], "--reasoning-effort", t.get("previous") or ""))
+        previous = t.get("previous")
+        previous_flag = "none" if previous is False else "" if previous is None else str(previous)
+        parts.append(lambda: lifecycle._edit_job(found["id"], "--reasoning-effort", previous_flag))
     if (t.get("toolsets") is not None or t.get("tools_changed")) and lifecycle._same_tools(found.get("enabled_toolsets"), t.get("toolsets")):
         parts.append(lambda: lifecycle.set_toolsets(found["id"], t.get("previous_toolsets")))
-    if t.get("hint") and t.get("hint_added", True) and EFFICIENCY_HINT in (found.get("prompt") or ""):
-        parts.append(lambda: lifecycle._edit_job(found["id"], "--prompt", found["prompt"].replace(EFFICIENCY_HINT, "")))
+    hints = (EFFICIENCY_HINT, LEGACY_EFFICIENCY_HINT)
+    if t.get("hint") and t.get("hint_added", True) and any(hint in (found.get("prompt") or "") for hint in hints):
+        prompt = found["prompt"]
+        for hint in hints:
+            prompt = prompt.replace(hint, "")
+        parts.append(lambda: lifecycle._edit_job(found["id"], "--prompt", prompt))
     if t.get("new_only"):
         parts.append(lambda: _set_new_only(found["id"], False))
     problem = None
@@ -432,6 +463,8 @@ def refresh() -> None:
         lifecycle.recover_promotions()
         lifecycle.refresh_drift()
         for t in store.list_tuning():
+            if _migrate_legacy(t):
+                continue
             if t.get("needs_restore") or (t["status"] == "starting" and time.time() - t["started_at"] > STALE_START):
                 _finish_restore(t)
             elif t["status"] in ("trial", "kept") and _configuration_drift(t):
@@ -441,7 +474,7 @@ def refresh() -> None:
             elif t["status"] == "kept":
                 _guard_kept(t)
     except Exception:  # noqa: BLE001
-        logger.warning("crystallize: checking reasoning trials failed", exc_info=True)
+        logger.warning("crystallize: checking efficiency trials failed", exc_info=True)
 
 
 def _configuration_drift(t: dict[str, Any]) -> bool:
@@ -509,7 +542,10 @@ def _guard_kept(t: dict[str, Any]) -> None:
 
 def _is_close(result: dict[str, Any]) -> bool:
     old, new = result.get("before"), result.get("after")
-    return result.get("kind") == "saving" and bool(old and new) and new <= old * (1 + CLOSE_CALL)
+    evidence = result.get("saving_evidence") or {}
+    return (result.get("kind") == "saving" and old is not None and new is not None and old > 0
+            and evidence.get("sufficient_samples", False)
+            and new - old <= evidence.get("required_drop", 0))
 
 
 def _trial_runs(t: dict[str, Any]) -> tuple[list[history.Run], list[history.Run]]:
@@ -543,6 +579,8 @@ def _decide(t: dict[str, Any]) -> None:
     elif len(counted) >= TRIAL_RUNS:
         result = evaluate(before, counted, answers, t.get("required_actions"), spec)
         if _is_close(result) and alive and len(counted) < MAX_TRIAL_RUNS:
+            t["pending_result"] = result
+            _save(t["job_name"], t)
             return  # one odd run can decide a close call, so it gets more runs
     elif len(trial) >= MAX_TRIAL_RUNS:
         result = {"ok": False, "why": f"it said nothing to report on {len(trial) - len(counted)} runs in a row"}
@@ -550,7 +588,7 @@ def _decide(t: dict[str, Any]) -> None:
         result = {"ok": False, "why": "the job finished before there were enough runs to compare"}
     else:
         return
-    # Weak answers may recover with more tools or reasoning. "Not cheaper" won't.
+    # A weaker answer may recover with the original tool definitions. Reasoning stays fixed.
     if not result["ok"] and result.get("kind") == "quality" and t.get("stages") and alive:
         stage, *rest = t["stages"]
         # Saved first, so a change that fails or a crash can always be undone.
@@ -571,6 +609,7 @@ def _decide(t: dict[str, Any]) -> None:
             logger.warning("crystallize: couldn't restore %s", t["job_name"], exc_info=True)
             return  # still in trial, so it's tried again next time
     now = time.time()
+    t.pop("pending_result", None)
     t.update({"status": "kept" if result["ok"] else "reverted", "result": result,
               "finished_at": now, "trial_finished_at": now})
     if result["ok"]:
@@ -594,8 +633,10 @@ def measured(name: str, t: dict[str, Any]) -> Optional[dict[str, Any]]:
         return None
     field = {"cost": lambda r: r.cost_usd, "api cost": lambda r: r.api_cost_usd}.get(metric)
     # Failed runs count too: they cost money and delivered nothing.
-    saved = sum(history.net_saving(r, old, field(r)) for r in every if field(r) is not None) if field else None
-    return {"metric": metric, "before": old, "after": new, "runs": len(every), "saved": saved, "run_list": every}
+    comparable = [r for r in every if history.comparable_runs(before, [r])]
+    saved = sum(history.net_saving(r, old, field(r)) for r in comparable if field(r) is not None) if field else None
+    return {"metric": metric, "before": old, "after": new, "runs": len(comparable), "saved": saved,
+            "run_list": comparable, "excluded_identity_runs": len(every) - len(comparable)}
 
 
 def _settings(t: dict[str, Any]) -> str:
@@ -604,6 +645,8 @@ def _settings(t: dict[str, Any]) -> str:
         parts.append("tools: " + (", ".join(t["toolsets"]) or "none"))
     if t.get("clean"):
         parts.append("cleaned results")
+    if t.get("schema_pruning"):
+        parts.append("observed read schemas")
     if t.get("hint"):
         parts.append("efficiency instruction")
     if t.get("new_only"):
@@ -619,6 +662,8 @@ def status_text(t: Optional[dict[str, Any]]) -> str:
         before, trial = _trial_runs(t)
         answers = history.final_answers([r.session_id for r in before + trial if r.session_id])
         done = len(counted_runs(before, trial, answers))
+        if done >= TRIAL_RUNS and t.get("pending_result"):
+            return f"Trying {_settings(t)}: {done} answers; gathering more comparable evidence (up to {MAX_TRIAL_RUNS})"
         return f"Trying {_settings(t)}: {min(done, TRIAL_RUNS)} of {TRIAL_RUNS} answers so far"
     if t["status"] == "kept":
         metric = res.get("metric", "cost")
@@ -632,7 +677,7 @@ def status_text(t: Optional[dict[str, Any]]) -> str:
 
 
 def sample_answers(name: str, t: dict[str, Any]) -> dict[str, str]:
-    """The latest answer from before and from the lower level, to read side by side."""
+    """The latest baseline and efficiency-trial answers, to read side by side."""
     before, trial = _trial_runs({**t, "job_name": name})
     ids = {"before": before[-1].session_id if before else None, "after": trial[-1].session_id if trial else None}
     answers = history.final_answers([s for s in ids.values() if s])

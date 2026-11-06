@@ -1,7 +1,7 @@
 """Authoritative zeroes and durable execution IDs must survive accounting."""
 import sqlite3
 
-from crystallize import history, modelinfo, overview
+from crystallize import chat, history, modelinfo, overview
 
 
 def make_run():
@@ -15,6 +15,7 @@ def test_actual_zero_is_not_replaced_with_estimate(monkeypatch):
     monkeypatch.setattr(history, '_session_costs', lambda ids: {'s': info})
     assert run.cost_usd == 0 and run.cost_provenance == 'actual'
     assert overview._chat_spent('s') == 0
+    assert chat.analyse('s')['spent_usd'] == 0
 
 
 def test_aggregate_price_estimate_is_explicitly_uncertain(monkeypatch):
@@ -41,6 +42,32 @@ def test_exact_scheduler_admission_wins_over_nearby_job():
                      "INSERT INTO session_admissions VALUES ('A','cron-owner','cron:job-A:exec-A');")
     assert history._ledger_session(db, 'job-A', 'exec-A', 100, 200)['id'] == 'A'
     db.close()
+
+
+def test_legacy_job_timestamp_cannot_prove_an_execution():
+    db = sqlite3.connect(':memory:'); db.row_factory = sqlite3.Row
+    db.executescript('CREATE TABLE sessions (id TEXT, source TEXT, started_at REAL, ended_at REAL, api_call_count INTEGER);'
+                     "INSERT INTO sessions VALUES ('cron_job-A_20261106_010101','cron',100,200,2);")
+    assert history._ledger_session(db, 'job-A', 'exec-A', 100, 200) is None
+    db.close()
+
+
+def test_ambiguous_scheduler_admission_is_not_resolved_by_time():
+    db = sqlite3.connect(':memory:'); db.row_factory = sqlite3.Row
+    db.executescript('CREATE TABLE sessions (id TEXT, source TEXT, started_at REAL);'
+                     'CREATE TABLE session_admissions (target_session_id TEXT, principal_id TEXT, request_id TEXT);'
+                     "INSERT INTO sessions VALUES ('A','cron',100),('B','cron',500);"
+                     "INSERT INTO session_admissions VALUES ('A','cron-owner','cron:job-A:exec-A'),"
+                     "('B','cron-owner','cron:job-A:exec-A');")
+    assert history._ledger_session(db, 'job-A', 'exec-A', 100, 200) is None
+    db.close()
+
+
+def test_recreated_job_name_does_not_merge_baselines(monkeypatch):
+    rows = [history.Run('a', 'job-old', 'same name', 'sa', True, 1),
+            history.Run('b', 'job-new', 'same name', 'sb', True, 2)]
+    monkeypatch.setattr(history, 'load_runs', lambda: rows)
+    assert {row['job_id'] for row in history.job_summaries()} == {'job-old', 'job-new'}
 
 
 def test_known_no_ai_runs_have_zero_api_equivalent_cost():
