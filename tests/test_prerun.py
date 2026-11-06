@@ -341,3 +341,14 @@ def test_a_no_ai_routine_crash_is_reported_as_a_failure(monkeypatch, tmp_path):
     prerun.write_script("cr_1", "job", no_ai=True)
     out = subprocess.run([sys.executable, str(d / "cr_1.py")], capture_output=True, text=True, env=_crashing_hermes(tmp_path))
     assert out.returncode == 7 and "Do the whole task" not in out.stdout
+
+
+def test_a_link_poor_run_keeps_the_remembered_items(monkeypatch):
+    saved = _fake_store(monkeypatch, _routine({"when_unchanged": "run", "new_only": True}))
+    monkeypatch.setattr(prerun, "_recent_answers", lambda name: ["An answer"])
+    outputs = [_feed(1, 2, 3, 4, 5, 6), "No links in this format", _feed(1, 2, 3, 4, 5, 7)]
+    dispatch = lambda name, args: json.dumps({"output": outputs.pop(0), "exit_code": 0})
+    prerun.run("cr_1", dispatch)
+    assert "No links" in prerun.run("cr_1", dispatch)[0]
+    assert len(saved["r"]["meta"]["last_links"]) == 6
+    assert "Title 7" in prerun.run("cr_1", dispatch)[0]
