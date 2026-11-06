@@ -127,6 +127,20 @@ def make_pre_llm_call(ctx: Any) -> Callable[..., Any]:
     return pre_llm_call
 
 
+def make_transform_llm_output(ctx: Any) -> Callable[..., Any]:
+    """Fill in the cheap model's text, so the main model doesn't pay to retype it."""
+    from . import chat_savings
+
+    def transform(response_text: str = "", **_: Any) -> Any:
+        try:
+            return chat_savings.fill_placeholders(response_text)
+        except Exception:  # noqa: BLE001 — a hook must never break a turn
+            logger.debug("crystallize: filling placeholders failed", exc_info=True)
+            return None
+
+    return transform
+
+
 RUN_MARKER = "__run__"  # stands for a cron run that made no tool calls
 
 

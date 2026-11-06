@@ -110,13 +110,15 @@ def set_model(provider: str, model: str) -> None:
 
 
 ROUTING_NOTE = (
-    "[Crystallize Chat] Prefer crystal_cheap for routine text work in this chat: give it an input, get its output "
-    "straight back from a much cheaper model. Use it first for summarizing, extracting data, reformatting, "
-    "translating or simple drafting, unless the text is only a line or two. If it isn't loaded, find it with "
-    "tool_search. Include everything it needs, because it "
-    "can't see this chat or use tools, and check what comes back. Keep planning, decisions, debugging, "
-    "anything that sends or changes something, and the final answer for yourself. Skip it for tiny tasks."
+    "[Crystallize Chat] For long routine writing, use crystal_cheap: give it an input and get its output straight "
+    "back from a much cheaper model. Each hand-off costs you an extra call, so use it only when the output would "
+    "be long, about 500 words or more, such as translating a lot of text, long drafts, or reformatting long "
+    "data. Do anything shorter yourself. If it isn't loaded, find it with tool_search. When its output is right, "
+    "write the placeholder it gives you instead of retyping it. Include everything it needs, because it can't "
+    "see this chat or use tools. Keep planning, decisions, debugging, anything that sends or changes something, "
+    "and your own conclusions for yourself."
 )
+MIN_ROUTING_PRICE_RATIO = 5     # below this, a hand-off's extra call eats the saving
 
 
 def ask_cheap(ctx: Any, text: str, session_id: str = "") -> str:
@@ -135,7 +137,27 @@ def ask_cheap(ctx: Any, text: str, session_id: str = "") -> str:
     tokens, cost = _usage_cost(answer.usage, picked)
     if session_id:
         store.add_chat_saving(session_id, 0, tokens, cost)
-    return json.dumps({"output": (answer.text or "").strip(), "answered_by": picked["model"]})
+    output = (answer.text or "").strip()
+    output_id = _keep_full(output)
+    return json.dumps({"output": output, "answered_by": picked["model"], "placeholder": f"{{{{crystal:{output_id}}}}}",
+                       "note": "To show this output as it is, write the placeholder instead of retyping it. It's filled in for you."})
+
+
+_PLACEHOLDER = re.compile(r"\{\{crystal:([0-9a-f]{16})\}\}")
+
+
+def fill_placeholders(response: str) -> Optional[str]:
+    """Put the cheap model's text into the final answer, so the main model never pays to retype it.
+    A placeholder that can't be found stays visible rather than silently losing text."""
+    if not isinstance(response, str) or "{{crystal:" not in response:
+        return None
+
+    def fill(match: "re.Match[str]") -> str:
+        path = _full_dir() / f"{match.group(1)}.txt"
+        return path.read_text(encoding="utf-8") if path.exists() else match.group(0)
+
+    filled = _PLACEHOLDER.sub(fill, response)
+    return filled if filled != response else None
 
 
 def routing_context(session_id: str = "", parent_session_id: str = "", **_: Any) -> Optional[dict[str, str]]:
@@ -143,9 +165,17 @@ def routing_context(session_id: str = "", parent_session_id: str = "", **_: Any)
     if parent_session_id or not session_id or not store.chat_enabled(session_id):
         return None
     picked = chosen_model()
-    if not picked["model"] or not _is_cheaper(picked, session_id):
+    if not picked["model"] or not _is_cheaper(picked, session_id) or not _routing_pays(picked, session_id):
         return None
     return {"context": ROUTING_NOTE}
+
+
+def _routing_pays(picked: dict[str, Optional[str]], session_id: Optional[str]) -> bool:
+    """Is the main model's writing enough dearer than the picked model's? With no prices, your choice stands."""
+    main = _main_model(session_id)
+    theirs = modelinfo.token_prices(picked["model"], picked["provider"])
+    ours = modelinfo.token_prices(main.get("model"), main.get("provider"))
+    return not (theirs and ours and ours["output"] < theirs["output"] * MIN_ROUTING_PRICE_RATIO)
 
 
 def connected_models() -> list[dict[str, Any]]:

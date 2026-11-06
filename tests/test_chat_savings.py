@@ -199,6 +199,7 @@ def test_routing_note_only_where_it_applies(monkeypatch):
     monkeypatch.setattr(cs.store, "chat_enabled", lambda sid: on.get(sid, False))
     monkeypatch.setattr(cs, "chosen_model", lambda: {"provider": "nous", "model": "cheap"})
     monkeypatch.setattr(cs, "_is_cheaper", lambda *a: True)
+    monkeypatch.setattr(cs, "_routing_pays", lambda *a: True)
     assert "crystal_cheap" in cs.routing_context(session_id="s")["context"]
     assert cs.routing_context(session_id="other") is None
     assert cs.routing_context(session_id="s", parent_session_id="p") is None   # helpers don't route again
@@ -222,3 +223,20 @@ def test_cheap_call_problems_tell_the_main_model_to_do_it(world, monkeypatch):
     assert "error" in json.loads(cs.ask_cheap(FakeCtx(), "  "))
     monkeypatch.setattr(cs, "chosen_model", lambda: {"provider": None, "model": None})
     assert "error" in json.loads(cs.ask_cheap(FakeCtx(), "x"))
+
+
+def test_cheap_output_fills_the_answer_without_retyping(world):
+    out = json.loads(cs.ask_cheap(FakeCtx(text="long table"), "make a table", "s1"))
+    assert cs.fill_placeholders(f"Here it is:\n{out['placeholder']}") == "Here it is:\nlong table"
+    assert cs.fill_placeholders("no placeholder here") is None
+    missing = "{{crystal:0000000000000000}}"
+    assert cs.fill_placeholders(missing) is None
+
+
+def test_routing_needs_a_big_enough_price_gap(monkeypatch):
+    monkeypatch.setattr(cs, "_main_model", lambda sid: {"model": "main", "provider": "p"})
+    prices = {"main": {"output": 10.0}, "cheap": {"output": 1.0}, "close": {"output": 5.0}}
+    monkeypatch.setattr(cs.modelinfo, "token_prices", lambda m, p: prices.get(m))
+    assert cs._routing_pays({"model": "cheap", "provider": "p"}, "s")
+    assert not cs._routing_pays({"model": "close", "provider": "p"}, "s")
+    assert cs._routing_pays({"model": "unknown", "provider": "p"}, "s")

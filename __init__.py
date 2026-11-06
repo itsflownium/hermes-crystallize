@@ -43,6 +43,7 @@ def register(ctx: Any) -> None:
     ctx.register_hook("on_session_end", capture.make_on_session_end(ctx))
     ctx.register_hook("transform_tool_result", capture.make_transform_tool_result(ctx))
     ctx.register_hook("pre_llm_call", capture.make_pre_llm_call(ctx))
+    ctx.register_hook("transform_llm_output", capture.make_transform_llm_output(ctx))
 
     ctx.register_tool(
         name="crystal_full_result", toolset="crystallize",

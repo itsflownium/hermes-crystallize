@@ -23,6 +23,7 @@ provides_hooks:
   - on_session_end
   - transform_tool_result
   - pre_llm_call
+  - transform_llm_output
 
 config_schema:
   capture_enabled:
