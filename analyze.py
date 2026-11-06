@@ -17,8 +17,11 @@ Pure functions over ``history.Run`` objects, so it's easy to test.
 
 from __future__ import annotations
 
+import ast
+import datetime as _dt
 import json
 import re
+import shlex
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
@@ -48,10 +51,12 @@ _MUTATING_SHELL = re.compile(
 )
 
 # Writes the shell can do with any command, and commands known only to read.
-_SCRATCH_WRITE = re.compile(r"(>>?|\s-o|\s--output)\s*[\"']?(/tmp/|/private/tmp/|/dev/null|\$TMPDIR/)[^\s;&|]*")
-_SHELL_WRITES = re.compile(r">(?!>?\s*/dev/null|&\d)|\$\(|`|\bsed\s[^|;&]*-i|\s-(delete|exec)\b|\bsort\s[^|;&]*\s-o\b|system\(|"
+_SCRATCH_WRITE = re.compile(r"(>>?|\s-[a-zA-Z]*o|\s--output)\s*[\"']?(/tmp/|/private/tmp/|/dev/null|\$TMPDIR/)[^\s;&|]*")
+_SHELL_WRITES = re.compile(r">(?!>?\s*/dev/null|&\d)|\$\(|`|\bsed\s[^|;&]*-i|\s-(delete|exec)\b|\bsort\b[^|;&]*\s-o\b|system\(|"
                            r"\bcurl\b[^|;&]*\s(-o|-O|-T|-F|--output|--remote-name|--upload-file|--form|--json|--request\s*(POST|PUT|PATCH|DELETE))\b|"
-                           r"\bcurl\b[^|;&]*-X(POST|PUT|PATCH|DELETE)|\bwget\b(?![^|;&]*-O\s*-)")
+                           r"\bcurl\b[^|;&]*\s-[a-zA-Z]*[XdFTOoK]|\bwget\b(?![^|;&]*-[a-zA-Z]*O\s*-)|\bwget\b[^|;&]*--(post|method|body)|"
+                           r"\bdate\s+-s\b|\s-fprint|\s-fls\b|\buniq\s+(-\S+\s+)*\S+\s+\S+")
+_SAFE_CURL_METHOD = re.compile(r"\s-X\s*(GET|HEAD)\b")
 _READ_ONLY_COMMANDS = {"curl", "wget", "cat", "head", "tail", "grep", "rg", "ls", "find", "jq", "date", "wc", "sort", "uniq",
                        "echo", "printf", "cut", "tr", "sed", "awk", "stat", "du", "df", "dig", "uname", "cd", "true"}
 _READ_ONLY_SUBCOMMANDS = ("git log", "git status", "git diff", "git show", "gh issue list", "gh issue view", "gh pr list",
@@ -59,8 +64,15 @@ _READ_ONLY_SUBCOMMANDS = ("git log", "git status", "git diff", "git show", "gh i
 _KNOWN_READ_TOOLS = {"web_search", "web_extract", "read_file", "search_files", "session_search", "browser_snapshot",
                      "browser_console", "browser_get_images", "web_crawl", "tool_describe", "tool_search", "vision_analyze", "crystal_list", "crystal_run",
                      "crystal_full_result", "__run__"}
-_MUTATING_CODE = re.compile(r"(\bopen\([^)]*['\"][wax+]|\.write\(|\bos\.(remove|unlink|rename|system|mkdir)|\bshutil\.|\bsubprocess\b|"
-                            r"\.(post|put|patch|delete)\(|\b(terminal|write_file|send_message)\()")
+# Python counts as read-only only if everything it imports and calls is known to only read.
+_SAFE_IMPORTS = {"json", "re", "math", "datetime", "time", "statistics", "collections", "itertools", "functools", "html", "csv",
+                 "string", "textwrap", "base64", "hashlib", "decimal", "fractions", "unicodedata", "urllib.parse", "xml",
+                 "xml.etree", "xml.etree.ElementTree", "email.utils", "random", "typing", "dataclasses", "operator", "sys",
+                 "os.path", "pathlib", "requests", "httpx", "urllib.request", "feedparser", "bs4"}
+_BLOCKED_CALLS = {"exec", "eval", "compile", "__import__", "getattr", "setattr", "delattr", "globals", "locals", "vars",
+                  "breakpoint", "Request", "terminal", "write_file", "patch", "send_message", "delegate_task", "process"}
+_WRITE_METHODS = {"write", "writelines", "truncate", "write_text", "write_bytes", "unlink", "mkdir", "rmdir", "rename", "touch",
+                  "chmod", "symlink_to", "hardlink_to", "post", "put", "patch", "delete", "request", "send", "stream"}
 
 # Blanks, in the order we try them. Each is (kind, pattern, placeholder).
 _FILL_INS: list[tuple[str, re.Pattern[str], str]] = [
@@ -158,12 +170,75 @@ def _backbone(sequences: list[list[str]]) -> list[str]:
     return common
 
 
+def _python_is_read_only(code: str) -> bool:
+    """Everything the code imports and calls must be known to only read. Anything else, or
+    code that can't be parsed, counts as an action."""
+    try:
+        tree = ast.parse(code)
+    except (SyntaxError, ValueError):
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import) and any(a.name not in _SAFE_IMPORTS for a in node.names):
+            return False
+        if isinstance(node, ast.ImportFrom):
+            if node.module == "hermes_tools":
+                if any(a.name not in _KNOWN_READ_TOOLS for a in node.names):
+                    return False
+            elif node.module not in _SAFE_IMPORTS or any(a.name in _BLOCKED_CALLS for a in node.names):
+                return False
+        if isinstance(node, ast.Call):
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else func.id if isinstance(func, ast.Name) else None
+            if isinstance(func, ast.Attribute) and name in _WRITE_METHODS or name in _BLOCKED_CALLS:
+                return False
+            if name == "urlopen" and (len(node.args) > 1 or any(k.arg == "data" for k in node.keywords)):
+                return False
+            if name == "open":
+                modes = [a.value for a in node.args[1:2] if isinstance(a, ast.Constant)]
+                modes += [k.value.value for k in node.keywords if k.arg == "mode" and isinstance(k.value, ast.Constant)]
+                has_mode = len(node.args) > 1 or any(k.arg == "mode" for k in node.keywords)
+                if has_mode and (not modes or set(str(modes[0])) & set("wax+")):
+                    return False
+    return True
+
+
+def _inline_python_reads(part: str) -> bool:
+    try:
+        words = shlex.split(part, comments=True)
+    except ValueError:
+        return False
+    return "-c" in words[:-1] and _python_is_read_only(words[words.index("-c") + 1])
+
+
+def _shell_parts(command: str) -> Optional[list[str]]:
+    """The commands in a line, split on operators outside quotes. None if the quotes don't close."""
+    parts, current, quote, i = [], "", None, 0
+    while i < len(command):
+        char = command[i]
+        if quote:
+            quote = None if char == quote else quote
+        elif char in "'\"":
+            quote = char
+        elif char in ";|&\n":
+            parts.append(current)
+            current = ""
+            i += 1
+            continue
+        current += char
+        i += 1
+    return None if quote else [*parts, current]
+
+
 def _shell_is_read_only(command: str) -> bool:
     """Every part of the command must start with something known only to read."""
     command = _SCRATCH_WRITE.sub(" ", command)  # writing to a scratch file changes nothing that matters
+    command = _SAFE_CURL_METHOD.sub(" ", command)
     if _MUTATING_SHELL.search(command) or _SHELL_WRITES.search(command):
         return False
-    for part in re.split(r"&&|\|\||;|\||\n", command):
+    parts = _shell_parts(command)
+    if parts is None:
+        return False
+    for part in parts:
         words = part.strip().split()
         while words and "=" in words[0] and not words[0].startswith("-"):  # VAR=value prefixes
             words = words[1:]
@@ -171,7 +246,7 @@ def _shell_is_read_only(command: str) -> bool:
             continue
         first = words[0].rsplit("/", 1)[-1]
         phrase = " ".join([first, *words[1:3]])
-        if first in ("python", "python3") and words[1:2] == ["-c"] and not _MUTATING_CODE.search(part):
+        if first in ("python", "python3") and words[1:2] == ["-c"] and _inline_python_reads(part):
             continue
         if first not in _READ_ONLY_COMMANDS and not any(phrase.startswith(p) for p in _READ_ONLY_SUBCOMMANDS):
             return False
@@ -184,7 +259,8 @@ def _is_side_effect(tool_name: str, args: Any) -> bool:
         command = args.get("command") if isinstance(args, dict) else args
         return not _shell_is_read_only(str(command or ""))
     if tool_name == "execute_code":
-        return bool(_MUTATING_CODE.search(_canon(args)) or _MUTATING_SHELL.search(_canon(args)))
+        code = args.get("code") if isinstance(args, dict) else args
+        return not _python_is_read_only(str(code or ""))
     if tool_name in SETUP_TOOLS or tool_name in _KNOWN_READ_TOOLS:
         return False
     if tool_name in SIDE_EFFECT_TOOLS:
@@ -225,6 +301,65 @@ def _sources_in(args: Any, sources: list[str]) -> set[str]:
     return {s for s in sources if s in text}
 
 
+_ID_LIKE = re.compile(r"(?<![\w-])(?=[\w-]*\d)[\w-]{4,}(?![\w-])")
+_DATE = _FILL_INS[0][1]
+
+
+@dataclass
+class _Only:
+    steps: list[Any]
+
+
+def _dates_are_today(args: Any, started: float) -> bool:
+    """A routine can only fill in today's date, so a range or another day can't be repeated."""
+    dates = {d[:10] for d in _DATE.findall(_canon(args))}
+    if len(dates) > 1:
+        return False
+    if not dates or not started:
+        return not dates
+    ran = _dt.datetime.fromtimestamp(started, _dt.timezone.utc).date()
+    try:
+        return abs((_dt.date.fromisoformat(next(iter(dates))) - ran).days) <= 1
+    except ValueError:
+        return False
+
+
+def _uses_earlier_result(step: Any, earlier: list[str]) -> bool:
+    """Does this step use an id that an earlier step found? That id can be new on the next run."""
+    if not earlier:
+        return False
+    args = _DATE.sub(" ", _canon(step.args))
+    return any(token in text for token in _ID_LIKE.findall(args) for text in earlier)
+
+
+def _depends_on_earlier(run: Any) -> bool:
+    earlier: list[str] = []
+    for s in run.steps:
+        if s.tool_name in SETUP_TOOLS or _is_side_effect(s.tool_name, s.args):
+            continue
+        if _uses_earlier_result(s, earlier):
+            return True
+        if s.result_preview:
+            earlier.append(s.result_preview)
+    return False
+
+
+def _unstable(plans: list[StepPlan], per_position: list[list[Any]], runs: list[Any]) -> Optional[str]:
+    """Why these steps can't safely repeat by themselves. Routines start with independent, stable reads."""
+    started_of = {id(s): r.started_ts for r in runs for s in r.steps}
+    for plan, steps in zip(plans, per_position):
+        if plan.kind == "varies":
+            return f"Its {plan.tool_name} step changes from run to run, so repeating it could fetch the wrong thing."
+        if plan.kind in ("fill-in", "fixed"):
+            if set(plan.fill_ins) - {"date"}:
+                return f"Its {plan.tool_name} step uses ids or temporary paths that change each run."
+            if plan.kind == "fill-in" and not all(_dates_are_today(s.args, started_of.get(id(s), 0)) for s in steps):
+                return f"Its {plan.tool_name} step uses a date range or another day, which can't be filled in safely."
+    if any(_depends_on_earlier(r) for r in runs):
+        return "One step uses an id found by an earlier step, and that id can change, so Hermes keeps doing it."
+    return None
+
+
 def _best_run(runs: list[Any], sources: list[str]) -> Optional[tuple[Any, list[Any]]]:
     """The cheapest run whose fetch steps cover the most sources, and those steps."""
     best_key, best = None, None
@@ -234,6 +369,11 @@ def _best_run(runs: list[Any], sources: list[str]) -> Optional[tuple[Any, list[A
             if s.tool_name in SETUP_TOOLS or _is_side_effect(s.tool_name, s.args):
                 continue
             if s.status not in (None, "ok") or not s.result_len:
+                continue
+            # Only a stable read can be frozen: nothing here may change from run to run.
+            if set(_blank(_canon(s.args))[1]) - {"date"} or not _dates_are_today(s.args, run.started_ts):
+                continue
+            if _depends_on_earlier(_Only(run.steps[: run.steps.index(s) + 1])):
                 continue
             hit = _sources_in(s.args, sources)
             if hit:
@@ -367,10 +507,16 @@ def analyze_runs(runs: list[Any], prompt: Optional[str] = None) -> Analysis:
         and all(p.kind in ("fixed", "fill-in", "setup") for p in plans)
     )
 
+    unstable = _unstable(plans, per_position, runs)
     if not scriptable:
         if sources and _plan_best_run(base, runs, sources):
             return base
         base.reason = "Every common step needs the agent, so there's nothing to save yet."
+    elif unstable:
+        if sources and _plan_best_run(base, runs, sources):
+            return base
+        base.agent_free = False
+        base.reason = unstable
     elif base.same_shape_share < 0.5:
         if sources and _plan_best_run(base, runs, sources):
             return base

@@ -197,6 +197,12 @@ def final_answers(session_ids: list[str]) -> dict[str, str]:
         conn.close()
 
 
+def net_saving(run: "Run", baseline: float, cost: float) -> float:
+    """What one run saved compared with a normal one. A dearer run counts against the total,
+    and a failed run delivered nothing, so all it cost is lost."""
+    return baseline - cost if run.outcome in (None, "completed", "no_change", "skipped", "silent") else -cost
+
+
 _QUIET_WORDS = {"[SILENT]", "SILENT", "NO_REPLY", "NO REPLY"}
 
 

@@ -391,7 +391,9 @@ def unchanged_action(routine: dict[str, Any]) -> str:
     return "quiet" if any(history.is_silent(a) for a in _recent_answers(routine["name"])) else "repeat"
 
 
-MAX_LINKS = 4000
+MAX_ITEMS = 300             # a longer list isn't compared item by item
+MAX_ITEM_WORDS = 80         # a longer item is compared as a whole
+_WORD = re.compile(r"[\w$%€£.,-]*\w[\w%]*")
 MAX_NEW_SHARE = 0.7         # mostly new: the AI might as well see it all
 _LINK = re.compile(r"https?://[^\s\"'<>)\]|]+")
 MIN_ITEMS = 5               # fewer links than this isn't a list of items
@@ -401,27 +403,70 @@ def _links(text: str) -> set[str]:
     return {link.rstrip(".,;:").rstrip("/").lower() for link in _LINK.findall(text)}
 
 
-def _new_only_text(data: str, seen_links: set[str], answer: str) -> Optional[str]:
-    """Only the items that weren't there last time, with the last answer to update. Items are
-    matched by their links, because a fetch tool can format the same feed differently each run.
-    None when there's nothing to gain: too few links to compare, mostly new, or nothing to go on."""
-    links = _links(data)
-    fresh = links - seen_links
-    if not answer or len(links) < MIN_ITEMS or len(seen_links) < MIN_ITEMS or len(fresh) > len(links) * MAX_NEW_SHARE:
+def _words(text: str) -> list[str]:
+    """What an item says, without its links or anything that changes on its own."""
+    for rx in _VOLATILE:
+        text = rx.sub(" ", text)
+    words = sorted(set(_WORD.findall(_LINK.sub(" ", text).lower())))
+    if len(words) > MAX_ITEM_WORDS:
+        return ["#" + hashlib.sha1(" ".join(words).encode()).hexdigest()[:12]]
+    return [hashlib.sha1(w.encode()).hexdigest()[:6] for w in words]
+
+
+def _item_blocks(data: str) -> dict[str, tuple[int, int]]:
+    """Each link and the lines that belong to it: the line above it, its own line and any details
+    below. The line just above the next link is that item's title, so it belongs to that item."""
+    lines = data.splitlines()
+    linked = [i for i, line in enumerate(lines) if _links(line)]
+    blocks: dict[str, tuple[int, int]] = {}
+    for n, i in enumerate(linked):
+        start = i - 1 if i and lines[i - 1].strip() and i - 1 not in linked else i
+        following = linked[n + 1] if n + 1 < len(linked) else len(lines) + 1
+        end = following - 1 if following - 1 > i else i + 1
+        for link in _links(lines[i]):
+            blocks.setdefault(link, (start, end))
+    return blocks
+
+
+def _items(data: str) -> Optional[dict[str, list[str]]]:
+    """A compact record of what each item said, to spot changes next run. None if there are too many."""
+    blocks = _item_blocks(data)
+    if len(blocks) > MAX_ITEMS:
         return None
     lines = data.splitlines()
-    keep: list[str] = []
-    for i, line in enumerate(lines):
-        if _links(line) & fresh:
-            if i and lines[i - 1].strip() and not _LINK.search(lines[i - 1]) and lines[i - 1] not in keep:
-                keep.append(lines[i - 1])  # a title often sits on the line above its link
-            keep.append(line)
+    return {link: _words("\n".join(lines[a:b])) for link, (a, b) in blocks.items()}
+
+
+def _item_changed(old: list[str], new: list[str]) -> bool:
+    """A format can add or drop a field, but a replaced word means the item really changed."""
+    if old == new:
+        return False
+    if (old and old[0].startswith("#")) or (new and new[0].startswith("#")):
+        return True
+    return not (set(old) <= set(new) or set(new) <= set(old))
+
+
+def _new_only_text(data: str, seen: dict[str, list[str]], answer: str) -> Optional[str]:
+    """Only what's new or changed since last time, what went away, and the last answer to update.
+    None sends everything: too few items to compare, most of them changed, or nothing to go on."""
+    now = _items(data)
+    if not answer or now is None or len(now) < MIN_ITEMS or len(seen) < MIN_ITEMS:
+        return None
+    fresh = {link for link, words in now.items() if link not in seen or _item_changed(seen[link], words)}
+    gone = sorted(set(seen) - set(now))
+    if len(fresh) > len(now) * MAX_NEW_SHARE or len(gone) > len(seen) * MAX_NEW_SHARE:
+        return None
+    lines = data.splitlines()
+    blocks = _item_blocks(data)
+    keep_lines = sorted({i for link in fresh for i in range(*blocks[link])})
+    keep = [lines[i] for i in keep_lines]
     if not keep:
-        return None  # same links but different text: an item may have changed, so send it all
-    return ("Crystallize: most of this job's items are the same as last run, so only the new ones are below "
-            f"({len(fresh)} of {len(links)} links). Update your last answer using them: keep what still stands, and "
-            "bring in anything new that matters more. Don't fetch anything.\n\n"
-            "Your last answer:\n<<<\n" + answer + "\n>>>\n\nNew items:\n" + "\n".join(keep))
+        return None  # the links match but something else changed, so send it all
+    removed = ("\n\nNo longer listed, so drop these if your answer mentions them:\n" + "\n".join(gone)) if gone else ""
+    return ("Crystallize: most of this job's items are the same as last run, so only the new and changed ones are below "
+            f"({len(fresh)} of {len(now)} items). Update your last answer using them: replace anything they change, keep what "
+            "still stands, and bring in anything new that matters more. Don't fetch anything.\n\n"
+            "Your last answer:\n<<<\n" + answer + "\n>>>\n\nNew and changed items:\n" + "\n".join(keep) + removed)
 
 
 def _repeat_text(answer: str) -> str:
@@ -467,12 +512,12 @@ def run(routine_id: str, dispatch: runner.Dispatch) -> tuple[str, int]:
             return f"Crystallize: no change since the last run ({time.time() - t0:.1f}s).\n{SKIP_GATE}", 0
         if last:
             return _repeat_text(last), 0
-    seen = set() if last_failed else set(meta.get("last_links") or [])
+    seen = {} if last_failed else (meta.get("last_items") or {})
     meta["last_fingerprint"] = fp
     meta["last_data_chars"] = len(data)
-    links_now = _links(data)
-    if len(links_now) >= MIN_ITEMS:  # a run that came back in a link-poor format says nothing about the items
-        meta["last_links"] = sorted(links_now)[:MAX_LINKS]
+    items_now = _items(data)
+    if items_now is None or len(items_now) >= MIN_ITEMS:  # a link-poor run says nothing about the items
+        meta["last_items"] = items_now or {}
     store.update_routine(routine_id, meta=meta)
     if meta.get("new_only") and not no_ai:
         recent = _recent_answers(routine["name"])
