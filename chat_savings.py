@@ -34,6 +34,7 @@ MAX_SUMMARY_TOKENS = 2000
 MAX_ROUTED_TOKENS = 4000
 CONDENSE_SECONDS = 20.0         # the longest a chat waits for the cheap model
 PAUSE_AFTER_PROBLEM_SECONDS = 600.0
+MIN_ORIGINAL_SHARE = 0.2        # cleaning that removes more than this keeps the original
 CHARS_PER_TOKEN = 4             # a rough rule, for estimates only
 FULL_RESULT_DAYS = 7
 MAX_FULL_READ = 40_000
@@ -328,6 +329,19 @@ def _condense(ctx: Any, tool: str, text: str, picked: dict[str, Optional[str]]) 
     return (summary, answer.usage) if summary and len(summary) <= len(text) * MAX_SUMMARY_SHARE else None
 
 
+def _with_original(cleaned: str, result: str) -> str:
+    """Cleaning can remove a lot, so a noticeably smaller result says how to get the original."""
+    if len(cleaned) > len(result) * (1 - MIN_ORIGINAL_SHARE):
+        return cleaned
+    note = {"full_result_id": _keep_full(result), "original_chars": len(result),
+            "note": "Cleaned to save space. Call crystal_full_result with this id if you need the exact text."}
+    try:
+        data = json.loads(cleaned)
+    except ValueError:
+        return json.dumps({"result": cleaned, **note})
+    return json.dumps({**data, **note} if isinstance(data, dict) else {"result": data, **note})
+
+
 def _is_error(result: str) -> bool:
     try:
         data = json.loads(result)
@@ -361,6 +375,8 @@ def shrink(ctx: Any, session_id: str, tool: str, result: Any) -> Optional[str]:
                                            "check one detail, or without one to read the exact text.")})
     if current == result or len(current) >= len(result):
         return None
+    if usage is None:
+        current = _with_original(current, result)
     store.add_chat_saving(session_id, len(result) - len(current), *_usage_cost(usage, picked))
     return current
 

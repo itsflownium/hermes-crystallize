@@ -240,3 +240,19 @@ def test_routing_needs_a_big_enough_price_gap(monkeypatch):
     assert cs._routing_pays({"model": "cheap", "provider": "p"}, "s")
     assert not cs._routing_pays({"model": "close", "provider": "p"}, "s")
     assert cs._routing_pays({"model": "unknown", "provider": "p"}, "s")
+
+
+def test_heavily_cleaned_results_keep_the_original(world, monkeypatch):
+    monkeypatch.setattr(cs, "chosen_model", lambda: {"provider": None, "model": None})
+    result = "original " * 500
+    monkeypatch.setattr(cs.prerun, "clean_result", lambda tool, res: json.dumps({"output": "short"}))
+    data = json.loads(cs.shrink(FakeCtx(), "s1", "terminal", result))
+    assert data["output"] == "short"
+    assert json.loads(cs.read_full(data["full_result_id"]))["result"] == result
+
+
+def test_lightly_cleaned_results_stay_simple(world, monkeypatch):
+    monkeypatch.setattr(cs, "chosen_model", lambda: {"provider": None, "model": None})
+    result = "x" * 1000
+    monkeypatch.setattr(cs.prerun, "clean_result", lambda tool, res: "x" * 900)
+    assert cs.shrink(FakeCtx(), "s1", "terminal", result) == "x" * 900

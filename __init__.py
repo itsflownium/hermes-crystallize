@@ -14,13 +14,17 @@ logger = logging.getLogger(__name__)
 def _status_text() -> str:
     stats = store.trace_stats()
     lines = [
-        f"Crystallize Cron is recording. {stats['tool_calls']} tool calls recorded so far."
+        f"Crystallize is recording cron jobs. {stats['tool_calls']} tool calls recorded so far."
     ]
     if stats["cron_jobs"]:
         lines.append("Scheduled cron runs recorded:")
-        for job in stats["cron_jobs"]:
-            name = job["job_name"] or job["job_id"]
-            lines.append(f"  - {name}: {job['runs']} runs, {job['tool_calls']} tool calls")
+        totals: dict[str, list[int]] = {}
+        for job in stats["cron_jobs"]:  # a re-created job has a new id but the same name
+            entry = totals.setdefault(job["job_name"] or job["job_id"], [0, 0])
+            entry[0] += job["runs"]
+            entry[1] += job["tool_calls"]
+        for name, (runs, calls) in totals.items():
+            lines.append(f"  - {name}: {runs} runs, {calls} tool calls")
     else:
         lines.append("No scheduled cron runs recorded yet.")
     routines = store.list_routines()

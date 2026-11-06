@@ -143,7 +143,7 @@ Turn it on per chat in the panel's **Chat** section, or with `/crystallize chat 
 that prompt is sent, and savings come from tool results, which don't exist until the work starts.
 
 - Tool results are cleaned with no AI. Big ones (8,000+ characters) are condensed if you've picked a model.
-- The exact original is kept for 7 days, and your main model can read it with `crystal_full_result`.
+- When a result is noticeably reduced, the exact original is kept for 7 days, and your main model can read it with `crystal_full_result`.
 - File contents, errors and small results always stay exact.
 - Your main model isn't switched mid-chat, because that would lose its prompt cache.
 - If your picked model isn't cheaper than your main one, results are only cleaned.

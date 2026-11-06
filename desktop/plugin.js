@@ -1003,7 +1003,7 @@ function ChatSection({ ctx, sessionId }) {
         label('How it saves'),
         small('Your main model keeps the thinking. For routine work like summarizing or reformatting, it sends an input to your cheap model and gets the output straight back, deciding by itself when that\'s worth doing.', C.soft),
         small('A big tool result is paid for again on every later message, so results are also cleaned, and big ones are condensed.', C.soft),
-        small('Your main model is never switched mid-chat, which would lose its prompt cache. File contents, errors and small results stay exact, and your main model can always read a full original.', C.soft),
+        small('Your main model is never switched mid-chat, which would lose its prompt cache. File contents, errors and small results stay exact. When a result is noticeably reduced, your main model can read the original.', C.soft),
         small(state.why_not_first, C.soft)
       ], 'how') : null
     ]
@@ -1044,7 +1044,7 @@ const NOTES = [
     ['Cleaned results', 'Removes markup and repeated space from tool results with no AI. File contents, errors and small results stay exact.'],
     ['Routing', 'Your main model decides when to send routine work to your cheap model and takes the output straight back, such as summarizing or extracting data. It keeps decisions, anything that sends or changes something, and the final answer.'],
     ['Cheap model', 'Does routed tasks and condenses big tool results. Your main model doesn\'t change. If the cheap model is slow or isn\'t worth it, results are only cleaned.'],
-    ['Full results', 'The exact original is kept for 7 days. Your main model can read it, or ask the cheap model about it.'],
+    ['Full results', 'When a result is noticeably reduced, the exact original is kept for 7 days. Your main model can read it, or ask the cheap model about it.'],
     ['Why not from the start', 'Hermes creates the chat when your first prompt is sent, and savings come from tool results, which don\'t exist until the work starts.']
   ]],
   ['Reading the numbers', [
