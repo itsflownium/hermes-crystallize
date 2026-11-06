@@ -173,11 +173,9 @@ async def tune_all() -> dict[str, Any]:
     """Start a trial on every job that can have one."""
     result = _tuning().start_all()
     count = len(result["started"])
-    tests = len(result["routines"])
-    extra = f" Testing routines for {tests}." if tests else ""
-    return {"ok": bool(count or tests),
+    return {"ok": bool(count),
             "message": (f"Making {count} job{'' if count == 1 else 's'} cheaper." if count
-                        else "No jobs are ready for cheaper settings yet. Each needs 2 finished runs first.") + extra}
+                        else "No jobs are ready for cheaper settings yet. Each needs 2 finished runs first.")}
 
 
 def _chat():

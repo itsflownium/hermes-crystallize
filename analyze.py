@@ -34,8 +34,10 @@ SIDE_EFFECT_TOOLS = {
     "send_message", "send_email", "post_message", "write_file", "patch", "file_edit",
     "delete_file", "cronjob_manage", "delegate_task",
 }
-_SIDE_EFFECT_NAME = re.compile(r"(send|post|delete|remove|create|update|publish|deploy|write|upload)",
+_SIDE_EFFECT_NAME = re.compile(r"(send|post|delete|remove|create|update|publish|deploy|write|upload|edit|"
+                               r"(^|_)(set|add|run|move|merge|close|cancel|execute|trigger|approve|invite|comment|assign)(_|$))",
                                re.IGNORECASE)
+_READ_NAME = re.compile(r"(^|_)(get|list|read|search|fetch|query|find|view|describe|show|lookup|count)(_|$)", re.IGNORECASE)
 
 # Shell commands that change things. Writing into a scratch/temp file is fine.
 _MUTATING_SHELL = re.compile(
@@ -44,6 +46,21 @@ _MUTATING_SHELL = re.compile(
     r"curl\b[^|;&]*\s-X\s*(POST|PUT|PATCH|DELETE)|curl\b[^|;&]*\s(-d|--data)\b)",
     re.IGNORECASE,
 )
+
+# Writes the shell can do with any command, and commands known only to read.
+_SCRATCH_WRITE = re.compile(r"(>>?|\s-o|\s--output)\s*[\"']?(/tmp/|/private/tmp/|/dev/null|\$TMPDIR/)[^\s;&|]*")
+_SHELL_WRITES = re.compile(r">(?!>?\s*/dev/null|&\d)|\$\(|`|\bsed\s[^|;&]*-i|\s-(delete|exec)\b|\bsort\s[^|;&]*\s-o\b|system\(|"
+                           r"\bcurl\b[^|;&]*\s(-o|-O|-T|-F|--output|--remote-name|--upload-file|--form|--json|--request\s*(POST|PUT|PATCH|DELETE))\b|"
+                           r"\bcurl\b[^|;&]*-X(POST|PUT|PATCH|DELETE)|\bwget\b(?![^|;&]*-O\s*-)")
+_READ_ONLY_COMMANDS = {"curl", "wget", "cat", "head", "tail", "grep", "rg", "ls", "find", "jq", "date", "wc", "sort", "uniq",
+                       "echo", "printf", "cut", "tr", "sed", "awk", "stat", "du", "df", "dig", "uname", "cd", "true"}
+_READ_ONLY_SUBCOMMANDS = ("git log", "git status", "git diff", "git show", "gh issue list", "gh issue view", "gh pr list",
+                          "gh pr view", "gh repo view", "gh release list")
+_KNOWN_READ_TOOLS = {"web_search", "web_extract", "read_file", "search_files", "session_search", "browser_snapshot",
+                     "browser_console", "browser_get_images", "web_crawl", "tool_describe", "tool_search", "vision_analyze", "crystal_list", "crystal_run",
+                     "crystal_full_result", "__run__"}
+_MUTATING_CODE = re.compile(r"(\bopen\([^)]*['\"][wax+]|\.write\(|\bos\.(remove|unlink|rename|system|mkdir)|\bshutil\.|\bsubprocess\b|"
+                            r"\.(post|put|patch|delete)\(|\b(terminal|write_file|send_message)\()")
 
 # Blanks, in the order we try them. Each is (kind, pattern, placeholder).
 _FILL_INS: list[tuple[str, re.Pattern[str], str]] = [
@@ -141,14 +158,38 @@ def _backbone(sequences: list[list[str]]) -> list[str]:
     return common
 
 
+def _shell_is_read_only(command: str) -> bool:
+    """Every part of the command must start with something known only to read."""
+    command = _SCRATCH_WRITE.sub(" ", command)  # writing to a scratch file changes nothing that matters
+    if _MUTATING_SHELL.search(command) or _SHELL_WRITES.search(command):
+        return False
+    for part in re.split(r"&&|\|\||;|\||\n", command):
+        words = part.strip().split()
+        while words and "=" in words[0] and not words[0].startswith("-"):  # VAR=value prefixes
+            words = words[1:]
+        if not words:
+            continue
+        first = words[0].rsplit("/", 1)[-1]
+        phrase = " ".join([first, *words[1:3]])
+        if first in ("python", "python3") and words[1:2] == ["-c"] and not _MUTATING_CODE.search(part):
+            continue
+        if first not in _READ_ONLY_COMMANDS and not any(phrase.startswith(p) for p in _READ_ONLY_SUBCOMMANDS):
+            return False
+    return True
+
+
 def _is_side_effect(tool_name: str, args: Any) -> bool:
+    """Would repeating this step change something? When unsure, yes, because tests repeat steps."""
+    if tool_name in ("terminal", "shell"):
+        command = args.get("command") if isinstance(args, dict) else args
+        return not _shell_is_read_only(str(command or ""))
+    if tool_name == "execute_code":
+        return bool(_MUTATING_CODE.search(_canon(args)) or _MUTATING_SHELL.search(_canon(args)))
+    if tool_name in SETUP_TOOLS or tool_name in _KNOWN_READ_TOOLS:
+        return False
     if tool_name in SIDE_EFFECT_TOOLS:
         return True
-    if tool_name in ("terminal", "shell", "execute_code"):
-        return bool(_MUTATING_SHELL.search(_canon(args)))
-    if tool_name.startswith("mcp_") or "__" in tool_name:
-        return bool(_SIDE_EFFECT_NAME.search(tool_name))
-    return False
+    return bool(_SIDE_EFFECT_NAME.search(tool_name)) or not _READ_NAME.search(tool_name)
 
 
 def _avg(values: list[Optional[float]]) -> Optional[float]:
@@ -348,7 +389,9 @@ def run_actions(run: Any) -> set[str]:
 
 
 def regular_actions(runs: list[Any]) -> set[str]:
-    """Actions most of these runs took. One-off actions aren't expected every time."""
+    """Actions most of these runs took. One-off actions aren't expected every time. Only runs
+    with recorded steps can show this, so older runs known just from Hermes's records don't count."""
+    runs = [r for r in runs if r.steps]
     tools = {t for r in runs for t in run_actions(r)}
     return {t for t in tools if sum(t in run_actions(r) for r in runs) * 2 > len(runs)}
 

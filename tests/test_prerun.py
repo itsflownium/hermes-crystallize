@@ -259,10 +259,31 @@ def test_new_only_matches_items_across_formats():
     assert "Title 8" in text and "Title 2" not in text
 
 
-def test_new_only_repeats_when_there_are_no_new_items():
+def test_new_only_sends_everything_when_only_the_text_changed():
+    """Same links can hide a changed status, so the old answer doesn't get repeated."""
     seen = prerun._links(_feed(1, 2, 3, 4, 5, 6))
-    text = prerun._new_only_text(_feed(1, 2, 3, 4, 5, 6), seen, "My answer")
-    assert "still stands" in text and "My answer" in text
+    assert prerun._new_only_text(_feed(1, 2, 3, 4, 5, 6), seen, "My answer") is None
+
+
+def test_summary_and_failures_survive_collapsing():
+    log = "\n".join([f"tests/a.py::t{i} PASSED [ 10%]" for i in range(30)] +
+                    ["tests/a.py::bad FAILED", "=== 1 failed, 30 passed in 2.1s ==="])
+    out = prerun.collapse_passing(log)
+    assert "30 passing" in out and "tests/a.py::bad FAILED" in out and "1 failed, 30 passed" in out
+
+
+def test_failed_commands_and_code_keep_their_shape():
+    code = "def f():\n" + "    return 1   # keep\n" * 200
+    ok = json.loads(prerun.clean_result("terminal", json.dumps({"output": code + "   \n" * 300, "exit_code": 0})))
+    assert "    return 1   # keep" in ok["output"]
+    assert prerun.clean_result("terminal", json.dumps({"output": "x  y\n" * 900, "exit_code": 1})) is None
+
+
+def test_download_links_and_prices_stay():
+    slim = prerun._slim_json({"download_url": "d", "pdf_url": "p", "html_url": "h", "labels_url": "x"})
+    assert set(slim) == {"download_url", "pdf_url", "html_url"}
+    assert prerun.fingerprint("price 1.25") != prerun.fingerprint("price 1.75")
+    assert prerun.fingerprint("took 1.25s") == prerun.fingerprint("took 1.75s")
 
 
 def test_new_only_stands_aside_when_it_cannot_help():

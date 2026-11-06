@@ -197,6 +197,15 @@ def final_answers(session_ids: list[str]) -> dict[str, str]:
         conn.close()
 
 
+_QUIET_WORDS = {"[SILENT]", "SILENT", "NO_REPLY", "NO REPLY"}
+
+
+def is_silent(text: Optional[str]) -> bool:
+    """Hermes's own rule for "nothing to report": the marker alone, or on the first or last line."""
+    lines = [line.strip() for line in (text or "").strip().splitlines() if line.strip()]
+    return bool(lines) and (lines[0].upper() in _QUIET_WORDS or lines[-1].upper() in _QUIET_WORDS)
+
+
 def _parse_args(text: Optional[str]) -> Any:
     if not text:
         return {}

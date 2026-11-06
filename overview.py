@@ -234,14 +234,14 @@ def _saved_since(after: list[history.Run], baseline: Optional[float]) -> float:
     """Money saved since Promote: what each run would have cost minus what it did."""
     if baseline is None:
         return 0.0
-    return sum(max(0.0, baseline - r.cost_usd) for r in after if r.cost_usd is not None)
+    return sum(baseline - r.cost_usd for r in after if r.cost_usd is not None)
 
 
 def _plan_saved(after: list[history.Run], baseline: Optional[float]) -> float:
     """The same as _saved_since for runs included in a plan, at API prices."""
     if baseline is None:
         return 0.0
-    return sum(max(0.0, baseline - r.api_cost_usd) for r in after if r.api_cost_usd is not None)
+    return sum(baseline - r.api_cost_usd for r in after if r.api_cost_usd is not None)
 
 
 def _chat_spent(session_id: Optional[str]) -> Optional[float]:

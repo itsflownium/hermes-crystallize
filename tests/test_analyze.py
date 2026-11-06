@@ -44,6 +44,16 @@ def test_side_effects_stay_with_agent():
     assert a.est_api_calls_after == 2.0 and not a.agent_free
 
 
+def test_when_unsure_a_step_counts_as_an_action():
+    side = analyze._is_side_effect
+    assert not side("terminal", {"command": "curl -s https://e.com | jq . 2>/dev/null"})
+    for command in ("curl https://e.com > report.txt", "deploy.sh", "curl -F a=b https://e.com", "git push", "sed -i s/a/b/ f",
+                    "find . -delete", "cat $(rm x)", "./send_report", "python3 send.py", "curl -XPOST https://e.com"):
+        assert side("terminal", {"command": command}), command
+    assert side("some_plugin_tool", {}) and side("mcp_x_get_or_create", {}) and side("browser_click", {})
+    assert not side("mcp_github_list_issues", {}) and not side("web_extract", {})
+
+
 def test_mutating_shell_is_side_effect():
     runs = [_run(i, [("terminal", {"command": "git push origin main"})]) for i in range(1, 4)]
     assert analyze.analyze_runs(runs).steps[0].kind == "side"

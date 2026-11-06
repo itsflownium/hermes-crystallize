@@ -61,12 +61,12 @@ def _lines(text: str) -> int:
 
 
 def counted_runs(before: list[history.Run], trial: list[history.Run], answers: dict[str, str]) -> list[history.Run]:
-    """The trial runs to judge. "Nothing new" can be a fair answer, so for a job that had
-    always answered, those runs neither pass nor fail: it waits for real answers."""
+    """The trial runs to judge. "Nothing new" can be a fair answer, but silence says nothing about
+    quality, so a job that has ever really answered waits for real answers."""
     said = lambda r: answers.get(r.session_id or "", "").strip()  # noqa: E731
-    if any(said(r) == _SILENT for r in before):
-        return trial
-    return [r for r in trial if said(r) != _SILENT]
+    if not any(said(r) and not history.is_silent(said(r)) for r in before):
+        return trial  # it has only ever stayed silent, so silence is all there is to compare
+    return [r for r in trial if not history.is_silent(said(r))]
 
 
 def _measure(before: list[history.Run], trial: list[history.Run]) -> tuple[str, Optional[float], Optional[float]]:
@@ -114,8 +114,8 @@ def evaluate(before: list[history.Run], trial: list[history.Run],
     lost = {t for t in analyze.regular_actions(before) if not all(t in analyze.run_actions(r) for r in trial)}
     if lost:
         return fail(f"it stopped doing something it normally does ({', '.join(sorted(lost))})")
-    real_old = [t for t in old if t and t != _SILENT]
-    real_new = [t for t in new if t != _SILENT]
+    real_old = [t for t in old if t and not history.is_silent(t)]
+    real_new = [t for t in new if not history.is_silent(t)]
     if real_old and real_new:
         if _mid([len(t) for t in real_new]) < MIN_LENGTH_RATIO * _mid([len(t) for t in real_old]):
             return fail("its answers got much shorter")
@@ -271,7 +271,7 @@ def start(job: str, level: Optional[str] = None) -> dict[str, Any]:
     if EFFICIENCY_HINT not in prompt:
         lifecycle._edit_job(found["id"], "--prompt", prompt + EFFICIENCY_HINT)
     data = {"job_name": name, "job_id": found["id"], "status": "trial", **stages[0], "stages": stages[1:],
-            "previous": found.get("reasoning_effort"), "started_at": now, "first_started_at": now,
+            "previous": found.get("reasoning_effort"), "started_at": now, "first_started_at": now, "baseline_until": now,
             "previous_toolsets": found.get("enabled_toolsets"), "clean": True, "hint": True,
             "new_only": _set_new_only(found["id"], True)}
     if upgrade:
@@ -284,7 +284,7 @@ def start(job: str, level: Optional[str] = None) -> dict[str, Any]:
 
 def start_all() -> dict[str, Any]:
     """Start a trial on every job that can have one. One job's problem doesn't stop the rest."""
-    started, skipped, routines = [], {}, []
+    started, skipped = [], {}
     for job in _all_jobs():
         name = job.get("name") or job.get("id")
         try:
@@ -292,21 +292,7 @@ def start_all() -> dict[str, Any]:
             started.append(name)
         except lifecycle.LifecycleError as exc:
             skipped[name] = str(exc)
-        if not job.get("no_agent") and _start_routine_test(job):
-            routines.append(name)
-    return {"started": started, "skipped": skipped, "routines": routines}
-
-
-def _start_routine_test(job: dict[str, Any]) -> bool:
-    """Begin testing a routine if the job has one to offer. Tests only read data, and
-    promoting one stays your choice."""
-    if store.routine_for_job(job["id"]):
-        return False
-    try:
-        lifecycle.try_job(job.get("name") or job["id"])
-        return True
-    except lifecycle.LifecycleError:
-        return False
+    return {"started": started, "skipped": skipped}
 
 
 def cleans_results(name: str) -> bool:
@@ -374,10 +360,19 @@ def _is_close(result: dict[str, Any]) -> bool:
     return result.get("kind") == "saving" and bool(old and new) and new <= old * (1 + CLOSE_CALL)
 
 
-def _decide(t: dict[str, Any]) -> None:
+def _trial_runs(t: dict[str, Any]) -> tuple[list[history.Run], list[history.Run]]:
+    """Runs from before this trial, and from its current stage. Earlier stages already had
+    cheaper settings, so they never count as "before"."""
     before, trial = _split(t["job_name"], t["started_at"])
+    if t.get("baseline_until"):
+        before = [r for r in before if (r.session_started or 0) < t["baseline_until"]]
     if t.get("baseline_from"):
         before = [r for r in before if (r.session_started or 0) >= t["baseline_from"]]
+    return before, trial
+
+
+def _decide(t: dict[str, Any]) -> None:
+    before, trial = _trial_runs(t)
     answers = history.final_answers([r.session_id for r in before + trial if r.session_id])
     counted = counted_runs(before, trial, answers)
     alive = lifecycle.cron_job(t["job_name"]) is not None and lifecycle.cron_job(t["job_name"]).get("state") != "completed"
@@ -425,7 +420,7 @@ def measured(name: str, t: dict[str, Any]) -> Optional[dict[str, Any]]:
     if old is None or new is None:
         return None
     field = {"cost": lambda r: r.cost_usd, "api cost": lambda r: r.api_cost_usd}.get(metric)
-    saved = sum(max(0.0, old - field(r)) for r in runs if field(r) is not None) if field else None
+    saved = sum(old - field(r) for r in runs if field(r) is not None) if field else None
     return {"metric": metric, "before": old, "after": new, "runs": len(runs), "saved": saved, "run_list": runs}
 
 
@@ -447,7 +442,7 @@ def status_text(t: Optional[dict[str, Any]]) -> str:
         return "Not tried yet"
     res = t.get("result") or {}
     if t["status"] == "trial":
-        before, trial = _split(t["job_name"], t["started_at"])
+        before, trial = _trial_runs(t)
         answers = history.final_answers([r.session_id for r in before + trial if r.session_id])
         done = len(counted_runs(before, trial, answers))
         return f"Trying {_settings(t)}: {min(done, TRIAL_RUNS)} of {TRIAL_RUNS} answers so far"
@@ -462,7 +457,7 @@ def status_text(t: Optional[dict[str, Any]]) -> str:
 
 def sample_answers(name: str, t: dict[str, Any]) -> dict[str, str]:
     """The latest answer from before and from the lower level, to read side by side."""
-    before, trial = _split(name, t["started_at"])
+    before, trial = _trial_runs({**t, "job_name": name})
     ids = {"before": before[-1].session_id if before else None, "after": trial[-1].session_id if trial else None}
     answers = history.final_answers([s for s in ids.values() if s])
     return {k: answers.get(v or "", "") for k, v in ids.items()}

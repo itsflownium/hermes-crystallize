@@ -34,6 +34,7 @@ const diag = (event, detail) => {
 
 function money(v) {
   if (v === null || v === undefined) return '—'
+  if (v < 0) return `-${money(-v)}`
   if (v > 0 && v < 1) return `$${v.toFixed(4)}`
   return `$${v.toFixed(2)}`
 }

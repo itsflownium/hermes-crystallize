@@ -140,6 +140,14 @@ ROUTING_NOTE = (
 MIN_ROUTING_PRICE_RATIO = 5     # below this, a hand-off's extra call eats the saving
 
 
+def _same_model(answered: Optional[str], picked: Optional[str]) -> bool:
+    """Providers often report a dated or prefixed id, such as vendor/model-2026-01."""
+    if not answered or not picked:
+        return True
+    a, p = answered.split("/")[-1].lower(), picked.split("/")[-1].lower()
+    return a == p or a.startswith(p + "-") or p.startswith(a + "-")
+
+
 def ask_cheap(ctx: Any, text: str, session_id: str = "") -> str:
     """One input to the picked model, its output straight back: no extra prompt or tools."""
     picked = chosen_model()
@@ -151,7 +159,7 @@ def ask_cheap(ctx: Any, text: str, session_id: str = "") -> str:
                             max_tokens=MAX_ROUTED_TOKENS)
     if answer is None:
         return json.dumps({"error": f"The cheap model didn't answer ({problem}). Do this yourself."})
-    if getattr(answer, "model", picked["model"]) != picked["model"]:
+    if not _same_model(getattr(answer, "model", None), picked["model"]):
         return json.dumps({"error": "A different model answered. Do this yourself."})
     tokens, cost = _usage_cost(answer.usage, picked)
     if session_id:
@@ -339,7 +347,7 @@ def _condense(ctx: Any, tool: str, text: str, picked: dict[str, Optional[str]]) 
         _paused_until = time.time() + PAUSE_AFTER_PROBLEM_SECONDS
         logger.warning("crystallize: condensing paused: %s", problem)
         return None
-    if picked["model"] and getattr(answer, "model", picked["model"]) != picked["model"]:
+    if picked["model"] and not _same_model(getattr(answer, "model", None), picked["model"]):
         _paused_until = time.time() + PAUSE_AFTER_PROBLEM_SECONDS
         logger.warning("crystallize: condensing paused: Hermes used %s instead of the picked model", answer.model)
         return None
