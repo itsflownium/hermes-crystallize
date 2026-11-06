@@ -1004,6 +1004,81 @@ function ThisChat({ state, onToggle, heading = 'This chat' }) {
   ], 'this')
 }
 
+// Context Rent: a map of what the chat re-reads on every AI call, and a way to stop paying for a result.
+function ContextRent({ ctx, sessionId, refresh }) {
+  const [data, setData] = useState(null)
+  const [picked, setPicked] = useState(null)
+  const load = useCallback(() => {
+    if (!sessionId) return
+    ctx.rest(`/chat-rent?session_id=${encodeURIComponent(sessionId)}`)
+      .then(res => setData(res && !res.error ? res : null))
+      .catch(() => setData(null))
+  }, [ctx, sessionId])
+  useEffect(load, [load, refresh])
+  if (!data || !data.calls) return null
+  const act = (path, id) => {
+    ctx.rest(path, { method: 'POST', body: { session_id: sessionId, id } })
+      .then(res => {
+        host.notify({ kind: res && res.ok ? 'success' : 'warning', message: (res && res.message) || 'Done.' })
+        load()
+      })
+      .catch(err => host.notify({ kind: 'error', message: `Crystallize: ${String(err)}` }))
+  }
+  const results = data.items.filter(i => !i.removed)
+  const tiles = [
+    ...results.map(i => ({ key: i.id, name: i.tool, tokens: i.tokens, item: i })),
+    ...data.groups.map(g => ({ key: g.name, name: g.name, tokens: g.tokens }))
+  ].filter(t => t.tokens > 0)
+  const total = tiles.reduce((sum, t) => sum + t.tokens, 0) || 1
+  const chosen = data.items.find(i => i.id === picked)
+  const explain = i => {
+    if (i.payback_calls === null || i.payback_calls === undefined) return `${tokensText(i.tokens)} tokens. No listed price for this model.`
+    const back = i.payback_calls === 0
+      ? 'Removing it costs nothing extra, because nothing comes after it.'
+      : `Removing it resets the provider's cache once, which pays back after ${i.payback_calls} more AI call${i.payback_calls === 1 ? '' : 's'}.`
+    return `${tokensText(i.tokens)} tokens. Costs ${money(i.per_call_usd)} on every AI call, ${money(i.paid_usd)} so far. ${back}`
+  }
+  const itemRow = i => jsxs('div', {
+    key: i.id,
+    style: { display: 'flex', flexDirection: 'column', gap: 3, padding: '6px 8px', borderRadius: 6, background: i.id === picked ? C.tile : 'none', border: `0.5px solid ${C.stroke}` },
+    children: [
+      row(jsx('span', { style: { fontSize: '0.75rem', color: i.removed ? C.muted : C.text, wordBreak: 'break-word' }, children: i.what ? `${i.tool}: ${i.what}` : i.tool }),
+        i.removed ? pill('Put back', () => act('/chat-restore', i.id), C.muted) : pill('Remove', () => act('/chat-evict', i.id), i.worth_it ? C.accent : C.muted)),
+      small(i.removed ? `Removed. Saves ${tokensText(i.tokens)} tokens on every AI call.` : explain(i), C.soft),
+      !i.removed && i.worth_it && i.payback_calls > 0 ? small('This chat has already made more AI calls than that, so removing it is likely to pay off.', C.green) : null
+    ]
+  })
+  return bubble([
+    row('Context Rent', data.per_call_usd != null ? chip(`${money(data.per_call_usd)} a call`, C.yellow) : chip(`${tokensText(data.tokens)} tokens`, C.muted)),
+    small(`Every AI call re-reads this chat: about ${tokensText(data.tokens)} tokens right now. The biggest blocks cost the most. Pick a tool result to see what it costs.`, C.soft),
+    jsx('div', {
+      key: 'map',
+      role: 'list',
+      'aria-label': 'What this chat re-reads, sized by tokens',
+      style: { display: 'flex', flexWrap: 'wrap', gap: 2, minHeight: 72 },
+      children: tiles.map(t => jsx('button', {
+        key: t.key,
+        type: 'button',
+        role: 'listitem',
+        disabled: !t.item,
+        title: `${t.name}: ${tokensText(t.tokens)} tokens`,
+        onClick: () => t.item && setPicked(t.key === picked ? null : t.key),
+        style: {
+          flex: `${t.tokens} 1 ${Math.max(36, (t.tokens / total) * 280)}px`, minHeight: 34, padding: '3px 5px', overflow: 'hidden', textAlign: 'left',
+          borderRadius: 4, cursor: t.item ? 'pointer' : 'default', fontSize: '0.625rem', lineHeight: 1.3, whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+          background: C.tile, color: t.item ? C.text : C.muted,
+          border: t.key === picked ? `1px solid ${C.accent}` : `0.5px solid ${t.item ? C.yellow : C.stroke}`
+        },
+        children: `${t.name} ${tokensText(t.tokens)}`
+      }))
+    }),
+    ...(chosen ? [itemRow(chosen)] : results.filter(i => i.worth_it).slice(0, 3).map(itemRow)),
+    ...data.items.filter(i => i.removed && i.id !== picked).map(itemRow),
+    data.removed_tokens ? small(data.saving_per_call_usd != null ? `Removed ${tokensText(data.removed_tokens)} tokens, which saves about ${money(data.saving_per_call_usd)} on every AI call.` : `Removed ${tokensText(data.removed_tokens)} tokens from every AI call.`, C.green) : null,
+    small('Removing only changes what is sent to the AI. Your chat stays the same, and the AI can read the original if it needs to. Tokens and prices are estimates.')
+  ].filter(Boolean), 'rent')
+}
+
 // The sidebar page isn't inside a chat, so it works on the chat you were last in.
 function ChatSection({ ctx, sessionId: focused }) {
   const [remembered, setRemembered] = useState(() => ctx.storage.get('last_chat', null))
@@ -1041,6 +1116,7 @@ function ChatSection({ ctx, sessionId: focused }) {
       error ? small(error, C.soft) : null,
       !state && !error ? small('Loading…') : null,
       state ? jsx(ThisChat, { key: 'this', state, onToggle: toggle, heading: focused ? 'This chat' : `Your last chat${state.title ? `: ${state.title}` : ''}` }) : null,
+      state && sessionId ? jsx(ContextRent, { key: 'rent', ctx, sessionId, refresh: state }) : null,
       state ? jsx(ModelPicker, { key: 'picker', ctx, picked: state.model, onPicked: load }) : null,
       state ? bubble([
         label('How it saves'),
@@ -1099,6 +1175,7 @@ const NOTES = [
     ['Routing', 'Your main model decides when to send routine work to your cheap model and takes the output straight back, such as summarizing or extracting data. It keeps decisions, anything that sends or changes something, and the final answer.'],
     ['Cheap model', 'Does routed tasks and condenses big tool results. Your main model doesn\'t change. If the cheap model is slow or isn\'t worth it, results are only cleaned.'],
     ['Full results', 'When a result is noticeably reduced, the exact original is kept for 7 days. Your main model can read it, or ask the cheap model about it.'],
+    ['Context Rent', 'Every AI call re-reads the whole chat, so each old tool result costs a little on every call after it. This shows what each one costs. Remove leaves a result out of what is sent to the AI, while your chat stays the same and the AI can still read the original. It works without turning on Crystallize Chat. Removing can reset the provider\'s cache once, so each result shows how many calls that takes to pay back.'],
     ['Why not from the start', 'Hermes creates the chat when your first prompt is sent, and savings come from tool results, which don\'t exist until the work starts.']
   ]],
   ['Reading the numbers', [

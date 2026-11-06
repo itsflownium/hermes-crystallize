@@ -140,6 +140,21 @@ def make_pre_tool_call(ctx: Any) -> Callable[..., Any]:
     return before_tool
 
 
+def make_llm_request(ctx: Any) -> Callable[..., Any]:
+    """Leave out the tool results you removed in Context Rent. The saved chat doesn't change."""
+    from . import rent
+
+    def rewrite(request: Any = None, session_id: str = "", **_: Any) -> Any:
+        try:
+            changed = rent.apply(request, session_id)
+            return {"request": changed} if changed is not None else None
+        except Exception:  # noqa: BLE001 — a failed saving must never stop the AI call
+            logger.debug("crystallize: leaving out removed results failed", exc_info=True)
+            return None
+
+    return rewrite
+
+
 def make_pre_llm_call(ctx: Any) -> Callable[..., Any]:
     """Tell the main model it can route routine work, in chats where Crystallize Chat is on."""
     from . import chat_savings

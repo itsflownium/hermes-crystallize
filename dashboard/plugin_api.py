@@ -250,6 +250,34 @@ async def brake_setting(body: dict) -> dict[str, Any]:
     return importlib.import_module(f"{_PKG}.brake").set_enabled(bool((body or {}).get("on")))
 
 
+@router.get("/chat-rent")
+async def chat_rent(session_id: Optional[str] = None) -> dict[str, Any]:
+    """What this chat re-reads on every AI call."""
+    import asyncio
+
+    _overview()
+    rent = importlib.import_module(f"{_PKG}.rent")
+    try:
+        return await asyncio.to_thread(lambda: rent.report(session_id))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("crystallize: context rent failed: %s", exc, exc_info=True)
+        return {"error": "Couldn't load Context Rent data."}
+
+
+@router.post("/chat-evict")
+async def chat_evict(body: dict) -> dict[str, Any]:
+    _overview()
+    body = body or {}
+    return importlib.import_module(f"{_PKG}.rent").evict(str(body.get("session_id") or ""), str(body.get("id") or ""))
+
+
+@router.post("/chat-restore")
+async def chat_restore(body: dict) -> dict[str, Any]:
+    _overview()
+    body = body or {}
+    return importlib.import_module(f"{_PKG}.rent").restore(str(body.get("session_id") or ""), str(body.get("id") or ""))
+
+
 @router.post("/reasoning-setting")
 async def reasoning_setting(body: dict) -> dict[str, Any]:
     """Whether Make cheaper may also try lower reasoning. Off keeps each job's own setting."""
