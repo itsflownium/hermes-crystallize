@@ -1,6 +1,7 @@
 """The pre-run step: cleaning data, spotting unchanged runs, and the no-AI check."""
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -241,14 +242,35 @@ def test_clean_result_leaves_alone_what_it_should():
     assert prerun.clean_result("terminal", None) is None
 
 
-def test_new_only_sends_changes_and_the_last_answer():
-    old = "\n".join(f"item {i}" for i in range(10))
-    seen = set(prerun._line_hashes(old))
-    text = prerun._new_only_text(old + "\nbrand new thing", seen, "My answer")
-    assert "brand new thing" in text and "My answer" in text and "item 3" not in text
-    assert prerun._new_only_text(old, set(), "My answer") is None            # nothing to compare with
-    assert prerun._new_only_text("all\ndifferent", seen, "My answer") is None  # mostly new: send it all
-    assert prerun._new_only_text(old + "\nnew", seen, "") is None            # nothing to update
+def _feed(*ids):
+    return "\n".join(f"Title {i}\nArticle URL: https://e.com/{i}" for i in ids)
+
+
+def test_new_only_sends_new_items_and_the_last_answer():
+    seen = prerun._links(_feed(1, 2, 3, 4, 5, 6))
+    text = prerun._new_only_text(_feed(1, 2, 3, 4, 5, 7), seen, "My answer")
+    assert "Title 7" in text and "https://e.com/7" in text and "My answer" in text and "Title 3" not in text
+
+
+def test_new_only_matches_items_across_formats():
+    seen = prerun._links(_feed(1, 2, 3, 4, 5, 6))
+    other = "\n".join(f"Title {i} | https://e.com/{i}/ | Fri" for i in (1, 2, 3, 4, 5, 8))
+    text = prerun._new_only_text(other, seen, "My answer")
+    assert "Title 8" in text and "Title 2" not in text
+
+
+def test_new_only_repeats_when_there_are_no_new_items():
+    seen = prerun._links(_feed(1, 2, 3, 4, 5, 6))
+    text = prerun._new_only_text(_feed(1, 2, 3, 4, 5, 6), seen, "My answer")
+    assert "still stands" in text and "My answer" in text
+
+
+def test_new_only_stands_aside_when_it_cannot_help():
+    seen = prerun._links(_feed(1, 2, 3, 4, 5, 6))
+    assert prerun._new_only_text(_feed(1, 2, 3, 4, 5, 7), set(), "My answer") is None      # nothing to compare
+    assert prerun._new_only_text(_feed(11, 12, 13, 14, 15, 16), seen, "My answer") is None # mostly new
+    assert prerun._new_only_text(_feed(1, 2, 3, 4, 5, 7), seen, "") is None                # nothing to update
+    assert prerun._new_only_text("just text, no links", seen, "My answer") is None         # not a list of items
 
 
 def test_a_job_that_acts_always_runs(monkeypatch):
@@ -294,3 +316,54 @@ def test_own_script_failure_is_passed_on(monkeypatch, tmp_path):
     (tmp_path / "own.py").write_text("import sys; print('broken'); sys.exit(3)")
     prerun.write_script("cr_1", "job", "own.py")
     assert _run_script(d / "cr_1.py", tmp_path).returncode == 3
+
+
+def _crashing_hermes(tmp_path):
+    """Run scripts against a stand-in Hermes whose command fails with no output."""
+    pkg = tmp_path / "fake" / "hermes_cli"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "main.py").write_text("import sys; sys.exit(7)")
+    return {**os.environ, "PYTHONPATH": str(tmp_path / "fake")}
+
+
+def test_a_routine_crash_hands_the_task_to_the_ai(monkeypatch, tmp_path):
+    d = tmp_path / "crystallize"
+    monkeypatch.setattr(prerun, "scripts_dir", lambda: d)
+    prerun.write_script("cr_1", "job")
+    out = subprocess.run([sys.executable, str(d / "cr_1.py")], capture_output=True, text=True, env=_crashing_hermes(tmp_path))
+    assert out.returncode == 0 and "Do the whole task yourself" in out.stdout
+
+
+def test_a_no_ai_routine_crash_is_reported_as_a_failure(monkeypatch, tmp_path):
+    d = tmp_path / "crystallize"
+    monkeypatch.setattr(prerun, "scripts_dir", lambda: d)
+    prerun.write_script("cr_1", "job", no_ai=True)
+    out = subprocess.run([sys.executable, str(d / "cr_1.py")], capture_output=True, text=True, env=_crashing_hermes(tmp_path))
+    assert out.returncode == 7 and "Do the whole task" not in out.stdout
+
+
+def test_a_link_poor_run_keeps_the_remembered_items(monkeypatch):
+    saved = _fake_store(monkeypatch, _routine({"when_unchanged": "run", "new_only": True}))
+    monkeypatch.setattr(prerun, "_recent_answers", lambda name: ["An answer"])
+    outputs = [_feed(1, 2, 3, 4, 5, 6), "No links in this format", _feed(1, 2, 3, 4, 5, 7)]
+    dispatch = lambda name, args: json.dumps({"output": outputs.pop(0), "exit_code": 0})
+    prerun.run("cr_1", dispatch)
+    assert "No links" in prerun.run("cr_1", dispatch)[0]
+    assert len(saved["r"]["meta"]["last_links"]) == 6
+    assert "Title 7" in prerun.run("cr_1", dispatch)[0]
+
+
+def test_long_test_logs_lose_only_passing_lines():
+    passing = [f"test_{i} (tests.test_a.T) ... ok" for i in range(300)]
+    failure = ["test_x (tests.test_a.T) ... FAIL", "FAIL: test_x", "AssertionError: 2 != 4", "FAILED (failures=1)"]
+    out = json.loads(prerun.clean_result("terminal", json.dumps({"output": "\n".join(passing + failure), "exit_code": 1, "error": None})))
+    assert "300 passing test lines removed" in out["output"] and "test_5 " not in out["output"]
+    for line in failure:
+        assert line in out["output"]
+    assert out["exit_code"] == 1
+
+
+def test_a_short_log_stays_whole():
+    text = "\n".join(f"test_{i} ... ok" for i in range(5))
+    assert prerun.collapse_passing(text) == text

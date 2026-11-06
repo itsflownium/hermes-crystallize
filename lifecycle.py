@@ -266,7 +266,7 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     if mode == "no_ai" and acts:
         raise LifecycleError("This job sends or changes something, so it needs the AI.")
     own_script = job.get("script") or None
-    script = prerun.write_script(routine_id, routine["name"], own_script)
+    script = prerun.write_script(routine_id, routine["name"], own_script, mode == "no_ai")
     prompt = action_prompt(routine_id, original) if acts else prerun_prompt(routine_id, original)
     flags = ["--prompt", prompt, "--script", script]
     if mode == "no_ai":
@@ -285,6 +285,12 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     meta.setdefault("first_promoted_at", meta.get("promoted_at") or now)
     meta.update({"original_prompt": original, "promoted_at": now, "failures": 0, "live_runs": 0,
                  "baseline_cost": baseline, "mode": mode, "own_script": own_script, "skips": [], "no_ai_runs": [], "last_fingerprint": None})
+    # A job with cheaper settings already on gets new-items-only too, unless it acts on its data.
+    tune = store.get_tuning(routine["name"])
+    if tune and tune.get("status") in ("trial", "kept") and mode == "prerun" and not acts:
+        meta["new_only"] = True
+        tune["new_only"] = True
+        store.save_tuning(routine["name"], tune)
     store.update_routine(routine_id, status="live", meta=meta)
     return store.get_routine(routine_id)
 
@@ -312,6 +318,8 @@ def undo(routine_id: str, reason: str = "you chose Undo") -> dict[str, Any]:
 def set_mode(routine_id: str, mode: str) -> dict[str, Any]:
     """Switch a live routine between "prerun" (AI writes the answer) and "no_ai".
     A routine promoted the older way (crystal_run tool) is moved to the script."""
+    from . import prerun
+
     routine = store.get_routine(routine_id)
     if not routine or routine["status"] != "live":
         raise LifecycleError("Only a live routine can change mode.")
@@ -324,6 +332,7 @@ def set_mode(routine_id: str, mode: str) -> dict[str, Any]:
     if current == "tool":
         undo(routine_id, reason=f"switching to {mode}")
         return promote(routine_id, mode=mode)
+    prerun.write_script(routine_id, routine["name"], meta.get("own_script"), mode == "no_ai")
     _edit_job(routine["source_ref"], "--no-agent" if mode == "no_ai" else "--agent")
     meta.update({"mode": mode, "last_fingerprint": None})
     store.update_routine(routine_id, meta=meta)

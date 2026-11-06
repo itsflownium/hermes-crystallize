@@ -40,7 +40,8 @@ Trials on more models also kept their savings, with the same job. These were jud
 | Solar Mini 4 | Nous Portal | $0.0008 → $0.0004 | **49%** |
 | Mercury 3 | Nous Portal | $0.0015 → $0.0014 | **12%** |
 
-Qwen 3.8 Flash also passed, on tokens written (about 25% fewer), because it was judged before API-price estimates existed.
+Qwen 3.8 Flash also passed. Hermes has no price for its runs, so its saving is an estimate at API prices: about 59%.
+At API-price estimates, its runs went from about $0.0046 to $0.0019.
 Llama 4 Scout and Nova Lite didn't complete their normal runs on this job (an empty answer and an HTTP 400 error), and
 Step 3.5 Flash was rejected by its provider, so none of the three could start a trial.
 
@@ -63,7 +64,7 @@ Each job uses every step it can, from the biggest saving down. The panel shows e
 | **Cleaned tool results** | Removes markup and API link fields before the AI reads them, so no later call pays for them. Uses no AI and never touches file contents or errors | Any job using web or shell tools |
 | **New items only** | Sends what changed, plus the last answer to update | Live routines |
 | **Only the tools it uses** | Starts with the toolsets its cheapest good run used, for a smaller prompt on every call | Any AI job |
-| **Lower reasoning** | The weakest level the job's model takes, as reported by Hermes | Models with reasoning settings |
+| **Lower reasoning (optional)** | Off by default, so jobs keep your setting. Turn it on and it tries the weakest level the job's model takes | Models with reasoning settings |
 
 ## How it decides
 
@@ -71,6 +72,7 @@ Each job uses every step it can, from the biggest saving down. The panel shows e
 2. **Trial.** Click **Make cheaper** (or **Make all jobs cheaper**), or run `hermes crystal tune <job>`. Earlier runs from Hermes's own records count, so a slow job doesn't wait weeks to start.
 3. **Check.** After 2 answers: did any run fail, did it stop an action it normally takes, are answers much shorter or missing items or links, and did the cost really fall? Close results get more runs.
 4. **Keep or adjust.** If answers suffer, tools and then reasoning come back a step at a time. If nothing works, or it wasn't cheaper, the old settings return. Your global settings never change.
+5. **Keep watching.** Settings that later fail 3 runs in a row go back by themselves.
 
 **What the checks can't catch:** subtle mistakes in an answer, or an action or tool a job only uses now and
 then. `hermes crystal tune <job> --status` shows an answer from before and after to read yourself.
@@ -88,8 +90,7 @@ undo the switch.
 
 ## The panel
 
-A Crystallize button in the top bar and the status bar (or ⌘K → "Crystallize: Open savings panel") opens a
-panel beside the chat. It updates from your real cron jobs: running jobs first, with their schedule, model,
+A Crystallize button in the top bar and the status bar opens a panel beside the chat, with Cron and Chat sections. It updates from your real cron jobs: running jobs first, with their schedule, model,
 reasoning and tools; a cost graph for each job; time ranges that appear only when they have data; and
 finished jobs collapsed with their full history. Totals keep real money and plan API prices apart.
 
@@ -121,11 +122,35 @@ hermes crystal skip morning-brief repeat   # when nothing changed: repeat, quiet
 hermes crystal undo morning-brief      # put the original prompt back
 ```
 
-Crystallize is **off for each chat until you turn it on.** Click **◆ Crystallize** in the message box:
-it puts `/crystallize on` in the box, and nothing changes until you press Enter. Click it again
-for `/crystallize off`. While a chat is on, its tool calls are recorded and the panel analyses it.
-Scheduled cron runs are always recorded. `/crystallize status` works in any chat, including
-Telegram and Discord. The Make cheaper, Try, Promote and Undo actions are in the panel.
+## Crystallize Chat
+
+| | Crystallize Cron | Crystallize Chat |
+|---|---|---|
+| **For** | Scheduled jobs | The chat you're in |
+| **Turned on** | Per job, with **Make cheaper** | Per chat, after your first prompt |
+| **How it saves** | Fewer AI calls and tools, cleaned results, lower reasoning, routines | Routine work sent to a cheap model, cleaned results, big ones condensed |
+| **Proof** | Each job's cost is measured, and changes that don't help are undone | Savings shown are estimates |
+
+For long or expensive chats, your main model keeps the thinking. For routine work, it sends an input to a cheap
+model you pick with `crystal_cheap` and gets the output straight back, deciding by itself when that's worth it.
+The cheap model also reads big tool results first. A result is paid for again on every later message, so reading less adds up. Open **Crystallize
+Chat** in the sidebar, or the **Chat** section of the panel, and pick a model from a subscription you've connected to Hermes. Hermes keeps your
+sign-ins; Crystallize never sees a key.
+
+Turn it on per chat in the panel's **Chat** section, or with `/crystallize chat on` on platforms without the panel.
+
+**You can't start a chat with it.** Send your first prompt, then turn it on. Hermes only creates the chat when
+that prompt is sent, and savings come from tool results, which don't exist until the work starts.
+
+- Tool results are cleaned with no AI. Big ones (8,000+ characters) are condensed if you've picked a model.
+- When a result is noticeably reduced, the exact original is kept for 7 days, and your main model can read it with `crystal_full_result`.
+- File contents, errors and small results always stay exact.
+- Your main model isn't switched mid-chat, because that would lose its prompt cache.
+- If your picked model isn't cheaper than your main one, results are only cleaned.
+- The panel has two sections, Cron and Chat. Chat shows savings for the chat you're in. The figures are estimates.
+- A summary can still leave out something that matters, so it's off by default.
+
+`/crystallize` shows what's happening with your scheduled jobs and this chat. It works in any chat, including Telegram and Discord.
 
 ## How a routine runs
 
@@ -144,6 +169,7 @@ source gets a fair share of the space, so no feed is dropped because another was
 - **Reads your Hermes history (read-only):** session costs and tool calls from
   `state.db`, run outcomes from `cron/executions.db`, and job definitions from
   `cron/jobs.json`. Nothing is modified there.
+- **Crystallize Chat sends tool results to the model you pick,** only in chats where you turned it on, and keeps originals in its data folder for 7 days.
 - **Stores its own data** in `<hermes home>/plugin-data/crystallize/`: recorded tool calls
   (inputs and the first 2,000 characters of each result, adjustable in settings),
   routines, and a Desktop diagnostics log.

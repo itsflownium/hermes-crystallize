@@ -182,3 +182,34 @@ def test_a_run_hermes_is_still_closing_is_not_judged(monkeypatch):
     done = _run("b", 0.01)
     monkeypatch.setattr(tuning.history, "load_runs", lambda name: [closing, done])
     assert [r.session_id for r in tuning._finished_scheduled("job")] == ["b"]
+
+
+def test_kept_settings_that_keep_failing_go_back(monkeypatch):
+    saved = {}
+    t = {"job_name": "job", "job_id": "j", "status": "kept", "finished_at": 0.5, "result": {"ok": True}}
+    monkeypatch.setattr(tuning, "_restore", lambda x: saved.setdefault("restored", True))
+    monkeypatch.setattr(tuning.store, "save_tuning", lambda n, d: saved.update(d))
+    bad = [_run(str(i), 0.01, outcome="failed") for i in range(3)]
+    monkeypatch.setattr(tuning, "_finished_scheduled", lambda n: bad)
+    tuning._guard_kept(t)
+    assert saved.get("restored") and saved["status"] == "reverted" and "failed" in saved["result"]["why"]
+
+
+def test_one_good_run_keeps_the_settings(monkeypatch):
+    t = {"job_name": "job", "job_id": "j", "status": "kept", "finished_at": 0.5}
+    monkeypatch.setattr(tuning, "_restore", lambda x: pytest.fail("shouldn't restore"))
+    monkeypatch.setattr(tuning, "_finished_scheduled", lambda n: [_run("a", 0.01, outcome="failed"), _run("b", 0.01), _run("c", 0.01, outcome="failed")])
+    tuning._guard_kept(t)
+    assert t["status"] == "kept"
+
+
+def test_the_instruction_protects_actions_and_details():
+    assert "every action" in tuning.EFFICIENCY_HINT and "links" in tuning.EFFICIENCY_HINT
+
+
+def test_reasoning_stays_yours_unless_you_opt_in(monkeypatch):
+    settings = {}
+    monkeypatch.setattr(tuning.store, "get_setting", lambda key, default=None: settings.get(key, default))
+    assert tuning.lowers_reasoning() is False
+    settings["lower_reasoning"] = True
+    assert tuning.lowers_reasoning() is True
