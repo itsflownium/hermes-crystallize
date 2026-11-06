@@ -197,6 +197,21 @@ def final_answers(session_ids: list[str]) -> dict[str, str]:
         conn.close()
 
 
+def net_saving(run: "Run", baseline: float, cost: float) -> float:
+    """What one run saved compared with a normal one. A dearer run counts against the total,
+    and a failed run delivered nothing, so all it cost is lost."""
+    return baseline - cost if run.outcome in (None, "completed", "no_change", "skipped", "silent") else -cost
+
+
+_QUIET_WORDS = {"[SILENT]", "SILENT", "NO_REPLY", "NO REPLY"}
+
+
+def is_silent(text: Optional[str]) -> bool:
+    """Hermes's own rule for "nothing to report": the marker alone, or on the first or last line."""
+    lines = [line.strip() for line in (text or "").strip().splitlines() if line.strip()]
+    return bool(lines) and (lines[0].upper() in _QUIET_WORDS or lines[-1].upper() in _QUIET_WORDS)
+
+
 def _parse_args(text: Optional[str]) -> Any:
     if not text:
         return {}

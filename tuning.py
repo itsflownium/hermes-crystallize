@@ -49,6 +49,7 @@ MIN_LINES_RATIO = 0.6
 MIN_COST_DROP = 0.1  # below 10% cheaper isn't worth a lower level
 _URL = re.compile(r"https?://")
 _SILENT = "[SILENT]"
+STALE_START = 300           # a change still "starting" after this many seconds was cut short
 _FAILURE = "[CRON_FAILURE]"
 
 
@@ -61,12 +62,12 @@ def _lines(text: str) -> int:
 
 
 def counted_runs(before: list[history.Run], trial: list[history.Run], answers: dict[str, str]) -> list[history.Run]:
-    """The trial runs to judge. "Nothing new" can be a fair answer, so for a job that had
-    always answered, those runs neither pass nor fail: it waits for real answers."""
+    """The trial runs to judge. "Nothing new" can be a fair answer, but silence says nothing about
+    quality, so a job that has ever really answered waits for real answers."""
     said = lambda r: answers.get(r.session_id or "", "").strip()  # noqa: E731
-    if any(said(r) == _SILENT for r in before):
-        return trial
-    return [r for r in trial if said(r) != _SILENT]
+    if not any(said(r) and not history.is_silent(said(r)) for r in before):
+        return trial  # it has only ever stayed silent, so silence is all there is to compare
+    return [r for r in trial if not history.is_silent(said(r))]
 
 
 def _measure(before: list[history.Run], trial: list[history.Run]) -> tuple[str, Optional[float], Optional[float]]:
@@ -91,7 +92,7 @@ def _amount(metric: Optional[str], value: Optional[float]) -> str:
 
 
 def evaluate(before: list[history.Run], trial: list[history.Run],
-             answers: dict[str, str]) -> dict[str, Any]:
+             answers: dict[str, str], required: Optional[list[str]] = None) -> dict[str, Any]:
     """Do the trial runs' answers hold up against earlier runs, and did the cost fall?"""
     def texts(runs):
         return [answers.get(r.session_id or "", "").strip() for r in runs]
@@ -111,11 +112,12 @@ def evaluate(before: list[history.Run], trial: list[history.Run],
         return fail("a run with these settings failed")
     if any(not t or t.startswith(_FAILURE) for t in new):
         return fail("a run with these settings gave no usable answer")
-    lost = {t for t in analyze.regular_actions(before) if not all(t in analyze.run_actions(r) for r in trial)}
+    # What the job did before any trial stays required, even if a later baseline lost it.
+    lost = {t for t in analyze.regular_actions(before) | set(required or []) if not all(t in analyze.run_actions(r) for r in trial)}
     if lost:
         return fail(f"it stopped doing something it normally does ({', '.join(sorted(lost))})")
-    real_old = [t for t in old if t and t != _SILENT]
-    real_new = [t for t in new if t != _SILENT]
+    real_old = [t for t in old if t and not history.is_silent(t)]
+    real_new = [t for t in new if not history.is_silent(t)]
     if real_old and real_new:
         if _mid([len(t) for t in real_new]) < MIN_LENGTH_RATIO * _mid([len(t) for t in real_old]):
             return fail("its answers got much shorter")
@@ -211,11 +213,13 @@ def plan_stages(levels: list[str], narrow: Optional[list[str]], wide: Optional[l
     return stages
 
 
-def _apply_stage(job_id: str, stage: dict[str, Any]) -> None:
+def _apply_stage(job_id: str, stage: dict[str, Any], t: Optional[dict[str, Any]] = None) -> None:
     if stage.get("level"):
         lifecycle._edit_job(job_id, "--reasoning-effort", stage["level"])
     if stage.get("toolsets") is not None:
         lifecycle.set_toolsets(job_id, stage["toolsets"])
+    elif t and t.get("tools_changed"):  # this stage gives all the tools back
+        lifecycle.set_toolsets(job_id, t.get("previous_toolsets"))
 
 
 def _live_routine(job_id: str) -> Optional[dict[str, Any]]:
@@ -266,25 +270,50 @@ def start(job: str, level: Optional[str] = None) -> dict[str, Any]:
         stages = [{"level": stage["level"] or current.get("level"),
                    "toolsets": stage["toolsets"] if stage["toolsets"] is not None else current.get("toolsets")}
                   for stage in stages]
-    _apply_stage(found["id"], stages[0])
-    prompt = found.get("prompt") or ""
-    if EFFICIENCY_HINT not in prompt:
-        lifecycle._edit_job(found["id"], "--prompt", prompt + EFFICIENCY_HINT)
-    data = {"job_name": name, "job_id": found["id"], "status": "trial", **stages[0], "stages": stages[1:],
-            "previous": found.get("reasoning_effort"), "started_at": now, "first_started_at": now,
+    # What the job did before any trial stays required through every later trial.
+    original = _split(name, current.get("first_started_at") or current["started_at"])[0] if upgrade else before
+    required = sorted(analyze.regular_actions(original) | set((current or {}).get("required_actions") or []))
+    # Saved first, so a change that fails or a crash can always be undone.
+    data = {"job_name": name, "job_id": found["id"], "status": "starting", **stages[0], "stages": stages[1:],
+            "required_actions": required, "tools_changed": stages[0]["toolsets"] is not None,
+            "previous": found.get("reasoning_effort"), "started_at": now, "first_started_at": now, "baseline_until": now,
             "previous_toolsets": found.get("enabled_toolsets"), "clean": True, "hint": True,
-            "new_only": _set_new_only(found["id"], True)}
+            "new_only": True}
     if upgrade:
         # Judged against its kept settings, and put back to them if it doesn't help.
         data.update({"baseline_from": current.get("first_started_at") or current["started_at"],
                      "first_started_at": current.get("first_started_at") or current["started_at"]})
     store.save_tuning(name, data)
+    try:
+        _apply_stage(found["id"], stages[0])
+        prompt = found.get("prompt") or ""
+        if EFFICIENCY_HINT not in prompt:
+            lifecycle._edit_job(found["id"], "--prompt", prompt + EFFICIENCY_HINT)
+        data["new_only"] = _set_new_only(found["id"], True)
+    except Exception as exc:
+        _roll_back(name, data, current if upgrade else None)
+        raise lifecycle.LifecycleError(f"Couldn't change {name}, so its old settings are back: {exc}") from exc
+    data["status"] = "trial"
+    store.save_tuning(name, data)
     return data
+
+
+def _roll_back(name: str, data: dict[str, Any], kept: Optional[dict[str, Any]]) -> None:
+    """Put a job back after a failed change. If that fails too, it's tried again on the next check."""
+    try:
+        _restore(data)
+    except Exception:  # noqa: BLE001
+        logger.warning("crystallize: couldn't restore %s yet", name, exc_info=True)
+        data["needs_restore"] = True
+        store.save_tuning(name, data)
+        return
+    store.save_tuning(name, kept or {**data, "status": "reverted", "finished_at": time.time(),
+                                     "result": {"ok": False, "why": "its settings couldn't be changed"}})
 
 
 def start_all() -> dict[str, Any]:
     """Start a trial on every job that can have one. One job's problem doesn't stop the rest."""
-    started, skipped, routines = [], {}, []
+    started, skipped = [], {}
     for job in _all_jobs():
         name = job.get("name") or job.get("id")
         try:
@@ -292,21 +321,7 @@ def start_all() -> dict[str, Any]:
             started.append(name)
         except lifecycle.LifecycleError as exc:
             skipped[name] = str(exc)
-        if not job.get("no_agent") and _start_routine_test(job):
-            routines.append(name)
-    return {"started": started, "skipped": skipped, "routines": routines}
-
-
-def _start_routine_test(job: dict[str, Any]) -> bool:
-    """Begin testing a routine if the job has one to offer. Tests only read data, and
-    promoting one stays your choice."""
-    if store.routine_for_job(job["id"]):
-        return False
-    try:
-        lifecycle.try_job(job.get("name") or job["id"])
-        return True
-    except lifecycle.LifecycleError:
-        return False
+    return {"started": started, "skipped": skipped}
 
 
 def cleans_results(name: str) -> bool:
@@ -318,21 +333,31 @@ def _restore(t: dict[str, Any]) -> None:
     found = lifecycle.cron_job(t["job_name"])
     if not found:  # a job that has finished for good has nothing to restore
         return
+    # Every part is tried, so one failure doesn't leave the others changed. Each is safe to repeat.
+    parts = []
     if t.get("level"):
-        lifecycle._edit_job(found["id"], "--reasoning-effort", t.get("previous") or "")
-    if t.get("toolsets") is not None:
-        lifecycle.set_toolsets(found["id"], t.get("previous_toolsets"))
+        parts.append(lambda: lifecycle._edit_job(found["id"], "--reasoning-effort", t.get("previous") or ""))
+    if t.get("toolsets") is not None or t.get("tools_changed"):
+        parts.append(lambda: lifecycle.set_toolsets(found["id"], t.get("previous_toolsets")))
     if t.get("hint") and EFFICIENCY_HINT in (found.get("prompt") or ""):
-        lifecycle._edit_job(found["id"], "--prompt", found["prompt"].replace(EFFICIENCY_HINT, ""))
+        parts.append(lambda: lifecycle._edit_job(found["id"], "--prompt", found["prompt"].replace(EFFICIENCY_HINT, "")))
     if t.get("new_only"):
-        _set_new_only(found["id"], False)
+        parts.append(lambda: _set_new_only(found["id"], False))
+    problem = None
+    for part in parts:
+        try:
+            part()
+        except lifecycle.LifecycleError as exc:
+            problem = exc
+    if problem:
+        raise problem
 
 
 def undo(job: str) -> dict[str, Any]:
     found = lifecycle.cron_job(job)
     name = (found or {}).get("name") or job
     t = store.get_tuning(name)
-    if not t or t["status"] not in ("trial", "kept"):
+    if not t or t["status"] not in ("starting", "trial", "kept"):
         raise lifecycle.LifecycleError(f"{name} has no cheaper settings to undo.")
     _restore(t)
     t.update({"status": "undone", "finished_at": time.time()})
@@ -340,11 +365,27 @@ def undo(job: str) -> dict[str, Any]:
     return t
 
 
+def _finish_restore(t: dict[str, Any]) -> None:
+    """A change was cut short, by a failure or a crash. Put the job back."""
+    try:
+        _restore(t)
+    except lifecycle.LifecycleError:
+        logger.warning("crystallize: couldn't restore %s yet", t["job_name"], exc_info=True)
+        return
+    t.pop("needs_restore", None)
+    t.update({"status": "reverted", "finished_at": time.time(),
+              "result": {**(t.get("result") or {}), "ok": False, "why": "its settings couldn't be changed"}})
+    store.save_tuning(t["job_name"], t)
+
+
 def refresh() -> None:
     """Decide any trial that has enough runs. Never raises: the panel calls this on every load."""
     try:
+        lifecycle.recover_promotions()
         for t in store.list_tuning():
-            if t["status"] == "trial":
+            if t.get("needs_restore") or (t["status"] == "starting" and time.time() - t["started_at"] > STALE_START):
+                _finish_restore(t)
+            elif t["status"] == "trial":
                 _decide(t)
             elif t["status"] == "kept":
                 _guard_kept(t)
@@ -374,15 +415,25 @@ def _is_close(result: dict[str, Any]) -> bool:
     return result.get("kind") == "saving" and bool(old and new) and new <= old * (1 + CLOSE_CALL)
 
 
-def _decide(t: dict[str, Any]) -> None:
+def _trial_runs(t: dict[str, Any]) -> tuple[list[history.Run], list[history.Run]]:
+    """Runs from before this trial, and from its current stage. Earlier stages already had
+    cheaper settings, so they never count as "before"."""
     before, trial = _split(t["job_name"], t["started_at"])
+    until = t.get("baseline_until") or (None if t.get("baseline_from") else t.get("first_started_at"))
+    if until:
+        before = [r for r in before if (r.session_started or 0) < until]
     if t.get("baseline_from"):
         before = [r for r in before if (r.session_started or 0) >= t["baseline_from"]]
+    return before, trial
+
+
+def _decide(t: dict[str, Any]) -> None:
+    before, trial = _trial_runs(t)
     answers = history.final_answers([r.session_id for r in before + trial if r.session_id])
     counted = counted_runs(before, trial, answers)
     alive = lifecycle.cron_job(t["job_name"]) is not None and lifecycle.cron_job(t["job_name"]).get("state") != "completed"
     if len(counted) >= TRIAL_RUNS:
-        result = evaluate(before, counted, answers)
+        result = evaluate(before, counted, answers, t.get("required_actions"))
         if _is_close(result) and alive and len(counted) < MAX_TRIAL_RUNS:
             return  # one odd run can decide a close call, so it gets more runs
     elif len(trial) >= MAX_TRIAL_RUNS:
@@ -394,13 +445,16 @@ def _decide(t: dict[str, Any]) -> None:
     # Weak answers may recover with more tools or reasoning. "Not cheaper" won't.
     if not result["ok"] and result.get("kind") == "quality" and t.get("stages") and alive:
         stage, *rest = t["stages"]
+        # Saved first, so a change that fails or a crash can always be undone.
+        t.update({**stage, "stages": rest, "started_at": time.time(), "last_setback": result["why"],
+                  "tools_changed": t.get("tools_changed") or stage.get("toolsets") is not None})
+        store.save_tuning(t["job_name"], t)
         try:
-            _apply_stage(t["job_id"], stage)
+            _apply_stage(t["job_id"], stage, t)
         except lifecycle.LifecycleError:
             logger.warning("crystallize: couldn't change %s", t["job_name"], exc_info=True)
-            return
-        t.update({**stage, "stages": rest, "started_at": time.time(), "last_setback": result["why"]})
-        store.save_tuning(t["job_name"], t)
+            t["needs_restore"] = True
+            store.save_tuning(t["job_name"], t)
         return
     if not result["ok"]:
         try:
@@ -417,16 +471,17 @@ def _decide(t: dict[str, Any]) -> None:
 def measured(name: str, t: dict[str, Any]) -> Optional[dict[str, Any]]:
     """What a job's cheaper settings have done so far, from its real runs."""
     since = t.get("first_started_at") or t.get("started_at")
-    before, runs = _split(name, since)
-    runs = [r for r in runs if r.outcome in (None, "completed")]
+    before, every = _split(name, since)
+    runs = [r for r in every if r.outcome in (None, "completed")]
     if not before or not runs or t["status"] not in ("trial", "kept"):
         return None
     metric, old, new = _measure(before, runs)
     if old is None or new is None:
         return None
     field = {"cost": lambda r: r.cost_usd, "api cost": lambda r: r.api_cost_usd}.get(metric)
-    saved = sum(max(0.0, old - field(r)) for r in runs if field(r) is not None) if field else None
-    return {"metric": metric, "before": old, "after": new, "runs": len(runs), "saved": saved, "run_list": runs}
+    # Failed runs count too: they cost money and delivered nothing.
+    saved = sum(history.net_saving(r, old, field(r)) for r in every if field(r) is not None) if field else None
+    return {"metric": metric, "before": old, "after": new, "runs": len(every), "saved": saved, "run_list": every}
 
 
 def _settings(t: dict[str, Any]) -> str:
@@ -447,7 +502,7 @@ def status_text(t: Optional[dict[str, Any]]) -> str:
         return "Not tried yet"
     res = t.get("result") or {}
     if t["status"] == "trial":
-        before, trial = _split(t["job_name"], t["started_at"])
+        before, trial = _trial_runs(t)
         answers = history.final_answers([r.session_id for r in before + trial if r.session_id])
         done = len(counted_runs(before, trial, answers))
         return f"Trying {_settings(t)}: {min(done, TRIAL_RUNS)} of {TRIAL_RUNS} answers so far"
@@ -462,7 +517,7 @@ def status_text(t: Optional[dict[str, Any]]) -> str:
 
 def sample_answers(name: str, t: dict[str, Any]) -> dict[str, str]:
     """The latest answer from before and from the lower level, to read side by side."""
-    before, trial = _split(name, t["started_at"])
+    before, trial = _trial_runs({**t, "job_name": name})
     ids = {"before": before[-1].session_id if before else None, "after": trial[-1].session_id if trial else None}
     answers = history.final_answers([s for s in ids.values() if s])
     return {k: answers.get(v or "", "") for k, v in ids.items()}
@@ -503,7 +558,7 @@ def cards() -> list[dict[str, Any]]:
             "status_text": status_text(t),
             "can_try": (not t or t["status"] in ("reverted", "undone") or (t["status"] == "kept" and not t.get("clean"))) and len(_split(name, time.time())[0]) >= MIN_BEFORE_RUNS,
             "cleaned_chars": store.get_cleaned(name) or None,
-            "can_undo": bool(t and t["status"] in ("trial", "kept")),
+            "can_undo": bool(t and t["status"] in ("starting", "trial", "kept")),
         })
     out.sort(key=lambda c: c["cost_now"] or 0.0, reverse=True)
     return out

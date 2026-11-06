@@ -247,26 +247,47 @@ def _feed(*ids):
 
 
 def test_new_only_sends_new_items_and_the_last_answer():
-    seen = prerun._links(_feed(1, 2, 3, 4, 5, 6))
+    seen = prerun._items(_feed(1, 2, 3, 4, 5, 6))
     text = prerun._new_only_text(_feed(1, 2, 3, 4, 5, 7), seen, "My answer")
     assert "Title 7" in text and "https://e.com/7" in text and "My answer" in text and "Title 3" not in text
 
 
-def test_new_only_matches_items_across_formats():
-    seen = prerun._links(_feed(1, 2, 3, 4, 5, 6))
+def test_new_only_matches_items_when_a_format_only_adds_fields():
+    seen = prerun._items("\n".join(f"Title {i} | https://e.com/{i}" for i in range(1, 7)))
     other = "\n".join(f"Title {i} | https://e.com/{i}/ | Fri" for i in (1, 2, 3, 4, 5, 8))
     text = prerun._new_only_text(other, seen, "My answer")
     assert "Title 8" in text and "Title 2" not in text
 
 
-def test_new_only_repeats_when_there_are_no_new_items():
-    seen = prerun._links(_feed(1, 2, 3, 4, 5, 6))
-    text = prerun._new_only_text(_feed(1, 2, 3, 4, 5, 6), seen, "My answer")
-    assert "still stands" in text and "My answer" in text
+def test_new_only_sends_everything_when_only_the_text_changed():
+    """Same links can hide a changed status, so the old answer doesn't get repeated."""
+    seen = prerun._items(_feed(1, 2, 3, 4, 5, 6))
+    assert prerun._new_only_text(_feed(1, 2, 3, 4, 5, 6), seen, "My answer") is None
+
+
+def test_summary_and_failures_survive_collapsing():
+    log = "\n".join([f"tests/a.py::t{i} PASSED [ 10%]" for i in range(30)] +
+                    ["tests/a.py::bad FAILED", "=== 1 failed, 30 passed in 2.1s ==="])
+    out = prerun.collapse_passing(log)
+    assert "30 passing" in out and "tests/a.py::bad FAILED" in out and "1 failed, 30 passed" in out
+
+
+def test_failed_commands_and_code_keep_their_shape():
+    code = "def f():\n" + "    return 1   # keep\n" * 200
+    ok = json.loads(prerun.clean_result("terminal", json.dumps({"output": code + "   \n" * 300, "exit_code": 0})))
+    assert "    return 1   # keep" in ok["output"]
+    assert prerun.clean_result("terminal", json.dumps({"output": "x  y\n" * 900, "exit_code": 1})) is None
+
+
+def test_download_links_and_prices_stay():
+    slim = prerun._slim_json({"download_url": "d", "pdf_url": "p", "html_url": "h", "labels_url": "x"})
+    assert set(slim) == {"download_url", "pdf_url", "html_url"}
+    assert prerun.fingerprint("price 1.25") != prerun.fingerprint("price 1.75")
+    assert prerun.fingerprint("took 1.25s") == prerun.fingerprint("took 1.75s")
 
 
 def test_new_only_stands_aside_when_it_cannot_help():
-    seen = prerun._links(_feed(1, 2, 3, 4, 5, 6))
+    seen = prerun._items(_feed(1, 2, 3, 4, 5, 6))
     assert prerun._new_only_text(_feed(1, 2, 3, 4, 5, 7), set(), "My answer") is None      # nothing to compare
     assert prerun._new_only_text(_feed(11, 12, 13, 14, 15, 16), seen, "My answer") is None # mostly new
     assert prerun._new_only_text(_feed(1, 2, 3, 4, 5, 7), seen, "") is None                # nothing to update
@@ -350,7 +371,7 @@ def test_a_link_poor_run_keeps_the_remembered_items(monkeypatch):
     dispatch = lambda name, args: json.dumps({"output": outputs.pop(0), "exit_code": 0})
     prerun.run("cr_1", dispatch)
     assert "No links" in prerun.run("cr_1", dispatch)[0]
-    assert len(saved["r"]["meta"]["last_links"]) == 6
+    assert len(saved["r"]["meta"]["last_items"]) == 6
     assert "Title 7" in prerun.run("cr_1", dispatch)[0]
 
 

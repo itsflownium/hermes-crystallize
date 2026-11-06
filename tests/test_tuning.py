@@ -2,7 +2,7 @@
 
 import pytest
 
-from crystallize import tuning
+from crystallize import analyze, tuning
 from crystallize.history import Run, Step
 
 ANSWER = "\n".join(f"{i}. item https://example.com/{i}" for i in range(5))
@@ -91,7 +91,8 @@ def test_rejects_a_job_that_stops_its_regular_action():
 
 
 def test_one_off_actions_are_not_required():
-    before = [_with_action(_run("b1", 0.02)), _run("b2", 0.02), _run("b3", 0.02)]
+    before = [_with_action(_run("b1", 0.02)), _with_action(_run("b2", 0.02), "web_search"),
+              _with_action(_run("b3", 0.02), "web_search")]
     answers = {"b1": ANSWER, "b2": ANSWER, "b3": ANSWER, "t1": ANSWER, "t2": ANSWER}
     assert tuning.evaluate(before, [_run("t1", 0.005), _run("t2", 0.005)], answers)["ok"]
 
@@ -100,7 +101,22 @@ def test_nothing_new_answers_wait_unless_the_job_already_goes_silent():
     trial = [_run("t1", 0.001), _run("t2", 0.005)]
     answers = {"b1": ANSWER, "b2": ANSWER, "t1": "[SILENT]", "t2": ANSWER}
     assert [r.session_id for r in tuning.counted_runs(BEFORE, trial, answers)] == ["t2"]
-    assert len(tuning.counted_runs(BEFORE, trial, {**answers, "b1": "[SILENT]"})) == 2
+    # Sometimes silent isn't enough: an all-silent trial mustn't pass for a job that has answered.
+    assert [r.session_id for r in tuning.counted_runs(BEFORE, trial, {**answers, "b1": "[SILENT]"})] == ["t2"]
+    assert len(tuning.counted_runs(BEFORE, trial, {**answers, "b1": "[SILENT]", "b2": "NO_REPLY"})) == 2
+
+
+def test_runs_without_recorded_steps_dont_hide_a_regular_action():
+    before = [_with_action(_run("b1", 0.02)), _with_action(_run("b2", 0.02)), _run("b3", 0.02), _run("b4", 0.02), _run("b5", 0.02)]
+    assert analyze.regular_actions(before) == {"send_message"}
+
+
+def test_earlier_stages_are_not_the_baseline(monkeypatch):
+    old, stage1, stage2 = _run("b", 0.02), _run("s1", 0.01), _run("s2", 0.01)
+    old.session_started, stage1.session_started, stage2.session_started = 10.0, 30.0, 60.0
+    monkeypatch.setattr(tuning, "_split", lambda name, started: ([old, stage1], [stage2]))
+    before, trial = tuning._trial_runs({"job_name": "j", "started_at": 50.0, "baseline_until": 20.0})
+    assert before == [old] and trial == [stage2]
 
 
 def test_settings_text_names_what_changed():
