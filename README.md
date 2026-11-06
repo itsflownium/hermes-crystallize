@@ -40,7 +40,7 @@ Trials on more models also kept their savings, with the same job. These were jud
 | Solar Mini 4 | Nous Portal | $0.0008 → $0.0004 | **49%** |
 | Mercury 3 | Nous Portal | $0.0015 → $0.0014 | **12%** |
 
-Qwen 3.8 Flash also passed, on tokens written (about 25% fewer), because it was judged before API-price estimates existed.
+Qwen 3.8 Flash also passed. Hermes has no price for its runs, so its saving is an estimate at API prices: about 59%.
 At API-price estimates, its runs went from about $0.0046 to $0.0019.
 Llama 4 Scout and Nova Lite didn't complete their normal runs on this job (an empty answer and an HTTP 400 error), and
 Step 3.5 Flash was rejected by its provider, so none of the three could start a trial.
