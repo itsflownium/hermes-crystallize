@@ -28,3 +28,33 @@ CRYSTAL_RUN = {
         "required": ["routine_id"],
     },
 }
+
+
+CRYSTAL_FULL_RESULT = {
+    "name": "crystal_full_result",
+    "description": ("Read the exact original of a tool result that Crystallize Chat condensed. Use it when the "
+                    "summary leaves out something you need."),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "result_id": {"type": "string", "description": "The full_result_id from the condensed result."},
+            "offset": {"type": "integer", "description": "Where to continue reading, from next_offset."},
+            "question": {"type": "string", "description": ("Ask a cheap model one question about the result instead "
+                                                           "of reading it all. Best for finding a single detail.")},
+        },
+        "required": ["result_id"],
+    },
+}
+
+
+CRYSTAL_CHEAP = {
+    "name": "crystal_cheap",
+    "description": ("Send one input to a cheaper model and get its output straight back. For routine work such as "
+                    "summarizing, extracting data, reformatting, translating or simple drafting. It can't see this "
+                    "chat or use tools, so include everything it needs, and check what comes back."),
+    "parameters": {
+        "type": "object",
+        "properties": {"input": {"type": "string", "description": "The full instruction and any text it should work on."}},
+        "required": ["input"],
+    },
+}

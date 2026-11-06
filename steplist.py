@@ -42,11 +42,13 @@ def routine_id(job_id: str) -> str:
 def build(a: analyze.Analysis) -> dict[str, Any]:
     if not a.ready:
         raise NotCrystallizable(a.reason)
-    if any(p.kind == "side" for p in a.steps):
-        raise NotCrystallizable("A step sends or changes something, so Hermes keeps doing this job itself.")
+    # Fetching can run ahead of time, but anything after a step that sends or changes
+    # something may depend on it, so the routine stops there and the AI carries on.
+    first_action = next((i for i, p in enumerate(a.steps) if p.kind == "side"), len(a.steps))
+    acts = first_action < len(a.steps)
 
     steps = []
-    for p in a.steps:
+    for p in a.steps[:first_action]:
         if p.kind not in RUNNABLE_KINDS:
             continue
         lens = [n for n in p.result_lens if n is not None]
@@ -60,7 +62,7 @@ def build(a: analyze.Analysis) -> dict[str, Any]:
             "check": {"min_len": min_len, "typical_len": int(statistics.median(lens)) if lens else None},
         })
     if not steps:
-        raise NotCrystallizable("No steps can run without the AI.")
+        raise NotCrystallizable("No steps can run before the job's first action, so Hermes keeps doing it.")
 
     return {
         "version": 1,
@@ -69,6 +71,7 @@ def build(a: analyze.Analysis) -> dict[str, Any]:
         "strategy": a.strategy,
         "source_execution_id": a.source_execution_id,
         "steps": steps,
+        "leaves_to_ai": acts,
         "baseline": {
             "cost_usd": a.avg_cost_usd,
             "api_calls": a.avg_api_calls,

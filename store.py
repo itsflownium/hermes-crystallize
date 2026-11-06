@@ -52,6 +52,32 @@ CREATE TABLE IF NOT EXISTS routines (
     created_at  REAL NOT NULL,
     updated_at  REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS chat_savings (
+    session_id  TEXT PRIMARY KEY,
+    chars       INTEGER NOT NULL,
+    results     INTEGER NOT NULL,
+    cheap_tokens INTEGER NOT NULL,
+    cheap_cost  REAL NOT NULL,
+    updated_at  REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+    key     TEXT PRIMARY KEY,
+    value   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cleaned (
+    job_name    TEXT PRIMARY KEY,
+    chars       INTEGER NOT NULL,
+    results     INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tuning (
+    job_name    TEXT PRIMARY KEY,
+    data_json   TEXT NOT NULL,
+    updated_at  REAL NOT NULL
+);
 """
 
 _conn: Optional[sqlite3.Connection] = None
@@ -250,6 +276,74 @@ def set_chat_enabled(session_id: str, enabled: bool) -> None:
                ON CONFLICT(session_id) DO UPDATE SET enabled=excluded.enabled, updated_at=excluded.updated_at""",
             (session_id, 1 if enabled else 0, time.time()),
         )
+        conn.commit()
+
+
+def get_tuning(job_name: str) -> Optional[dict[str, Any]]:
+    with _lock:
+        row = _db().execute("SELECT data_json FROM tuning WHERE job_name = ?", (job_name,)).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def list_tuning() -> list[dict[str, Any]]:
+    with _lock:
+        rows = _db().execute("SELECT data_json FROM tuning ORDER BY updated_at DESC").fetchall()
+    return [json.loads(r[0]) for r in rows]
+
+
+def save_tuning(job_name: str, data: dict[str, Any]) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute("INSERT OR REPLACE INTO tuning (job_name, data_json, updated_at) VALUES (?, ?, ?)",
+                     (job_name, json.dumps(data, default=str), time.time()))
+        conn.commit()
+
+
+def add_cleaned(job_name: str, chars: int) -> None:
+    """Note characters removed from a job's tool results, kept apart from its trial state."""
+    with _lock:
+        conn = _db()
+        conn.execute("INSERT INTO cleaned (job_name, chars, results) VALUES (?, ?, 1) ON CONFLICT(job_name) "
+                     "DO UPDATE SET chars = chars + excluded.chars, results = results + 1", (job_name, chars))
+        conn.commit()
+
+
+def get_cleaned(job_name: str) -> int:
+    with _lock:
+        row = _db().execute("SELECT chars FROM cleaned WHERE job_name = ?", (job_name,)).fetchone()
+    return int(row[0]) if row else 0
+
+
+def add_chat_saving(session_id: str, chars: int, cheap_tokens: int, cheap_cost: float) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute(
+            "INSERT INTO chat_savings (session_id, chars, results, cheap_tokens, cheap_cost, updated_at) "
+            "VALUES (?, ?, 1, ?, ?, ?) ON CONFLICT(session_id) DO UPDATE SET chars = chars + excluded.chars, "
+            "results = results + 1, cheap_tokens = cheap_tokens + excluded.cheap_tokens, "
+            "cheap_cost = cheap_cost + excluded.cheap_cost, updated_at = excluded.updated_at",
+            (session_id, chars, cheap_tokens, cheap_cost, time.time()))
+        conn.commit()
+
+
+def list_chat_savings() -> list[dict[str, Any]]:
+    with _lock:
+        rows = _db().execute("SELECT session_id, chars, results, cheap_tokens, cheap_cost, updated_at "
+                             "FROM chat_savings ORDER BY updated_at DESC LIMIT 50").fetchall()
+    keys = ("session_id", "chars", "results", "cheap_tokens", "cheap_cost", "updated_at")
+    return [dict(zip(keys, tuple(r))) for r in rows]
+
+
+def get_setting(key: str, default: Any = None) -> Any:
+    with _lock:
+        row = _db().execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return json.loads(row[0]) if row else default
+
+
+def set_setting(key: str, value: Any) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, json.dumps(value)))
         conn.commit()
 
 
