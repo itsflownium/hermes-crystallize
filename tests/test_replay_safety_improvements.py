@@ -179,7 +179,17 @@ def _stored_routine(meta=None):
                        meta=meta or {})
 
 
-def test_complete_changes_beyond_legacy_display_cap_do_not_repeat_old_answer(monkeypatch):
+@pytest.fixture
+def verified_fake_prerun(monkeypatch):
+    """Exercise pure fake-dispatch rendering/failure paths after a verified gate.
+
+    This unit-only injection never calls a Hermes dispatcher. Current public SDK
+    rejection and attachment recovery are covered in test_public_cron_support.py.
+    """
+    monkeypatch.setattr(lifecycle, "_replay_available", lambda: True)
+
+
+def test_complete_changes_beyond_legacy_display_cap_do_not_repeat_old_answer(monkeypatch, verified_fake_prerun):
     _stored_routine({"when_unchanged": "repeat"})
     monkeypatch.setattr(lifecycle, "check_drift", lambda _: True)
     monkeypatch.setattr(lifecycle, "live_result", lambda *args: None)
@@ -195,7 +205,7 @@ def test_complete_changes_beyond_legacy_display_cap_do_not_repeat_old_answer(mon
     assert "stale answer" not in second and prerun.SKIP_GATE not in second
 
 
-def test_live_source_schema_change_invalidates_before_delivering(monkeypatch):
+def test_live_source_schema_change_invalidates_before_delivering(monkeypatch, verified_fake_prerun):
     _stored_routine()
     monkeypatch.setattr(lifecycle, "check_drift", lambda _: True)
     monkeypatch.setattr(lifecycle, "live_result", lambda *args: None)
@@ -208,7 +218,7 @@ def test_live_source_schema_change_invalidates_before_delivering(monkeypatch):
     assert invalid == [("cr_safe", "source schema changed")] and "tested again" in text
 
 
-def test_pre_run_drift_failure_never_dispatches(monkeypatch):
+def test_pre_run_drift_failure_never_dispatches(monkeypatch, verified_fake_prerun):
     _stored_routine()
     monkeypatch.setattr(lifecycle, "check_drift", lambda _: False)
     calls = []
@@ -216,7 +226,7 @@ def test_pre_run_drift_failure_never_dispatches(monkeypatch):
     assert code == 0 and "configuration changed" in text and calls == []
 
 
-def test_no_ai_unexpected_error_reports_failure_and_records_it(monkeypatch):
+def test_no_ai_unexpected_error_reports_failure_and_records_it(monkeypatch, verified_fake_prerun):
     _stored_routine({"mode": "no_ai"})
     monkeypatch.setattr(lifecycle, "check_drift", lambda _: True)
     monkeypatch.setattr(runner, "run", lambda *args: (_ for _ in ()).throw(RuntimeError("failure")))

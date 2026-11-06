@@ -64,6 +64,9 @@ def test_fingerprint_preserves_timings_and_timestamps_without_a_volatile_contrac
 
 
 def _fake_store(monkeypatch, routine):
+    # Pure dispatch fakes exercise renderer/fallback semantics; no host bypass
+    # capability or environment flag exists in production.
+    monkeypatch.setattr(lifecycle, "replay_support", lambda: {"guarded_dispatch_available": True, "automatic_nested_tools": True})
     saved = {"r": routine}
     monkeypatch.setattr(store, "get_routine", lambda rid: saved["r"])
 

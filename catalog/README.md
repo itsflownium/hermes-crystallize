@@ -1,19 +1,23 @@
-# Submission bundle, not a listing
+# Pinned submission bundle
 
-This directory prepares a future Hermes catalog PR. It does not establish
-admission. Public SDK migration, exact-pin host validation, public clone
-availability and a maintainer-reviewed upstream PR remain required. See
-[status/disclosures](../docs/marketplace.md) and [SDK gaps](../docs/sdk-gaps.md).
+This is preparation for an upstream maintainer-reviewed catalog PR, not a listing.
+[Technical checks](../docs/marketplace.md) and human admission are separate.
+Missing public capabilities become explicit unsupported features; they do not
+justify private imports or raw dispatch. See [boundaries](../docs/sdk-gaps.md).
 
-Generate an entry only after the actual plugin feature commit exists:
+`public-api.json` contains the published 89-target API facts at upstream commit
+`90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`, verified by the digest in
+`sdk-policy.json` and `public_api_audit.py`. No private validator code is vendored.
+The independent audit is consumed by compatibility diagnostics and CI tests.
 
-```bash
-python catalog/generate_entry.py --sha FULL_40_CHARACTER_EXISTING_FEATURE_COMMIT --output catalog
-```
+First commit the completed feature code, manifest, docs and actual current
+fixture-labelled UI captures. Then run `generate_entry.py --sha <existing full
+feature SHA> --screenshot <tracked image> --verification <exact-pin host JSON>`.
+See the submission guide for the complete schema. No placeholder pin is supplied.
 
-The generator resolves that commit locally, reads manifest/source, checks
-literal capabilities and emits `crystallize.yaml`, `readiness.json` and
-`submission.md`. It does not fetch, guess a hash, read credentials, suppress
-warnings, run the scanner or open a PR. No placeholder YAML pin is provided.
-Commit generated files separately so their pin names the reviewed feature
-commit instead of attempting to reference themselves.
+The generator reports capability/public-source/payload tripwires, exact-pin host
+validation evidence, screenshot provenance and human gates separately. It creates
+`crystallize.yaml`, `readiness.json` and `submission.md`; technical readiness can
+pass while admission/listing remains pending. It never fetches, reads credentials,
+mutates Git, hides warnings or fabricates validation. Commit generated files in a
+later catalog-only commit, keeping their pin on the reviewed feature commit.

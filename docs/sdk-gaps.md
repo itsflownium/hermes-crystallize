@@ -1,134 +1,73 @@
-# Public SDK compatibility and upstream proposal
+# Public SDK boundaries
 
-Crystallize is **not yet a public SDK only catalog submission**. Its guarded
-replay, rate cards, legacy model catalogs, connected-model inventory and cron
-toolset edits still depend on private host modules. These imports remain literal
-and visible to `hermes plugins validate`; moving them behind an alias would not
-resolve the dependency. The read-only `hermes crystal compatibility` command and
-`GET /api/plugins/crystallize/compatibility` report known gaps and current import
-sites without running a model, tool, provider probe or CLI child.
+This revision removes the private Hermes pricing, model-inventory, cron-update
+and tool-dispatch imports. Missing public capabilities are explicit unsupported
+features, with work left to the normal host agent. A private adapter, raw registry
+call, hidden import alias or guessed future method is not a fallback.
 
-This audit used the installed Hermes source and its documented SDK. The relevant
-host references are `hermes_cli/plugins.py::PluginContext.dispatch_tool`,
-`hermes_cli/plugin_validate_private_imports.py::_PUBLIC`,
-`hermes_cli/subcommands/cron.py`, `providers/base.py::ProviderProfile`, and
-`website/docs/developer-guide/plugins/index.md`. No installed host files were
-changed. These findings establish source compatibility boundaries; they do not
-establish a tested provider/operating-system matrix or catalog admission.
+The independent static audit reads the **published plugin API facts** from
+`hermes_cli/data/plugin_api.json` at upstream commit
+`90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. The 5,044-byte snapshot contains 89
+public targets; SHA256 is
+`aeafa3b0333bfbe01746774e3ffa74d46eee32478b398c38144956bd5be9b98b`.
+`catalog/public-api.json` contains those facts, not copied private validator code.
+`catalog/sdk-policy.json` records provenance. CI verifies the digest and exercises
+our own static tripwires. A policy update requires deliberate source review.
 
-## Boundaries implemented here
+## Supported behavior and explicit limits
 
-| Area | Current behavior | Remaining dependency |
+| Area | Public surface used | Limit/fallback |
 | --- | --- | --- |
-| Reasoning | Provider-declared effort vocabulary and capability declarations only; unknown returns no declared levels. No reasoning reduction is proposed or applied by the model adapter. | Public `providers` and `hermes_constants`; no private reasoning catalogs or guessed low/medium/high fallback. |
-| Configured route | A real cron job uses job pins, then `cron.model` / `cron.model_provider`, then main configuration. Empty-job queries retain the main-chat route. Runtime evidence identifies the actually served model/provider. | Public `hermes_cli.config`; this adapter does not resolve auth or fallback. |
-| Guarded nested tools | `model_tools.handle_function_call` preserves the host's guard and middleware path. If unavailable, dispatch fails closed. | Private `model_tools`; no raw registry fallback. |
-| Cron prompt, script, mode, interpreter | Documented `hermes cron edit` flags. Interpreter is changed/restored in the same CLI invocation as the prompt/script. | Public CLI, with a profile-scoped child environment. |
-| Cron toolsets | `None` restores cron defaults; `[]` means no toolsets. | Private `cron.jobs.update_job`; the audited CLI has no toolset edit flag. |
-| Exact rate cards | `modelinfo.exact_token_prices` uses the requested provider/model/base URL only, preserving zero, missing cache rates, context tiers, request fees, source and version. | Private `agent.usage_pricing.get_pricing_entry`. |
-| API equivalent estimates | A separate path can price an included/unpriced model at a listed API rate. Profile identity and declared model data are preferred; ambiguous vendor/model leaves are rejected. | Private `CanonicalUsage`, `estimate_usage_cost`, legacy `hermes_cli.models.provider_model_ids` catalogs. The Codex → OpenAI API-vendor mapping remains explicit legacy compatibility. |
-| Connected model inventory | Hermes supplies connected routes; the plugin does not read credential stores. | Private `hermes_cli.inventory`. |
+| Model calls | `ctx.llm.complete`, host auxiliary slots and trust policy | Hermes owns authentication and served-route selection; unknown usage stays unknown |
+| Provider metadata | Public provider declarations/capabilities | No private model catalog or guessed reasoning vocabulary |
+| Route selection | Sanitized explicit main/auxiliary/cron routes, public declarations and user-added routes | Configured/declared does not prove sign-in, entitlement or current availability; no credential probing |
+| Pricing | Public `ProviderProfile.get_usage_cost` totals plus explicit exact-route user rate cards | Quotes/cards are estimates; a total cannot establish separate token rates; missing rates/fees/tiers stay unknown |
+| Tool schema discovery | Public registration/metadata surfaces | Metadata access does not authorize execution |
+| Nested tools and automatic routines | Currently unsupported | Public `ctx.dispatch_tool` documentation promises guards, but the audited implementation directly reaches registry dispatch. Presence/version/config cannot certify those guards. Return a normal-host-tool plan; do not dispatch, promote or replay automatically |
+| Requested file inputs/outputs | Non-executing ordinary-host read/write plans and owned text placeholders | A plan is not a completed read/write. The normal agent performs tools with normal approvals |
+| Cron edits | Documented public `hermes cron edit` fields | Unsupported toolset changes become an explicit normal-agent plan; no `cron.jobs` mutation |
+| Legacy recovery | Saved recovery records, supported CLI restoration and explicit host-tool guidance | Pending/unsupported restoration retains its record; user edits are preserved |
+| CLI children | Profile-scoped explicit environment with verified YOLO bypass removed | No auto-approving/noninteractive tool children or automatic nested replay |
 
-The public `ctx.dispatch_tool` method in the audited host directly invokes
-`registry.dispatch`. The documentation describes inherited parent context, but
-that is insufficient evidence that the method traverses the ordinary
-`pre_tool_call`, approval, availability and tool-execution middleware pipeline.
-The plugin therefore does not treat method presence as a guarded-dispatch
-capability. There is no documented public guarded-dispatch capability in the
-audited SDK to feature-detect. A future method must be adopted against its exact
-documented contract; guessing a name or forwarding an undocumented keyword to
-the raw dispatcher is unsafe.
+The minimum manifest floor remains `>=0.22.7`. This is a load/compatibility floor,
+not a promise that every optional host capability exists there. Optional behavior
+is inspected/gated; no unavailable capability is silently replaced by a private
+implementation. A complete minimum-version/platform/provider matrix is not
+claimed. The authoritative validator must check the floor at the exact pin and
+must not be pointed at a future release number to silence failures.
 
-Prices are estimates unless runtime evidence labels them otherwise. Runtime
-helper observations can inform routing decisions and overhead accounting, but
-one total cost divided by total tokens cannot establish separate input, output,
-cache, tier or request-fee rates. The exact-rate API never fills unknown prices
-with another provider's rate card. API equivalent values are reported separately
-and must not authorize a budgeted experiment. Older host catalog/price lookups
-may fetch metadata through Hermes; this plugin has no independent credential
-reader or model-price table. The legacy Nous/OpenRouter catalog fallback remains
-a real provider-specific compatibility boundary, not universal discovery.
+## Technical checks and admission are separate
 
-## Proposed host SDK additions
+`hermes crystal compatibility` reports the actual local public-source audit and
+unsupported capabilities. It must not equate unsupported automatic routines with
+private imports, or equate a clean static result with catalog admission.
 
-These are **proposals**, not APIs implemented or feature-detected by this plugin.
-Each should have a documented, versioned capability whose presence confirms
-semantics, and should work through the plugin host isolation boundary.
+The source audit checks direct and aliased/computed imports, private attributes
+on core handles, module/function overrides, credential-store/env reads, unsafe
+child flags/environments and dynamic code execution. It permits only provably
+plugin-owned module-cache namespaces. It is a review tripwire, not a sandbox or
+full data-flow proof. Production Python/dashboard are its scope; standalone
+operator validation scripts and tests are separately disclosed. The host's
+validator/security/Desktop checks, execution tests and manual review remain
+required at the feature commit.
 
-### Guarded nested tool dispatch
+No private implementation was vendored to obtain a clean result. Public API
+facts cannot grant a missing guard contract. A future guarded-dispatch integration
+needs a documented public contract **and** verified guard/approval/hook/middleware
+semantics before it can enable nested execution.
 
-Expose a public service such as:
+The catalog generator reports static technical results, exact-pin host evidence,
+current offline UI evidence and human admission separately. Technical checks can
+pass while publication, an upstream catalog PR and maintainer merge are pending.
+See [submission workflow](marketplace.md).
 
-```python
-ctx.tools.dispatch_guarded(name, arguments, *, caller=None) -> ToolResult
-```
+## Evidence from the previous build
 
-The host should derive the active session/profile/task/turn, permit only
-documented caller fields, assign a fresh nested tool-call ID, enforce the
-caller's enabled tools and approvals, invoke veto hooks, traverse normal tool
-middleware, retain execution/audit identity and propagate cancellation. A
-detached or unattended caller must be unable to obtain approval by omission.
-Unavailable context should return a structured refusal. A capability such as
-`guarded_tool_dispatch.v1` must explicitly promise this pipeline, with host
-tests for veto, denied approval, disabled tools, middleware and profile isolation.
-Keep raw registry dispatch separately named if it is still necessary internally.
-
-### Exact model metadata, pricing and observed costs
-
-Expose public, serializable route and rate-card data:
-
-```python
-ctx.models.describe(route, *, allow_network=False) -> ModelMetadata | None
-ctx.pricing.rate_card(route, *, allow_network=False) -> RateCard | None
-ctx.pricing.estimate(route, usage) -> CostResult
-```
-
-`route` should include provider, model, base URL and API mode. Metadata should
-distinguish configured and served identities, exact IDs/declared aliases,
-unknown capabilities, context bounds and supported reasoning efforts. Rate cards
-need explicit currency/units, nullable token bucket rates, whole-request tier
-semantics, request fees, billing mode, source URL/version and freshness. A
-subscription's included cost must remain distinguishable from a free API model.
-Expose the canonical usage type publicly, including request count and safe
-provider usage metadata. Estimation of summed sessions must retain uncertainty
-where request boundaries or service tiers are missing.
-
-Return per-request observed cost/provenance, served route and response completion
-status through public completion results and lifecycle hooks. Add a public
-connected-model inventory with host-owned authentication, cached/no-network
-options and explicit discovery errors. Plugins should never need auth registry
-internals or direct credential access to list permitted model routes.
-
-### Atomic cron patches and toolsets
-
-Expose an immutable-ID, profile-scoped cron facade, for example:
-
-```python
-ctx.cron.get(job_id) -> JobSnapshot | None
-ctx.cron.update(job_id, patch, *, expected_revision) -> JobSnapshot
-```
-
-Apply validated prompt/script/interpreter/workdir/no-agent/toolset changes under
-one transaction and refuse revision conflicts. Preserve three-way toolset
-semantics: omitted field leaves it unchanged, `None` restores platform defaults,
-and `[]` explicitly permits no toolsets. Return normalized values/revision and
-structured refusal details. Record the initiating plugin and user-authorized
-action. Crystallize's reasoning-preservation policy must still prohibit reasoning
-reductions even if a general host API supports that field.
-
-For CLI parity, add a documented toolset edit option with an unambiguous clear
-operation, or a validated JSON patch input with revision checks. Existing public
-`--prompt`, `--script`, `--agent`, `--no-agent`, `--interpreter` and `--workdir`
-flags should remain supported. Plugin recovery records must still be saved before
-a host mutation; a host transaction cannot atomically commit the plugin's own
-separate database.
-
-## Release gate
-
-Keep catalog readiness false while required private couplings remain. A clean
-lint achieved by aliasing imports, suppressing findings or dropping guards is not
-a release criterion. Implement and test the required public host seams, migrate
-the plugin to those documented contracts, run the complete host validator on the
-exact proposed commit, and disclose remaining warnings and platform/provider
-verification limits in the catalog PR. The local compatibility report is a
-diagnostic aid; the host validator and human catalog review remain authoritative.
+The preserved 16-attempt Nous evidence under `docs/evidence/` belongs to the prior
+implementation, which still had private dependencies. It records frozen tasks,
+helper smoke calls and interrupted attempts with their original costs/unknowns.
+The analysis checker correction remains separately labelled and original failures
+remain intact. The isolated scheduled no-agent smoke tests only scheduling/local
+snapshot behavior. These records do not validate this public-SDK-only revision,
+current UI, automatic AI cron execution, actual billing or all providers. No paid
+rerun was performed to replace them during this migration.

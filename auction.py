@@ -1,6 +1,6 @@
 """Opt-in, bounded model comparisons through Hermes's public LLM facade.
 
-An auction generates one answer per explicitly selected connected route. It never
+An auction generates one answer per explicitly selected provider/model route. It never
 executes recorded tools, changes model settings, or treats a model switch as an
 efficiency saving. Its cap admits known-price estimates; no plugin-side token
 limit can guarantee a provider's final bill.
@@ -15,7 +15,7 @@ import time
 import uuid
 from typing import Any, Callable, Optional
 
-from . import chat_savings, contracts, experiments as ex, history as run_history, modelinfo, receipts, store
+from . import configured_models, contracts, experiments as ex, history as run_history, modelinfo, receipts, store
 
 MIN_MODELS = 2
 MAX_MODELS = 6
@@ -25,7 +25,7 @@ MAX_RECORD_BYTES = 2_000_000
 _SCOPE = "answer_only_model_comparison"
 _CAP_NOTICE = (
     "This is a local admission and spending-ledger cap, not a provider billing guarantee. "
-    "Reservations use conservative input-token estimates and known listed prices. "
+    "Reservations use conservative input-token estimates and explicit exact-route rate cards. "
     "Provider-added reasoning tokens, hidden input, routing, pricing changes and billing "
     "adjustments can exceed that estimate. No reasoning setting is overridden."
 )
@@ -35,6 +35,7 @@ _LIMITATIONS = [
     "The scoreboard contains output and structural contract checks, not a semantic quality score or an automatic winner.",
     "Recorded evidence can be stale. An auction does not fetch current task evidence.",
     "Actual billed cost may be unavailable through the public facade; strict mode then stops before the next call.",
+    "Configured or provider-declared routes do not prove authentication or current model access; Hermes owns both at call time.",
     _CAP_NOTICE,
 ]
 _SCHEMA = """
@@ -58,17 +59,15 @@ class AuctionError(ValueError):
 
 def _routes(models: Any) -> list[dict[str, str]]:
     if not isinstance(models, list) or not MIN_MODELS <= len(models) <= MAX_MODELS:
-        raise AuctionError(f"Choose {MIN_MODELS} to {MAX_MODELS} explicit connected provider/model routes.")
+        raise AuctionError(f"Choose {MIN_MODELS} to {MAX_MODELS} explicit provider/model routes.")
     result = []
     for value in models:
         if not isinstance(value, dict) or set(value) != {"provider", "model"}:
             raise AuctionError("Each auction route must contain only provider and model; reasoning and other overrides are unsupported.")
-        route = {}
-        for key in ("provider", "model"):
-            raw = value[key]
-            if not isinstance(raw, str) or not raw.strip() or len(raw) > 512 or any(ord(c) < 32 for c in raw):
-                raise AuctionError(f"Each route needs a bounded {key} string.")
-            route[key] = raw.strip()
+        try:
+            route = configured_models.validate_route(value["provider"], value["model"])
+        except ValueError as exc:
+            raise AuctionError(str(exc)) from exc
         result.append(route)
     if len({(r["provider"].lower(), r["model"].lower()) for r in result}) != len(result):
         raise AuctionError("Choose distinct provider/model routes; each route gets exactly one answer.")
@@ -103,17 +102,6 @@ def _grant(routes: list[dict[str, str]]) -> None:
                     raise AuctionError(f"That {key} is outside Hermes's plugins.entries.{store.PLUGIN_NAME}.llm.allowed_{key}s grant.")
 
 
-def _connected(routes: list[dict[str, str]]) -> None:
-    try:
-        providers = chat_savings.connected_models()
-    except Exception as exc:
-        raise AuctionError("Hermes's connected model inventory is unavailable; no routes were assumed connected.") from exc
-    listed = {(p.get("slug"), m.get("id")) for p in providers if isinstance(p, dict)
-              for m in (p.get("models") or []) if isinstance(m, dict)}
-    if any((r["provider"], r["model"]) not in listed for r in routes):
-        raise AuctionError("Every auction route must appear in Hermes's current connected model inventory.")
-
-
 def _number(value: Any) -> Optional[float]:
     if isinstance(value, bool) or not isinstance(value, (float, int)) or not math.isfinite(value) or value < 0:
         return None
@@ -132,24 +120,31 @@ def _pricing(route: dict[str, str]) -> dict[str, Any]:
         "input", "output", "cache_read", "cache_write", "input_above", "output_above",
         "cache_read_above", "cache_write_above", "request_cost")}
     for key in ("cache_read", "cache_write"):
-        if raw.get(key) is not None and normalized[key] is None:
-            raise AuctionError("A listed cache price is invalid; no call was admitted.")
         if normalized[key] is None:
-            normalized[key] = normalized["input"]
+            raise AuctionError("Known cache read/write rates are required; no input-rate fallback was assumed.")
     for key in ("input_above", "output_above", "cache_read_above", "cache_write_above"):
         if raw.get(key) is not None and normalized[key] is None:
             raise AuctionError("A listed tier price is invalid; no call was admitted.")
-    if raw.get("request_cost") is not None and normalized["request_cost"] is None:
-        raise AuctionError("A listed request fee is invalid; no call was admitted.")
-    normalized["request_cost"] = normalized["request_cost"] or 0.0
+    if normalized["request_cost"] is None:
+        raise AuctionError("The exact route's per-request fee is unknown; no zero fee was assumed.")
+    if raw.get("tiers_known") is not True:
+        raise AuctionError("The exact route's context-tier pricing is unknown; no base-tier-only assumption was made.")
+    threshold = raw.get("tier_threshold_tokens")
+    if threshold is not None:
+        if isinstance(threshold, bool) or not isinstance(threshold, int) or threshold < 0:
+            raise AuctionError("The exact route's context-tier threshold is invalid.")
+        if any(normalized[key] is None for key in ("input_above", "output_above", "cache_read_above", "cache_write_above")):
+            raise AuctionError("Known rates for every above-threshold bucket are required for a tiered route.")
+    if raw.get("user_authorized") is not True and raw.get("verified") is not True:
+        raise AuctionError("A rate card needs explicit user authorization or public verified provenance before it can admit a call.")
     # Reserve the highest known context/cache rate instead of assuming a cheap
     # base tier, a cache hit, or an absent cache write fee.
     normalized["input_usd_per_token"] = max(normalized[k] or 0.0 for k in (
         "input", "cache_read", "cache_write", "input_above", "cache_read_above", "cache_write_above"))
     normalized["output_usd_per_token"] = max(normalized["output"], normalized["output_above"] or 0.0)
-    for key in ("source", "pricing_version", "source_url", "tier_threshold_tokens"):
+    for key in ("source", "provenance", "origin", "user_authorized", "verified", "pricing_version", "source_url", "tier_threshold_tokens", "tiers_known"):
         normalized[key] = raw.get(key)
-    normalized["basis"] = "exact_route_listed_price_estimate"
+    normalized["basis"] = "exact_route_rate_card_estimate"
     return normalized
 
 
@@ -157,10 +152,10 @@ def _prepare(job_id: str, models: Any, *, max_tokens: int, cost_cap_usd: float,
              execution_id: Optional[str], accept_estimated_cap: bool) -> dict[str, Any]:
     _bounds(max_tokens, cost_cap_usd, accept_estimated_cap)
     routes = _routes(models)
-    # Check host grants before inventory/catalog access, and again before each
+    # Check host grants before public declaration access, and again before each
     # call. A test completion cannot bypass either gate.
     _grant(routes)
-    _connected(routes)
+    route_metadata = configured_models.describe_routes(routes)
     canonical_id, job = ex._job(job_id)
     config = ex._configuration({"max_tokens": max_tokens, "timeout": 60}, {"prompt": job.get("prompt") or ""})
     sample = ex._captures(canonical_id, execution_id, 1)[0]
@@ -180,7 +175,7 @@ def _prepare(job_id: str, models: Any, *, max_tokens: int, cost_cap_usd: float,
                    + max_tokens * pricing["output_usd_per_token"] + pricing["request_cost"])
         if not math.isfinite(reserve) or reserve > cost_cap_usd:
             raise AuctionError("A route's estimated worst-case reservation exceeds the explicit cap; no calls were made.")
-        priced.append({"index": index, **route, "pricing": pricing, "reservation_usd": reserve})
+        priced.append({"index": index, **route_metadata[index], "pricing": pricing, "reservation_usd": reserve})
     total = math.fsum(r["reservation_usd"] for r in priced)
     if total > cost_cap_usd:
         raise AuctionError(f"The estimated worst-case reservation (${total:.6f}) exceeds the explicit cap (${cost_cap_usd:.6f}); no calls were made.")

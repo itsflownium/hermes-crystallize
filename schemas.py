@@ -13,9 +13,11 @@ CRYSTAL_LIST = {
 CRYSTAL_RUN = {
     "name": "crystal_run",
     "description": (
-        "Run a saved, user-approved Crystallize routine by id. It performs the routine's "
-        "fixed steps without further reasoning and returns their combined output, which you "
-        "then summarize or act on. Only routines with status 'live' can run."
+        "Get the read recipe for a saved, user-approved live Crystallize routine by id. "
+        "On the current public SDK this returns status 'pending_host_tools', completed false "
+        "and a host_tool_plan, not fetched data. Resolve bindings from fresh evidence and make "
+        "the listed calls through your ordinary host tools with normal approvals. Inspect actual "
+        "results and finish the whole task. Never repeat crystal_run to execute a returned plan."
     ),
     "parameters": {
         "type": "object",
@@ -58,8 +60,8 @@ CRYSTAL_CHEAP = {
         "type": "object",
         "properties": {
             "input": {"type": "string", "minLength": 1, "description": "A complete nonempty instruction and source text. Required even with input_files."},
-            "input_files": {"type": "array", "maxItems": 8, "items": {"type": "string", "minLength": 1}, "description": "Source files read through normal guarded host tools. A complete nonempty input instruction is still required; partial inputs are rejected."},
-            "save_to": {"type": "string", "minLength": 1, "description": "Optional destination. Writes accepted output with its exact whitespace through guarded write_file and returns a short preview plus a reusable placeholder. Check completion metadata; some hosts omit stop reasons."},
+            "input_files": {"type": "array", "maxItems": 8, "items": {"type": "string", "minLength": 1}, "description": "Optional source paths. Current SDK returns a pending read_file plan before any helper call. Use ordinary host tools to read every page, then append complete source text to input and call again without input_files. A complete nonempty instruction remains required."},
+            "save_to": {"type": "string", "minLength": 1, "description": "Optional destination. Current SDK retains the paid text output and returns a pending ordinary write_file plan using its owned placeholder; written remains false. Perform and verify that write through your normal tools. Do not repeat the paid handoff. Check completion metadata; some hosts omit stop reasons."},
             "expected_output_tokens": {"type": "integer", "minimum": 1, "maximum": 4000, "description": "Expected deliverable size for cost and timeout estimates."},
             "subtask": {"type": "boolean", "description": "Delegate a complete self-contained text subtask. No global route change and no tools/actions are available to the helper."},
         },

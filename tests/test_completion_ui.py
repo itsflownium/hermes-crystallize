@@ -23,7 +23,7 @@ CASES = [
     "rhythm preview needs explicit consent and invalidates on edits",
     "rhythm fallback exports a reviewable command",
     "rhythm undo uses the current configuration fingerprint",
-    "auction requires connected candidates and a budget preview",
+    "auction requires declared candidates and a budget preview",
     "auction sends frozen input and explicit estimated-cap consent",
     "auction retains failed and skipped routes with unknown cost",
     "model discovery failure remains distinct from no connections",
@@ -34,6 +34,17 @@ CASES = [
     "auction discovery survives edits while it loads",
     "qualified receipt totals exclude historical counterfactuals",
     "heatmap keyboard inspection uses one tab stop",
+    "manual routes stay declarations and preserve arbitrary identifiers",
+    "empty or failed inventory still offers manual route entry",
+    "pricing cards keep unknown values and explicit zero distinct",
+    "pricing acknowledgement resets when a tier or rate changes",
+    "saved unknown tiers are never presented as no tiers",
+    "unguarded dispatch cannot enable autonomous modes",
+    "host-tool plans require an explicit mode choice",
+    "observation starts only through its explicit control",
+    "compatibility explains normal host-tool file plans",
+    "unsupported unchanged policies expose only a run-always reset",
+    "host-tool mode never offers automatic unchanged cycling",
     "reasoning stays fixed and desktop imports remain public",
 ]
 
@@ -78,7 +89,7 @@ const sdk = {Codicon: () => null, ROUTES_AREA: 'routes', SIDEBAR_NAV_AREA: 'nav'
 const sandbox = {...hooks, ...sdk, jsx, jsxs: jsx, Intl, Date, URLSearchParams, console};
 vm.createContext(sandbox);
 const code = source.replace(/^import .* from .*\n/gm, '').replace('export default {', 'const desktopPlugin = {');
-vm.runInContext(code + '\nthis.parts={BlindTasteTest,RhythmHeatmap,RhythmControl,ModelAuction,AuctionResult,RereadControls,DelegationControls,JobEvidence,ReceiptSummary,Hero};', sandbox);
+vm.runInContext(code + '\nthis.parts={BlindTasteTest,RhythmHeatmap,RhythmControl,ModelAuction,AuctionResult,RereadControls,DelegationControls,JobEvidence,ReceiptSummary,Hero,RouteEntry,PricingCard,ModelPicker,CompatibilityCard,LiveOptions,JobBubble,promotionTarget,canUseMode};', sandbox);
 const plain = value => JSON.parse(JSON.stringify(value));
 function mount(name, props) {
   const owner = {slots: [], effects: [], dirty: true, cursor: 0, tree: null, props};
@@ -157,7 +168,7 @@ const results = [];
 async function test(name, run) {try {await run();results.push({name,ok:true});} catch(error) {results.push({name,ok:false,error:error.stack});}}
 (async () => {
 await test('read-only expansion never starts paid work', async () => {
-  for (const [name, title] of [['JobEvidence','▸ Evidence and controls'],['RhythmControl','▸ Rhythm · schedule frequency'],['ModelAuction','▸ Model auction · compare connected routes']]) {
+  for (const [name, title] of [['JobEvidence','▸ Evidence and controls'],['RhythmControl','▸ Rhythm · schedule frequency'],['ModelAuction','▸ Model auction · compare declared routes']]) {
     const api = makeContext(); const view = mount(name, {ctx:api.ctx,jobId:'job-a',item:{job_id:'job-a'},onChanged:() => {}});
     await view.flush(); assert.equal(api.calls.length,0); click(view,title); await view.flush(); assert.ok(api.calls.length); assert.equal(api.posts().length,0); view.dispose();
   }
@@ -209,13 +220,13 @@ await test('rhythm undo uses the current configuration fingerprint', async () =>
   assert.deepEqual(plain(api.posts()[0].body),{job_id:'job-a',confirmed:true,expected_config_fingerprint:'fingerprint-current'}); view.dispose();
 });
 async function auctionView(api) {
-  const view = mount('ModelAuction',{ctx:api.ctx,jobId:'job-a'}); click(view,'▸ Model auction · compare connected routes'); await view.flush();
+  const view = mount('ModelAuction',{ctx:api.ctx,jobId:'job-a'}); click(view,'▸ Model auction · compare declared routes'); await view.flush();
   change(view,'model/a',true); change(view,'model/b',true); change(view,'Total cost cap','1'); return view;
 }
 const auctionPreview = {ok:true,available:true,models:[{},{}],execution_id:'execution-frozen',input_sha256:'sha-frozen',cost_cap_usd:1,estimated_reservation_usd:0.1};
-await test('auction requires connected candidates and a budget preview', async () => {
+await test('auction requires declared candidates and a budget preview', async () => {
   const api = makeContext({'POST /auction-preview':() => auctionPreview}); const view = mount('ModelAuction',{ctx:api.ctx,jobId:'job-a'});
-  click(view,'▸ Model auction · compare connected routes'); await view.flush();
+  click(view,'▸ Model auction · compare declared routes'); await view.flush();
   assert.equal(button(view,'Preview auction budget').props.disabled,true); assert.equal(input(view,'Use an estimated cap').props.checked,false);
   change(view,'model/a',true); change(view,'model/b',true); assert.equal(button(view,'Preview auction budget').props.disabled,true);
   change(view,'Total cost cap','1'); click(view,'Preview auction budget'); await view.flush();
@@ -241,8 +252,8 @@ await test('auction retains failed and skipped routes with unknown cost', async 
 });
 await test('model discovery failure remains distinct from no connections', async () => {
   const api = makeContext({'GET /chat-models':() => Promise.reject(new Error('offline'))});
-  const view = mount('ModelAuction',{ctx:api.ctx,jobId:'job-a'}); click(view,'▸ Model auction · compare connected routes'); await view.flush();
-  assert.ok(text(view.tree).includes('Connected model discovery failed')); assert.ok(!text(view.tree).includes('No connected models were returned')); assert.equal(api.posts().length,0); view.dispose();
+  const view = mount('ModelAuction',{ctx:api.ctx,jobId:'job-a'}); click(view,'▸ Model auction · compare declared routes'); await view.flush();
+  assert.ok(text(view.tree).includes('Configured-route discovery failed')); assert.ok(!text(view.tree).includes('No configured or declared model choices were returned')); assert.equal(api.posts().length,0); view.dispose();
 });
 await test('reread changes are explicit and chat-scoped', async () => {
   const api = makeContext({'POST /reread':call => ({ok:true,policy:call.body})});
@@ -278,7 +289,7 @@ await test('blocked rhythm proposals never expose a schedule command', async () 
 });
 await test('auction discovery survives edits while it loads', async () => {
   const slow = deferred(); const api = makeContext({'GET /chat-models':() => slow.promise});
-  const view = mount('ModelAuction',{ctx:api.ctx,jobId:'job-a'}); click(view,'▸ Model auction · compare connected routes');
+  const view = mount('ModelAuction',{ctx:api.ctx,jobId:'job-a'}); click(view,'▸ Model auction · compare declared routes');
   change(view,'Total cost cap','1'); slow.resolve(inventory); await view.flush();
   assert.ok(input(view,'model/a')); assert.equal(input(view,'Total cost cap').props.value,'1'); assert.equal(api.posts().length,0); view.dispose();
 });
@@ -295,6 +306,83 @@ await test('heatmap keyboard inspection uses one tab stop', async () => {
   assert.ok(all(view).filter(node=>node.type==='button').every(node=>node.props.tabIndex===-1));
   const press=key=>{const current=all(view).find(node=>node.type==='div' && node.props.role==='group');current.props.onKeyDown({key,preventDefault:()=>{}});view.render();};
   press('ArrowDown'); press('ArrowRight'); assert.ok(text(view.tree).includes('Tue 01:00: 3 observations, 2 comparisons, 1 changes')); view.dispose();
+});
+
+await test('manual routes stay declarations and preserve arbitrary identifiers', async () => {
+  const api = makeContext({'POST /model-route':call => ({ok:true,configured_route:call.body,activated:false})});
+  const view = mount('RouteEntry',{ctx:api.ctx}); await view.flush(); assert.equal(api.calls.length,0);
+  click(view,'▸ Add a provider / model route'); change(view,'Provider identifier','new-cloud.route'); change(view,'Model identifier','tenant/never-listed-model:version-2027');
+  assert.equal(api.posts().length,0); click(view,'Add route choice'); await view.flush();
+  assert.deepEqual(plain(api.posts()[0].body),{provider:'new-cloud.route',model:'tenant/never-listed-model:version-2027'});
+  assert.equal(api.posts().length,1); assert.equal(api.posts().some(call=>call.base==='/chat-model'),false);
+  assert.ok(text(view.tree).includes('Select it separately')); assert.ok(text(view.tree).includes('Authentication is checked by Hermes')); view.dispose();
+});
+await test('empty or failed inventory still offers manual route entry', async () => {
+  for(const inventory of [{providers:[],authentication_verified:false}, {ok:false,error:'Inventory unavailable'}]){
+    const api=makeContext({'GET /chat-models':()=>inventory}); const view=mount('ModelPicker',{ctx:api.ctx,picked:null,onPicked:()=>{}}); await view.flush();
+    assert.ok(all(view).find(node=>node.type===sandbox.parts.RouteEntry)); assert.ok(text(view.tree).includes('public SDK does not expose a verified authenticated-model inventory'));
+    assert.equal(api.posts().length,0); view.dispose();
+  }
+});
+await test('pricing cards keep unknown values and explicit zero distinct', async () => {
+  const api=makeContext({'GET /pricing-cards':()=>({ok:true,cards:[]}), 'POST /pricing-card':call=>({ok:true,card:call.body.card})});
+  const view=mount('PricingCard',{ctx:api.ctx,route:{provider:'new-cloud',model:'arbitrary/model'}});click(view,'▸ User-supplied pricing card');await view.flush();
+  assert.equal(input(view,'Input USD per million tokens').props.value,''); assert.equal(input(view,'Output USD per million tokens').props.value,'');
+  assert.equal(input(view,'Fixed fee').props.value,''); assert.equal(button(view,'Save user rate card').props.disabled,true);
+  change(view,'Input USD per million tokens','0'); change(view,'Output USD per million tokens','2.5');
+  change(view,'I confirm these are human-provided rates',true);click(view,'Save user rate card');await view.flush();
+  const body=plain(api.posts()[0].body);assert.equal(body.confirmed,true);assert.equal(body.card.input,0);assert.equal(body.card.output,2.5);assert.equal(body.card.cache_read,null);assert.equal(body.card.request_cost,null);
+  assert.equal('tier_threshold_tokens' in body.card,false);assert.equal(body.card.unit,'per_million_tokens');assert.equal(api.posts().length,1);view.dispose();
+});
+await test('pricing acknowledgement resets when a tier or rate changes', async () => {
+  const api=makeContext({'GET /pricing-cards':()=>({ok:true,cards:[]})});const view=mount('PricingCard',{ctx:api.ctx,route:{provider:'provider',model:'model'}});
+  click(view,'▸ User-supplied pricing card');await view.flush();change(view,'I confirm these are human-provided rates',true);
+  change(view,'I know this rate card has no volume tiers',true);assert.equal(input(view,'I confirm these are human-provided rates').props.checked,false);
+  change(view,'I confirm these are human-provided rates',true);change(view,'Fixed fee','0');assert.equal(input(view,'I confirm these are human-provided rates').props.checked,false);
+  assert.equal(button(view,'Save user rate card').props.disabled,true);assert.equal(api.posts().length,0);view.dispose();
+});
+await test('saved unknown tiers are never presented as no tiers', async () => {
+  const card={schema_version:1,provider:'provider',model:'model',unit:'per_token',currency:'USD',input:0.000001,output:0.000002,request_cost:0,tier_threshold_tokens:null,tiers_known:false};
+  const api=makeContext({'GET /pricing-cards':()=>({ok:true,cards:[card]})});const view=mount('PricingCard',{ctx:api.ctx,route:null});click(view,'▸ User-supplied pricing card');await view.flush();
+  change(view,'Load a saved rate card','0');assert.equal(input(view,'I know this rate card has no volume tiers').props.checked,false);
+  assert.equal(input(view,'Input USD per token').props.value,0.000001);assert.equal(input(view,'Fixed fee').props.value,0);assert.equal(api.posts().length,0);view.dispose();
+});
+const unsupported={dispatch:{public_dispatch_method_present:true,guarded_dispatch_available:false,automatic_nested_tools:false,input_files_mode:'normal_host_tool_plan',save_to_mode:'normal_host_tool_plan',reason:'The current public dispatcher cannot verify the host guards.'}};
+const modeItem={job_id:'job-a',routine_id:'routine-a',name:'An observed task',ready:true,no_ai_fit:true,mode:'tool',promotion_availability:{try_available:true,test_execution:'observe_normal_host_runs',automatic_replay_available:false,modes:{tool:{available:true,execution:'normal_host_tools'},prerun:{available:false,reason:'Guarded dispatch is unavailable.'},no_ai:{available:false,reason:'Guarded dispatch is unavailable.'}}}};
+await test('unguarded dispatch cannot enable autonomous modes', async () => {
+  const unsafe={...modeItem,promotion_availability:{...modeItem.promotion_availability,modes:{tool:{available:false},prerun:{available:true},no_ai:{available:true}}}};
+  assert.equal(sandbox.parts.canUseMode(unsafe,'prerun',unsupported),false);assert.equal(sandbox.parts.canUseMode(unsafe,'no_ai',unsupported),false);assert.equal(sandbox.parts.promotionTarget(unsafe,unsupported),null);
+  const calls=[];const view=mount('LiveOptions',{item:unsafe,compatibility:unsupported,act:(...args)=>calls.push(args)});await view.flush();
+  assert.equal(button(view,'Run with no AI'),undefined);assert.equal(button(view,'Use verified pre-run'),undefined);assert.equal(calls.length,0);view.dispose();
+});
+await test('host-tool plans require an explicit mode choice', async () => {
+  const calls=[];const view=mount('JobBubble',{item:modeItem,status:'testing',trialRuns:3,ctx:makeContext().ctx,compatibility:unsupported,act:(path,body)=>calls.push({path,body}),exp:{open:{'job-a':true},toggle:()=>{}}});await view.flush();
+  const action=all(view).find(node=>node.type && node.type.name==='JobHeader').props.action;assert.equal(text(action),'Use host-tool plan');assert.equal(calls.length,0);action.props.onClick();view.render();
+  assert.deepEqual(plain(calls),[{path:'/promote',body:{routine_id:'routine-a',mode:'tool'}}]);assert.ok(text(view.tree).includes('Automatic Promote unavailable'));view.dispose();
+});
+await test('observation starts only through its explicit control', async () => {
+  const calls=[];const view=mount('JobBubble',{item:{...modeItem,ready:false},status:'spotted',trialRuns:3,ctx:makeContext().ctx,compatibility:unsupported,act:(path,body)=>calls.push({path,body}),exp:{open:{'job-a':true},toggle:()=>{}}});await view.flush();assert.equal(calls.length,0);const action=all(view).find(node=>node.type && node.type.name==='JobHeader').props.action;assert.equal(text(action),'Observe next runs');action.props.onClick();view.render();
+  assert.deepEqual(plain(calls),[{path:'/try',body:{job_id:'job-a'}}]);assert.ok(text(view.tree).includes('normally executed Hermes runs'));view.dispose();
+});
+await test('compatibility explains normal host-tool file plans', async () => {
+  const view=mount('CompatibilityCard',{state:{data:unsupported,error:null,load:()=>{}}});await view.flush();click(view,'▸ Capability details');
+  const content=text(view.tree);assert.ok(content.includes('Automatic pre-run replay and zero-AI execution need'));assert.ok(content.includes('explicit host-tool read plan'));assert.ok(content.includes('explicit host-tool write plan'));
+  view.dispose();
+});
+
+await test('unsupported unchanged policies expose only a run-always reset', async () => {
+  for(const mode of ['tool','prerun']) for(const saved of ['repeat','quiet','auto']) {
+    const calls=[];const view=mount('LiveOptions',{item:{...modeItem,mode,when_unchanged:saved},compatibility:unsupported,act:(path,body)=>calls.push({path,body})});await view.flush();
+    assert.ok(text(view.tree).includes('is unavailable in this mode'));assert.equal(all(view).filter(node=>node.type==='button' && text(node).startsWith('If unchanged:')).length,0);
+    assert.equal(calls.length,0);click(view,'Run always / clear saved skip');assert.deepEqual(plain(calls),[{path:'/skip',body:{routine_id:'routine-a',when:'run'}}]);view.dispose();
+  }
+});
+await test('host-tool mode never offers automatic unchanged cycling', async () => {
+  const guarded={dispatch:{guarded_dispatch_available:true,automatic_nested_tools:true}};
+  const policy={...modeItem.promotion_availability,modes:{...modeItem.promotion_availability.modes,prerun:{available:true}}};
+  const calls=[];const view=mount('LiveOptions',{item:{...modeItem,mode:'tool',when_unchanged:'quiet',promotion_availability:policy},compatibility:guarded,act:(path,body)=>calls.push({path,body})});await view.flush();
+  assert.equal(all(view).filter(node=>node.type==='button' && text(node).startsWith('If unchanged:')).length,0);
+  click(view,'Run always / clear saved skip');assert.deepEqual(plain(calls),[{path:'/skip',body:{routine_id:'routine-a',when:'run'}}]);view.dispose();
 });
 await test('reasoning stays fixed and desktop imports remain public', async () => {
   assert.equal(source.includes('/reasoning-setting'),false); assert.equal(source.includes('Reasoning: also try lower'),false);

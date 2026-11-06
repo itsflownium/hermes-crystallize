@@ -1,8 +1,41 @@
 # Validation results — 6 November 2026
 
-These results cover the implementation in this follow-up to PR #7. They do not
-establish universal model compatibility, semantic equivalence or marketplace
-admission.
+These results distinguish the current public-SDK migration from the earlier
+implementation in this follow-up to PR #7. They do not establish universal model
+compatibility, semantic equivalence or marketplace admission.
+
+## Current public-SDK migration
+
+- Standalone Python suite: **1,186 passed, 1 skipped** on Python 3.13. The skipped
+  case is an optional source-backed audit; a separate invocation with the local
+  Hermes source enabled passed all 151 selected checks, including that case.
+- **30 Desktop behavior checks** passed. Real React/Chromium fixture captures
+  verified the route/pricing and host-tool-plan surfaces, narrow-screen overflow
+  and zero console errors. The tracked [review captures](../assets/review/README.md)
+  visibly identify their simulated backend and contain no live savings evidence.
+- The independent published-public-API source audit found **zero violations**.
+  JavaScript syntax and Git whitespace checks passed.
+- Local Hermes validation passed **all 16 checks with zero warnings**, including
+  isolated registrations, security, no core override and Desktop surface checks.
+  The reviewed public API policy is pinned to upstream `90d6b98`; the actual
+  local validated host source is `2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19`.
+  The catalog bundle retains a separate exact-feature-pin validation record;
+  neither local validation nor the policy snapshot establishes maintainer approval.
+- Regression coverage includes unknown/zero/endpoint/tier pricing, declared
+  routes without authentication probes, no unguarded nested execution, pending
+  file plans, observed host-run readiness, legacy recovery and unavailable skip
+  controls. Main model/reasoning remain unchanged.
+
+No paid provider calls, production job changes or gateway restart were performed
+for this migration. Automatic nested replay/no-AI execution remain unavailable
+on the audited public SDK. Ordinary host-tool plans preserve the normal agent's
+tool/approval flow. The earlier live evidence below was not rerun or relabelled.
+
+## Historical build: before public-SDK migration
+
+The sections below record the earlier feature commit
+`c2c15d8dfa62b3e075da78547669b165e2b4c523`, which retained private dependencies.
+Its warning, counts and live results are preserved as historical evidence.
 
 ## Offline and host checks
 
@@ -13,7 +46,7 @@ admission.
 - Hermes 0.22.7 admission validation passed all 16 checks, including isolated
   registration, declared capabilities, security scan, no core overrides and
   Desktop SDK surface. Host readiness was reported as ready. Its private-import
-  warning remains; see [SDK gaps](sdk-gaps.md).
+  warning applied to that earlier build; it has been removed by the migration above.
 
 ## Nous Portal frozen-input checks
 

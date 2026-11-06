@@ -116,12 +116,13 @@ def _print_routine(r: dict) -> None:
         for t in (meta.get("tests") or [])[-3:]:
             print(f"    {'match' if t['ok'] else 'no match'} ({t['source']}): {t['why']}")
     if r["status"] == "live":
-        mode = {"no_ai": "no AI", "prerun": "pre-run script"}.get(meta.get("mode"), "crystal_run tool")
+        mode = {"no_ai": "no AI", "prerun": "pre-run script"}.get(meta.get("mode"), "ordinary host-tool plan")
         print(f"  Live runs: {meta.get('live_runs', 0)}, skipped (no change): {len(meta.get('skips') or [])}, "
               f"failures in a row: {meta.get('failures', 0)}  [{mode}]")
         from . import prerun
 
-        print(f"  When nothing has changed: {prerun.unchanged_action(r)}")
+        if meta.get("mode", "tool") != "tool":
+            print(f"  When nothing has changed: {prerun.unchanged_action(r)}")
     steps = r["steps"] if isinstance(r["steps"], dict) else {}
     for line in steplist.describe(steps):
         print(f"  {line}")
@@ -139,15 +140,21 @@ def _lifecycle_action(sub: str, job: str, args: Any = None) -> None:
         r = _routine_for(job)
         if sub == "test":
             meta = lifecycle.test_now(job, tools.dispatch)
-            print(f"Test run: {meta['tests'][-1]['why']}. Matching in a row: {meta['matches']} of {meta['needed']}.")
+            tests = meta.get("tests") or []
+            reason = meta.get("why") or (tests[-1]["why"] if tests else "Waiting for completed normal host runs.")
+            label = "Observation" if meta.get("executed") is False else "Test run"
+            print(f"{label}: {reason}. Matching in a row: {meta.get('matches', 0)} of {meta.get('needed', lifecycle.MATCHES_NEEDED)}.")
         elif sub == "promote":
             if not r:
                 print(f"No routine for {job!r}. Run `hermes crystal try {job}` first.")
                 return
             no_ai = bool(getattr(args, "no_ai", False))
-            lifecycle.promote(r["id"], mode="no_ai" if no_ai else "prerun")
+            mode = "no_ai" if no_ai else getattr(args, "mode", "prerun")
+            lifecycle.promote(r["id"], mode=mode)
             if no_ai:
                 print(f"{r['name']} is live with no AI: the routine's output is the job's result.")
+            elif mode == "tool":
+                print(f"{r['name']} now provides recipe guidance. The main agent runs and verifies its normal host tools; nothing is automatically replayed.")
             else:
                 print(f"{r['name']} is live. A pre-run script now collects the data before the AI starts; "
                       "see what it does when nothing changed with `hermes crystal show`.")
@@ -155,10 +162,11 @@ def _lifecycle_action(sub: str, job: str, args: Any = None) -> None:
             if not r:
                 print(f"No routine for {job!r}.")
                 return
-            mode = {"ai": "prerun", "no-ai": "no_ai"}[args.mode]
+            mode = {"ai": "prerun", "no-ai": "no_ai", "tool": "tool"}[args.mode]
             lifecycle.set_mode(r["id"], mode)
-            print(f"{r['name']} now runs " + ("with no AI." if mode == "no_ai" else
-                  "with the AI writing the answer from the pre-run data."))
+            message = {"no_ai": "with no AI.", "tool": "with recipe guidance and ordinary host tools; no automatic replay.",
+                       "prerun": "with the AI writing the answer from the pre-run data."}[mode]
+            print(f"{r['name']} now runs {message}")
         elif sub == "skip":
             if not r:
                 print(f"No routine for {job!r}.")
@@ -179,7 +187,7 @@ def _lifecycle_action(sub: str, job: str, args: Any = None) -> None:
         elif sub == "show":
             _print_routine(r) if r else print(f"No routine for {job!r}.")
     except lifecycle.LifecycleError as exc:
-        print(str(exc))
+        raise SystemExit(str(exc)) from exc
 
 
 def _prerun(routine_id: str) -> None:
@@ -272,7 +280,7 @@ def _tune(args: Any) -> None:
 
 def _handle(args: Any) -> None:
     sub = getattr(args, "crystal_command", None)
-    if sub in ("reread", "blind", "rhythm", "auction", "delegation", "tool-defer", "compatibility"):
+    if sub in ("reread", "blind", "rhythm", "auction", "delegation", "tool-defer", "compatibility", "model-route", "rate-card"):
         _completion_action(sub, args)
         return
     if sub in ("contract", "compare", "receipt", "recipe", "cache", "chat-policy"):
@@ -293,7 +301,7 @@ def _handle(args: Any) -> None:
     elif sub == "analyze":
         _print_analysis(args.job, getattr(args, "json", False))
     else:
-        print("Usage: hermes crystal history [job] | analyze <job> [--json] | try|test|promote|undo|show <job> | mode <job> ai|no-ai | skip <job> auto|repeat|quiet|off | tune [job] [--level L] [--undo]")
+        print("Usage: hermes crystal history [job] | analyze <job> [--json] | try|test|promote|undo|show <job> | mode <job> ai|no-ai|tool | skip <job> auto|repeat|quiet|off | tune [job] [--undo]")
 
 
 def _read_json(path: str) -> Any:
@@ -353,23 +361,25 @@ def _setup(subparser: Any) -> None:
     a.add_argument("job", help="Job name or id")
     a.add_argument("--json", action="store_true", help="Print the full analysis as JSON")
     for name, text in (("try", "Save a job's steps as a routine and start testing it"),
-                       ("test", "Run the routine once now and compare with the latest real run"),
+                       ("test", "Inspect fresh normal host observations; replay needs a verified guarded SDK"),
                        ("promote", "Switch the job over to its routine (needs 3 matching test runs)"),
                        ("undo", "Put the job's original prompt back"),
                        ("show", "Show a job's routine and its test results")):
         p = subs.add_parser(name, help=text)
         p.add_argument("job", help="Job name or id")
         if name == "promote":
+            p.add_argument("--mode", choices=("prerun", "tool"), default="prerun",
+                           help="tool provides ordinary host-tool guidance; automatic modes require a guarded public SDK")
             p.add_argument("--no-ai", action="store_true",
                            help="Use the routine's output as the job's result, with no AI at all")
     sk = subs.add_parser("skip", help="What a live job does when its data hasn't changed")
     sk.add_argument("job", help="Job name or id")
     sk.add_argument("state", choices=("auto", "repeat", "quiet", "off"),
                     help="repeat the last answer, stay quiet, off = run the AI, auto = choose for me")
-    md = subs.add_parser("mode", help="Switch a live job between AI-written answers and no AI")
+    md = subs.add_parser("mode", help="Choose ordinary host-tool guidance or an available guarded automatic mode")
     md.add_argument("job", help="Job name or id")
-    md.add_argument("mode", choices=("ai", "no-ai"))
-    tn = subs.add_parser("tune", help="Trim a job's tools and reasoning, and keep that only if its answers hold up and it costs less")
+    md.add_argument("mode", choices=("ai", "no-ai", "tool"))
+    tn = subs.add_parser("tune", help="Reduce repeated input and unused read schemas while preserving reasoning")
     tn.add_argument("job", nargs="?", help="Job name or id. Leave out to list every job")
     tn.add_argument("--level", help="Legacy option; rejected because reasoning settings are preserved")
     tn.add_argument("--reasoning", choices=("keep", "lower"), help="Use keep; the legacy lower option is refused")
@@ -444,14 +454,41 @@ def _setup(subparser: Any) -> None:
     td.add_argument("--fingerprint", default="")
     td.add_argument("--confirm", action="store_true")
     subs.add_parser("compatibility", help="Report public SDK support and remaining marketplace blockers")
+    mr = subs.add_parser("model-route", help="Declare an exact model route; this does not sign in or select a helper")
+    mr.add_argument("--provider")
+    mr.add_argument("--model")
+    pc = subs.add_parser("rate-card", help="Show or explicitly set an exact-route user price estimate")
+    change = pc.add_mutually_exclusive_group()
+    change.add_argument("--file", help="JSON rate card using documented units; never an invoice")
+    change.add_argument("--delete", action="store_true")
+    pc.add_argument("--provider")
+    pc.add_argument("--model")
+    pc.add_argument("--base-url")
+    pc.add_argument("--confirm", action="store_true", help="Acknowledge user-supplied rates and their estimation limits")
     subparser.set_defaults(func=_handle)
 
 
 def _completion_action(sub: str, args: Any) -> None:
     import json
-    from . import auction, blind, delegation, host_api, lifecycle, reread, rhythm, tool_discovery
+    from . import auction, blind, configured_models, delegation, host_api, lifecycle, public_pricing, reread, rhythm, tool_discovery
     try:
-        if sub == "reread":
+        if sub == "model-route":
+            if bool(args.provider) != bool(args.model):
+                raise ValueError("Supply both provider and model, or neither to inspect available declarations.")
+            result = configured_models.configure_route(args.provider, args.model) if args.provider else configured_models.inventory()
+        elif sub == "rate-card":
+            if args.file or args.delete:
+                if not args.confirm:
+                    raise ValueError("Use --confirm to acknowledge that explicit rates are user estimates, not proof of billing.")
+                if args.delete:
+                    if not args.provider or not args.model:
+                        raise ValueError("Deleting a rate card requires an exact provider and model.")
+                    result = public_pricing.delete_rate_card(args.provider, args.model, args.base_url)
+                else:
+                    result = public_pricing.save_rate_card(_read_json(args.file))
+            else:
+                result = public_pricing.rate_cards_report()
+        elif sub == "reread":
             values = {k: getattr(args, k) for k in ("enabled", "writes", "results", "batching") if getattr(args, k) is not None}
             result = reread.configure(args.session_id, **values) if values else reread.policy(args.session_id)
         elif sub == "blind":

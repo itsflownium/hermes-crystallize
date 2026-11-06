@@ -9,7 +9,7 @@ from contextvars import ContextVar
 from uuid import uuid4
 from typing import Any, Optional
 
-from . import lifecycle, runner, store
+from . import dispatch_support, lifecycle, runner, store
 
 logger = logging.getLogger(__name__)
 
@@ -36,50 +36,17 @@ def _identity(kwargs: dict[str, Any]) -> dict[str, Any]:
 def set_context(ctx: Any) -> None:
     global _ctx
     _ctx = ctx
-
-
-_builtins_loaded = False
-
-
-def _ensure_builtin_tools() -> None:
-    """Load Hermes's built-in tools when running outside an agent.
-
-    Inside a chat or cron run the registry is already full. A bare terminal
-    command (`hermes crystal test`) starts with an empty registry, so we ask
-    Hermes to discover its built-ins once. Feature-detected: if the function
-    moves, the test just reports the missing tool.
-    """
-    global _builtins_loaded
-    if _builtins_loaded:
-        return
-    _builtins_loaded = True
-    try:
-        from tools.registry import discover_builtin_tools
-
-        discover_builtin_tools()
-    except Exception:  # noqa: BLE001
-        logger.debug("crystallize: couldn't load built-in tools", exc_info=True)
+    dispatch_support.set_context(ctx)
 
 
 def dispatch(name: str, args: dict, **caller_context: Any) -> str:
-    """Run a nested tool through Hermes's ordinary guard/middleware pipeline.
-
-    The plugin SDK's dispatch_tool is a raw registry call in supported Hermes
-    versions. Do not silently fall back to it if the host pipeline moves.
-    """
-    if _ctx is None:
-        raise RuntimeError("Crystallize isn't fully loaded yet.")
-    try:
-        from model_tools import handle_function_call
-    except (ImportError, AttributeError) as exc:
-        raise RuntimeError("This Hermes version cannot safely dispatch routine steps. Do the task yourself.") from exc
-    context = {**_caller.get(), **{k: v for k, v in caller_context.items() if k in _CALLER_FIELDS}}
+    """Use only a verified public host dispatch; the current SDK fails closed."""
+    context = dispatch_support.require(_ctx)
+    identity = {**_caller.get(), **{k: v for k, v in caller_context.items() if k in _CALLER_FIELDS}}
     # Nested calls need their own identity, rather than overwriting the outer
     # crystal_run receipt or causing tools to share an approval/cache slot.
-    context["tool_call_id"] = f"crystal-{uuid4().hex}"
-    if not _builtins_loaded:
-        _ensure_builtin_tools()
-    return handle_function_call(name, args, **context)
+    identity["tool_call_id"] = f"crystal-{uuid4().hex}"
+    return context.dispatch_tool(name, args, **identity)
 
 
 def crystal_list(args: dict[str, Any] | None = None, **_: Any) -> str:
@@ -115,6 +82,12 @@ def crystal_run(args: dict[str, Any] | None = None, **kwargs: Any) -> str:
         reason = "This job's configuration changed or could not be verified, so the routine must be tested again."
         return json.dumps({"ok": False, "failed_step": 0, "reason": reason, "outputs": [],
                            "error": reason + " Do the task yourself.", "routine": routine["name"]})
+    if not dispatch_support.support(_ctx)["guarded_dispatch_available"]:
+        try:
+            return json.dumps(dispatch_support.routine_plan(routine), ensure_ascii=False)
+        except (ValueError, TypeError) as exc:
+            return json.dumps({"ok": False, "completed": False, "outputs": [], "routine": routine["name"],
+                               "error": f"The saved recipe cannot supply safe guidance: {exc}. Do the task yourself."})
     token = _caller.set(_identity(kwargs))
     try:
         try:

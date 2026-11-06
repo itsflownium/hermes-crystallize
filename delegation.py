@@ -9,13 +9,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import store
+from . import configured_models, store
 
 
 def summary() -> dict:
     value = store.get_setting("delegation_consent") or {}
-    return {"enabled": value.get("enabled") is True, "provider": value.get("provider"),
-            "model": value.get("model"), "scope": "profile-wide backend; each task must request the helper",
+    value = value if isinstance(value, dict) else {}
+    try:
+        route = configured_models.validate_route(value.get("provider"), value.get("model"))
+    except ValueError:
+        route = {"provider": None, "model": None}
+    return {"enabled": value.get("enabled") is True and bool(route["provider"] and route["model"]), **route,
+            "scope": "profile-wide backend; each task must request the helper",
+            "availability": "authentication_unverified", "authentication_verified": False,
+            "provenance": ["explicit_profile_consent"] if route["model"] else [],
+            "warnings": ["The configured helper route has not been authenticated or probed. Hermes owns authentication at task execution."],
             "reasoning_unchanged": True, "activation": "Select /delegation crystallize yourself; this control never selects it.",
             "savings_classification": "model_comparison_not_efficiency_proof"}
 
@@ -24,11 +32,13 @@ def configure(enabled: bool, provider: str = "", model: str = "", *, confirmed: 
     if not isinstance(enabled, bool) or confirmed is not True:
         raise ValueError("Confirm the profile-wide delegation consent explicitly.")
     if enabled:
-        from . import chat_savings
-        available = chat_savings.connected_models()
-        if not any(p["slug"] == provider and any(m["id"] == model for m in p["models"]) for p in available):
-            raise ValueError("Choose a model from your connected providers.")
-    store.set_setting("delegation_consent", {"enabled": enabled, "provider": provider, "model": model})
+        route = configured_models.validate_route(provider, model)
+        # A public declaration is not an exhaustive catalog or proof of auth.
+        # Explicit identifiers remain selectable for any host-supported route.
+        configured_models.configure_route(**route)
+    else:
+        route = {"provider": "", "model": ""}
+    store.set_setting("delegation_consent", {"enabled": enabled, **route})
     return summary()
 
 
@@ -58,21 +68,24 @@ def provider_class():
 
         def route_task(self, task, config):
             own = summary()
-            route_keys = {"model", "provider", "base_url", "api_key", "api_mode", "request_overrides",
-                          "reasoning_effort", "fallback_providers", "profile"}
-            inherited = {k: v for k, v in config.items() if k in route_keys}
             choice = task.get("crystallize_route", "inherit")
             if choice == "inherit":
-                return inherited
+                # The public provider contract defines dict(config) as the
+                # existing delegation route. Core retains its original auth;
+                # this is pass-through input, never a credential-store read.
+                route_keys = {"model", "provider", "base_url", "api_key", "api_mode", "request_overrides",
+                              "reasoning_effort", "service_tier", "fallback_providers", "profile"}
+                return {k: v for k, v in config.items() if k in route_keys}
             if choice != "helper" or not own["enabled"]:
                 raise DelegationRouteError("The user has not consented to this helper route. Use the inherited route.")
-            if inherited.get("profile"):
+            if config.get("profile"):
                 raise DelegationRouteError("A profile route cannot be replaced by a helper model. Use inherit.")
             if not own["provider"] or not own["model"]:
                 raise DelegationRouteError("The consented helper is unavailable. Use inherit.")
             # Credentials and provider endpoints remain Hermes-owned. Never carry
             # another route's API key/base URL into the helper provider.
-            return {**{k: v for k, v in inherited.items() if k == "reasoning_effort"},
+            reasoning = {"reasoning_effort": config["reasoning_effort"]} if "reasoning_effort" in config else {}
+            return {**reasoning,
                     "provider": own["provider"], "model": own["model"],
                     "fallback_providers": [],
                     "label": "Crystallize helper · explicit model switch"}

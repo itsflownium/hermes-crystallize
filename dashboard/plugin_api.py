@@ -155,8 +155,11 @@ async def try_routine(body: dict) -> dict[str, Any]:
 @router.post("/promote")
 async def promote_routine(body: dict) -> dict[str, Any]:
     def apply():
-        r = _lifecycle().promote(_identifier(body.get("routine_id"), "routine"))
-        return {"ok": True, "message": f"{r['name']} is live."}
+        mode = body.get("mode", "prerun")
+        if mode not in ("prerun", "no_ai", "tool"):
+            raise ValueError("Choose a supported execution mode.")
+        r = _lifecycle().promote(_identifier(body.get("routine_id"), "routine"), mode=mode)
+        return {"ok": True, "message": f"{r['name']} is ready for normal host-tool guidance." if mode == "tool" else f"{r['name']} is live."}
     return await _serve(apply, message="Couldn't promote the routine.")
 
 
@@ -220,8 +223,8 @@ async def chat_summary(session_id: Optional[str] = None) -> dict[str, Any]:
 
 @router.get("/chat-models")
 async def chat_models() -> dict[str, Any]:
-    return await _serve(lambda: {"providers": _chat().connected_models()},
-                        message="Couldn't read your connected subscriptions.")
+    return await _serve(lambda: _module("configured_models").inventory(),
+                        message="Couldn't read configured model routes.")
 
 
 @router.post("/chat-model")
@@ -232,7 +235,7 @@ async def chat_model(body: dict) -> dict[str, Any]:
         ch = _chat()
         listed = ch.connected_models()
         if not any(p["slug"] == provider and any(m["id"] == model for m in p["models"]) for p in listed):
-            return {"ok": False, "code": "invalid_request", "message": "That model isn't on your connected subscriptions."}
+            return {"ok": False, "code": "invalid_request", "message": "Declare that provider/model route before selecting it. Hermes checks authentication when it is used."}
         ch.set_model(provider, model)
         return {"ok": True, "message": f"Crystallize Chat will use {model.split('/')[-1]}."}
     return await _serve(apply, message="Couldn't save the helper model.")
@@ -477,3 +480,44 @@ async def delegation_consent(body: dict) -> dict[str, Any]:
 @router.get("/compatibility")
 async def compatibility() -> dict[str, Any]:
     return await _serve(lambda: _module("host_api").report(), message="Couldn't inspect public SDK compatibility.")
+
+
+@router.post("/model-route")
+async def configure_model_route(body: dict) -> dict[str, Any]:
+    def apply():
+        result = _module("configured_models").configure_route(
+            _reference(body.get("provider"), "provider"), _reference(body.get("model"), "model"))
+        return {"ok": True, **result}
+    return await _serve(apply, message="Couldn't save the configured model route.")
+
+
+@router.get("/pricing-cards")
+async def pricing_cards() -> dict[str, Any]:
+    return await _serve(lambda: {"ok": True, **_module("public_pricing").rate_cards_report()},
+                        message="Couldn't load explicit rate cards.")
+
+
+@router.post("/pricing-card")
+async def save_pricing_card(body: dict) -> dict[str, Any]:
+    def apply():
+        if not _boolean(body, "confirmed"):
+            raise ValueError("Confirm the exact route, source and pricing assumptions before saving a rate card.")
+        import json
+        if len(json.dumps(body.get("card"), allow_nan=False).encode()) > 32_000:
+            raise ValueError("A rate card must fit within 32,000 bytes.")
+        result = _module("public_pricing").save_rate_card(body.get("card"))
+        return {"ok": True, "card": result, "message": "Saved the user-supplied price estimate. It is not proof of billing."}
+    return await _serve(apply, message="Couldn't save that rate card.")
+
+
+@router.post("/pricing-card-delete")
+async def delete_pricing_card(body: dict) -> dict[str, Any]:
+    def apply():
+        if not _boolean(body, "confirmed"):
+            raise ValueError("Confirm removal of the explicit rate card.")
+        result = _module("public_pricing").delete_rate_card(
+            _reference(body.get("provider"), "provider"), _reference(body.get("model"), "model"), body.get("base_url"))
+        return {"ok": True, **result,
+                "message": "Removed the saved plugin-data card. Cards declared in Hermes configuration require a config edit."
+                if result["removed"] else "No saved plugin-data card matched. Cards declared in Hermes configuration require a config edit."}
+    return await _serve(apply, message="Couldn't remove that rate card.")

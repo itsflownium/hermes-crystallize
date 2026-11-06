@@ -181,6 +181,7 @@ def test_over_budget_presentation_keeps_the_full_current_original():
 
 
 def test_oversized_or_incomplete_artifacts_hand_back_the_whole_task(monkeypatch, tmp_path):
+    monkeypatch.setattr(lifecycle, "replay_support", lambda: {"guarded_dispatch_available": True, "automatic_nested_tools": True})
     artifact = tmp_path / "large.txt"
     artifact.write_text("complete output" * 100)
     monkeypatch.setattr(prerun, "MAX_FILE_BYTES", 10)

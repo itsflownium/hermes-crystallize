@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from crystallize import auction, blind, chat_savings, contracts, experiments as ex, history, modelinfo, receipts, store, tools
+from crystallize import auction, blind, configured_models, contracts, experiments as ex, history, modelinfo, receipts, store, tools
 
 
 @pytest.fixture
@@ -19,15 +19,16 @@ def world(monkeypatch):
     config = {"plugins": {"entries": {"crystallize": {"llm": {
         "allow_provider_override": True, "allow_model_override": True}}}}}
     prices = {"input": 0.000001, "output": 0.000002, "cache_read": 0.0000005,
-              "cache_write": 0.00000125, "request_cost": 0.0, "source": "host_test_price_list"}
+              "cache_write": 0.00000125, "request_cost": 0.0, "source": "user_rate_card",
+              "user_authorized": True, "verified": False, "tiers_known": True, "tier_threshold_tokens": None}
     runs = []
     monkeypatch.setattr(ex.lifecycle, "cron_job", lambda value: job if value in {job["id"], job["name"]} else None)
     monkeypatch.setattr(modelinfo, "_config", lambda: config)
     monkeypatch.setattr(modelinfo, "exact_token_prices", lambda *args, **kwargs: dict(prices), raising=False)
     monkeypatch.setattr(modelinfo, "api_cost", lambda *args, **kwargs: None)
-    monkeypatch.setattr(chat_savings, "connected_models", lambda: [
-        {"slug": "connected-a", "models": [{"id": "model-one"}, {"id": "model-three"}]},
-        {"slug": "connected-b", "models": [{"id": "model-two"}]}])
+    monkeypatch.setattr(configured_models, "describe_routes", lambda routes: [
+        {**route, "availability": "explicit_selection_unverified", "authentication_verified": False,
+         "provenance": ["explicit_user_selection"], "warnings": ["Authentication has not been checked."]} for route in routes])
     monkeypatch.setattr(history, "load_runs", lambda *args, **kwargs: list(runs))
     monkeypatch.setattr(history, "_session_costs", lambda *args, **kwargs: {})
     monkeypatch.setattr(tools, "dispatch", lambda *args, **kwargs: pytest.fail("auction replayed a tool"))
@@ -104,7 +105,7 @@ def test_explicit_distinct_route_bounds(world, routes):
 
 def test_missing_host_grant_blocks_even_inventory_or_injected_calls(world, monkeypatch):
     world.config["plugins"]["entries"]["crystallize"]["llm"]["allow_model_override"] = False
-    monkeypatch.setattr(chat_savings, "connected_models", lambda: pytest.fail("inventory read before grant"))
+    monkeypatch.setattr(configured_models, "describe_routes", lambda routes: pytest.fail("inventory read before grant"))
     calls = []
     result = auction.preview(world.job["id"], world.routes, cost_cap_usd=1)
     assert not result["available"] and "allow_model_override" in result["why"]
@@ -127,16 +128,21 @@ def test_host_route_allowlists_are_enforced(world, key, allowed):
         run(world, [])
 
 
-def test_exact_connected_inventory_required(world):
-    world.routes[1]["model"] = "invented-model"
-    with pytest.raises(auction.AuctionError, match="current connected"):
-        run(world, [])
+def test_explicit_unlisted_route_is_host_owned_and_never_claimed_authenticated(world):
+    world.trace()
+    world.routes[1] = {"provider": "future-cloud", "model": "future/model-revision"}
+    calls = []
+    result = run(world, calls)
+    assert len(calls) == 2 and calls[1][1]["provider"] == "future-cloud"
+    assert result["models"][1]["availability"] == "explicit_selection_unverified"
+    assert result["models"][1]["authentication_verified"] is False
 
 
-def test_inventory_failure_is_not_silently_assumed_connected(world, monkeypatch):
-    monkeypatch.setattr(chat_savings, "connected_models", lambda: (_ for _ in ()).throw(RuntimeError("offline")))
+def test_missing_public_declarations_do_not_block_explicit_routes_or_imply_auth(world, monkeypatch):
+    world.trace()
     result = auction.preview(world.job["id"], world.routes, cost_cap_usd=1)
-    assert not result["available"] and "inventory is unavailable" in result["why"]
+    assert result["available"]
+    assert all(row["authentication_verified"] is False for row in result["models"])
 
 
 def test_unknown_price_rejects_before_calls_even_in_estimated_mode(world, monkeypatch):
@@ -157,10 +163,43 @@ def test_invalid_price_categories_fail_closed(world, key, value):
         run(world, [])
 
 
+@pytest.mark.parametrize("changes", [
+    {"cache_read": None}, {"cache_write": None}, {"request_cost": None},
+    {"tiers_known": False}, {"tiers_known": None},
+    {"tier_threshold_tokens": 100, "input_above": None},
+    {"user_authorized": False, "verified": False},
+])
+def test_unknown_fees_cache_tiers_or_rate_card_authorization_blocks_admission(world, changes):
+    world.trace()
+    world.prices.update(changes)
+    calls = []
+    with pytest.raises(auction.AuctionError):
+        run(world, calls, accept_estimated_cap=True)
+    assert not calls and auction.history(world.job["id"]) == []
+
+
+def test_saved_explicit_user_rate_cards_enable_unlisted_routes_without_private_prices(world, monkeypatch):
+    from crystallize import public_pricing
+    world.trace()
+    for route in world.routes:
+        public_pricing.save_rate_card({**route, "currency": "USD", "unit": "per_million_tokens",
+            "input": 1.0, "output": 2.0, "cache_read": 0.5, "cache_write": 1.25,
+            "request_cost": 0.0, "tier_threshold_tokens": None,
+            "source_url": "https://provider.example/pricing", "pricing_version": "explicit-test-card"})
+    monkeypatch.setattr(modelinfo, "exact_token_prices", lambda model, provider, base_url=None:
+                        public_pricing.exact_rate_card(model, provider, base_url, config=world.config))
+    result = run(world, [])
+    assert result["all_answers_completed"]
+    for route in result["models"]:
+        assert route["pricing"]["source"] == "user_rate_card"
+        assert route["pricing"]["user_authorized"] is True and route["pricing"]["verified"] is False
+        assert route["authentication_verified"] is False
+
+
 def test_preflight_reserves_full_input_max_output_cache_tiers_and_request_fees(world):
     world.trace()
     world.prices.update(input_above=0.00001, output_above=0.00002, cache_write_above=0.00003,
-                        request_cost=0.01, tier_threshold_tokens=100)
+                        cache_read_above=0.00001, request_cost=0.01, tier_threshold_tokens=100)
     preview = auction.preview(world.job["id"], world.routes, max_tokens=64, cost_cap_usd=1)
     assert preview["available"]
     expected = preview["input_tokens_estimate"] * 0.00003 + 64 * 0.00002 + 0.01

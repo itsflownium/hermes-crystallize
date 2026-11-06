@@ -1,85 +1,61 @@
-"""Read-only SDK compatibility diagnostics, without probing credentials or providers.
-
-This is an inventory of known integration gaps, not a replacement for
-``hermes plugins validate``. No undocumented host API is imported to produce it.
-"""
+"""Public-API compatibility and honest feature/admission readiness, without probes."""
 from __future__ import annotations
 
-import ast
 from pathlib import Path
 from typing import Any
 
-_ctx: Any = None
+from . import dispatch_support
+from .catalog.public_api_audit import audit
 
-# These modules are still private according to the host's admission validator.
-# Keep imports at their real call sites: aliases/dynamic imports do not make an
-# undocumented dependency public, and must not be used to suppress warnings.
-_PRIVATE_MODULES = frozenset({
-    "model_tools", "cron.jobs", "agent.usage_pricing", "hermes_cli.models",
-    "hermes_cli.inventory",
-})
+_ctx: Any = None
 
 
 def set_context(ctx: Any) -> None:
     global _ctx
     _ctx = ctx
-
-
-def _private_imports() -> list[dict[str, Any]]:
-    root = Path(__file__).resolve().parent
-    sites = []
-    for path in sorted(root.rglob("*.py")):
-        relative = path.relative_to(root)
-        if any(part.startswith(".") or part in ("tests", "__pycache__", "node_modules") for part in relative.parts):
-            continue
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8-sig"))
-        except (OSError, SyntaxError, UnicodeError):
-            continue
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and not node.level and node.module in _PRIVATE_MODULES:
-                for name in node.names:
-                    # CostResult alone is documented for provider profiles.
-                    if node.module == "agent.usage_pricing" and name.name == "CostResult":
-                        continue
-                    sites.append({"file": relative.as_posix(), "line": node.lineno,
-                                  "target": node.module + "." + name.name})
-            elif isinstance(node, ast.Import):
-                for name in node.names:
-                    if name.name in _PRIVATE_MODULES:
-                        sites.append({"file": relative.as_posix(), "line": node.lineno, "target": name.name})
-    return sorted(sites, key=lambda site: (site["file"], site["line"], site["target"]))
+    dispatch_support.set_context(ctx)
 
 
 def report(ctx: Any = None) -> dict[str, Any]:
-    """Describe public support and unresolved gaps; never call a model/tool/CLI.
+    """Inspect local facts without model, credential, tool, or CLI calls.
 
-    The supported host's ``dispatch_tool`` is a raw registry dispatch. Presence
-    of that method is not evidence of guarded execution. A future SDK seam must
-    have a documented contract and explicit capability before we adopt it.
+    Public-API compliance does not establish an upstream catalog listing.
+    Missing optional SDK features are gated, never worked around.
     """
     context = ctx if ctx is not None else _ctx
-    has_dispatch = callable(getattr(context, "dispatch_tool", None)) if context is not None else None
-    gaps = [
-        {"id": "guarded_tool_dispatch", "public": False,
-         "current": "model_tools.handle_function_call",
-         "needed": "Public nested dispatch preserving availability, approval, hooks, middleware and caller identity."},
-        {"id": "model_metadata_and_pricing", "public": False,
-         "current": "Public provider declarations plus private model catalogs and usage_pricing rate cards.",
-         "needed": "Public exact-route metadata/rate cards with tiers, fees, provenance and request-level observed costs."},
-        {"id": "cron_toolsets_and_atomic_update", "public": False,
-         "current": "Documented CLI for prompt/script/interpreter/mode; private cron.jobs.update_job for toolsets.",
-         "needed": "Public revision-checked atomic field updates, including nullable enabled_toolsets."},
-        {"id": "connected_model_inventory", "public": False,
-         "current": "hermes_cli.inventory",
-         "needed": "Public inventory of connected model routes without exposing credentials."},
-    ]
-    return {"schema_version": 1, "catalog_ready": False, "status": "public_sdk_gaps",
-            "context_bound": context is not None,
-            "public_dispatch_method_present": has_dispatch,
-            "public_guarded_dispatch_available": False,
-            "reasoning_reductions_enabled": False, "raw_registry_fallback_enabled": False,
-            "private_core_imports": _private_imports(), "sdk_gaps": gaps,
-            "warnings": ["Private host dependencies remain; catalog readiness is not established.",
-                         "Run the host's plugin validator for the authoritative complete admission checks."],
-            "proposal": "docs/sdk-gaps.md"}
+    checks = audit(Path(__file__).resolve().parent)
+    dispatch = dispatch_support.support(context)
+    private = [f for f in checks["findings"] if f["kind"] in {
+        "private_core_import", "private_core_attribute", "private_dynamic_import"}]
+    clean = checks["ok"]
+    return {
+        "schema_version": 2,
+        "status": "public_sdk_only" if clean else "source_review_required",
+        "public_api_only": clean,
+        "technical_public_api_ready": clean,
+        "catalog_ready": False,
+        "catalog_readiness_meaning": "Legacy field: local checks cannot establish upstream admission or listing.",
+        "admission": {"listed": False, "maintainer_approval": "not_established",
+                      "next_step": "Validate the exact published pin and submit the entry for upstream maintainer review."},
+        "context_bound": context is not None,
+        "public_dispatch_method_present": dispatch["public_dispatch_method_present"],
+        "public_guarded_dispatch_available": dispatch["guarded_dispatch_available"],
+        "raw_registry_fallback_enabled": False,
+        "reasoning_reductions_enabled": False,
+        "dispatch": dispatch,
+        "private_core_imports": private,
+        "public_api_audit": checks,
+        "optional_sdk_limits": [
+            {"id": "automatic_nested_tools", "available": dispatch["automatic_nested_tools"],
+             "fallback": "The main agent executes returned plans through its ordinary host tools."},
+            {"id": "model_inventory", "source": "public declarations and configured identifiers",
+             "authentication_verified": False},
+            {"id": "pricing", "source": "public provider quotes or explicit user-supplied exact-route cards",
+             "unknown_rates": "No inferred or substituted cards; unknown stays unknown."},
+            {"id": "legacy_cron_toolsets", "automatic_mutation": False,
+             "fallback": "Retain recovery and use host job controls for a legacy toolset edit."},
+        ],
+        "warnings": (["Current SDK cannot safely automate nested tools; ordinary host-tool plans remain available."]
+                     if clean else ["Unsupported dependencies or policy violations require source review."]),
+        "proposal": "docs/sdk-gaps.md",
+    }

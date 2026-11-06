@@ -139,9 +139,10 @@ def test_an_action_first_leaves_nothing_to_fetch():
         steplist.build(a)
 
 
-def test_promote_turns_on_new_items_only_after_cheaper_settings(monkeypatch):
+def test_explicit_tool_plan_preserves_complete_evidence_without_automatic_delta_flags(monkeypatch):
     saved = {}
-    routine = {"id": "cr_1", "name": "job", "status": "testing", "source_ref": "j1", "steps": {"steps": []},
+    routine = {"id": "cr_1", "name": "job", "status": "testing", "source_ref": "j1", "steps": {"steps": [
+               {"tool": "web_extract", "args": {"url": "https://example.invalid"}, "check": {"min_len": 1}}]},
                "meta": {"ready": True}}
     monkeypatch.setattr(lifecycle.store, "get_routine", lambda rid: routine)
     monkeypatch.setattr(lifecycle.store, "update_routine", lambda rid, **kw: saved.update(kw))
@@ -151,5 +152,5 @@ def test_promote_turns_on_new_items_only_after_cheaper_settings(monkeypatch):
     monkeypatch.setattr(lifecycle, "_edit_job", lambda *a: None)
     from crystallize import prerun
     monkeypatch.setattr(prerun, "write_script", lambda *a: "script.py")
-    lifecycle.promote("cr_1")
-    assert saved["meta"]["new_only"] and saved["tune"]["new_only"]
+    lifecycle.promote("cr_1", mode="tool")
+    assert saved["meta"]["new_only"] is False and "tune" not in saved

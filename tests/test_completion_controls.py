@@ -21,15 +21,18 @@ def test_reasoning_reduction_controls_are_rejected(monkeypatch):
 
 
 def test_delegation_requires_separate_explicit_profile_consent(monkeypatch):
-    from crystallize import chat_savings
-    monkeypatch.setattr(chat_savings, "connected_models", lambda: [{"slug": "vendor", "models": [{"id": "general"}]}])
+    from crystallize import configured_models
+    monkeypatch.setattr(configured_models, "inventory", lambda: {"providers": [], "authentication_verified": False})
     with pytest.raises(ValueError, match="Confirm"):
         delegation.configure(True, "vendor", "general")
     assert not delegation.summary()["enabled"]
     result = delegation.configure(True, "vendor", "general", confirmed=True)
     assert result["enabled"] and "never selects" in result["activation"]
-    with pytest.raises(ValueError, match="connected"):
-        delegation.configure(True, "other", "general", confirmed=True)
+    assert result["authentication_verified"] is False
+    manual = delegation.configure(True, "unlisted-cloud", "new/model-revision", confirmed=True)
+    assert manual["enabled"] and manual["provider"] == "unlisted-cloud"
+    with pytest.raises(ValueError, match="identifier"):
+        delegation.configure(True, "https://token@example.com", "general", confirmed=True)
 
 
 def test_delegation_never_reduces_inherited_reasoning_or_copies_endpoint_secrets(monkeypatch):
@@ -53,6 +56,23 @@ def test_delegation_never_reduces_inherited_reasoning_or_copies_endpoint_secrets
     assert route["fallback_providers"] == [] and "service_tier" not in route
     assert "api_key" not in route and "base_url" not in route
     assert config == original
+
+
+def test_helper_delegation_does_not_read_parent_auth_or_endpoint_fields(monkeypatch):
+    module = types.ModuleType("agent.delegation_provider")
+    module.DelegationProvider = object
+    module.DelegationRouteError = ValueError
+    monkeypatch.setitem(sys.modules, "agent.delegation_provider", module)
+    class RouteInput(dict):
+        def items(self):
+            pytest.fail("helper route iterated parent credential/endpoint values")
+        def get(self, key, default=None):
+            assert key not in {"api_key", "base_url", "request_overrides"}
+            return super().get(key, default)
+    store.set_setting("delegation_consent", {"enabled": True, "provider": "future-cloud", "model": "new-model"})
+    value = delegation.provider_class()().route_task({"crystallize_route": "helper"},
+        RouteInput(reasoning_effort="max", api_key="never-read", base_url="https://never-read.invalid"))
+    assert value["provider"] == "future-cloud" and value["reasoning_effort"] == "max"
 
 
 def test_protected_tool_deferral_never_calls_host_cli(monkeypatch):

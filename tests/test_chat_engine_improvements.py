@@ -344,33 +344,19 @@ def test_late_accounting_is_pinned_and_tolerates_orderly_store_close(monkeypatch
         second.close()
 
 
-def test_nested_dispatch_preserves_identity_and_uses_host_guards(monkeypatch):
-    calls = []
-
-    def guarded(name, args, **kwargs):
-        calls.append((name, args, kwargs))
-        return json.dumps({"error": "blocked by host policy"})
-
-    monkeypatch.setitem(sys.modules, "model_tools", SimpleNamespace(handle_function_call=guarded))
-    monkeypatch.setattr(tools, "_ctx", SimpleNamespace(dispatch_tool=lambda *args, **kw: pytest.fail("raw registry used")))
-    monkeypatch.setattr(tools, "_builtins_loaded", True)
-    routine = {"id": "r", "source_ref": "job", "status": "live", "name": "routine", "steps": {},
+def test_nested_execution_is_pending_guidance_until_public_host_guards_are_available(monkeypatch):
+    monkeypatch.setattr(tools, "_ctx", SimpleNamespace(dispatch_tool=lambda *args, **kw: pytest.fail("raw SDK dispatch used")))
+    routine = {"id": "r", "source_ref": "job", "status": "live", "name": "routine",
+               "steps": {"steps": [{"tool": "web_extract", "args": {"url": "https://example.com"}}]},
                "meta": {"config_snapshot": {"fingerprint": "unchanged"}}}
     monkeypatch.setattr(store, "get_routine", lambda rid: routine)
-    monkeypatch.setattr(tools.lifecycle, "_bound_job", lambda job_id: {"id": "job"} if job_id == "job" else None)
-    monkeypatch.setattr(tools.lifecycle, "configuration_fingerprint", lambda job, recipe: {"fingerprint": "unchanged"})
-    monkeypatch.setattr(tools.lifecycle, "live_result", lambda *args: None)
-
-    def execute(routine, dispatch):
-        response = json.loads(dispatch("web_extract", {"url": "https://example.com"}))
-        return {"ok": False, "reason": response["error"], "outputs": []}
-
-    monkeypatch.setattr(tools.runner, "run", execute)
+    monkeypatch.setattr(tools.lifecycle, "check_drift", lambda saved: True)
+    monkeypatch.setattr(tools.lifecycle, "live_result", lambda *args: pytest.fail("guidance was reported as an execution"))
+    monkeypatch.setattr(tools.runner, "run", lambda *args: pytest.fail("unsupported nested replay ran"))
     result = json.loads(tools.crystal_run({"routine_id": "r"}, session_id="s1", task_id="task", turn_id="turn", user_task="read"))
-    assert not result["ok"] and "blocked" in result["reason"]
-    assert calls[0][2]["session_id"] == "s1" and calls[0][2]["task_id"] == "task"
-    assert calls[0][2]["turn_id"] == "turn" and calls[0][2]["user_task"] == "read"
-    assert calls[0][2]["tool_call_id"].startswith("crystal-")
+    assert not result["ok"] and result["status"] == "pending_host_tools" and not result["completed"]
+    assert result["outputs"] == [] and result["execution_validation"] == "not_run"
+    assert result["host_tool_plan"]["actions"][0]["arguments"] == {"url": "https://example.com"}
     assert tools._caller.get() == {}
 
 
