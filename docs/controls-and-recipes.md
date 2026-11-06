@@ -7,6 +7,14 @@ override, and supply the facts a summary must retain. Saving a policy never
 enables Chat savings. Clean is the default and does not call a model. Files and
 failed results remain exact. Summary is opt-in and keeps a session-owned original.
 
+Failure checks include HTTP statuses, explicit unsuccessful/pending results and
+nested source errors. Before a paid summary, local checks collect structured
+numeric values, recognizable IDs/dates, amounts and URLs. Excessively complex
+inputs stay exact without a helper call. A summary missing a checked literal is
+rejected; its actual attempt/unknown cost is retained. Bare numbers in arbitrary
+prose and semantic correctness are not proven by these checks. Exact/Clean remain
+the appropriate controls when any changed meaning would be unacceptable.
+
 ```bash
 hermes crystal chat-policy SESSION_ID
 hermes crystal chat-policy SESSION_ID --mode summary --focus "Keep incident IDs, severity, status and source URLs"
@@ -18,6 +26,22 @@ accepted/rejected/failed outcome by turn. Routing uses explicit user rate cards/
 observed helper behavior, without decomposing a quote into inferred rates. Unknown prices remain unknown, and generated output
 is counted as avoided only when its placeholder actually expands. These are
 estimates, not provider bills or guaranteed future savings.
+
+Main-request usage treats Hermes's uncached, cache-read and cache-write buckets
+separately and prices each once. Unknown cache composition is bounded at the
+largest known input rate when a total is known; it is labelled as an upper bound.
+Legacy ambiguous observations need a fresh usage hook before pricing/re-read
+decisions. Concurrent local/host price-card saves use a database transaction.
+
+## Complete Cron evidence
+
+`result_preview_chars` controls the display preview, not validation completeness.
+The plugin separately retains at most 256 complete Cron results, each at most
+500,000 UTF-8 bytes, in its profile-local database. Retrieval verifies the full
+length and SHA256 before using that result as evidence. Larger, evicted, legacy
+partial or damaged payloads stay incomplete and cannot become successful
+validation. This bounded retention is separate from seven-day chat originals.
+Complete captures can contain sensitive source text, like the existing previews.
 
 ## Outcome contracts
 

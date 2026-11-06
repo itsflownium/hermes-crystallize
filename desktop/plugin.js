@@ -753,6 +753,7 @@ function CompatibilityCard({ state }) {
       dispatch.reason ? small(dispatch.reason, C.soft) : null,
       small(`File inputs: ${dispatch.input_files_mode === 'normal_host_tool_plan' ? 'explicit host-tool read plan' : 'host capability required'} · Saved output: ${dispatch.save_to_mode === 'normal_host_tool_plan' ? 'explicit host-tool write plan' : 'host capability required'}`),
       small('Model and pricing choices are declarations until checked on the actual route. Compatibility details describe support, not a paid-call test.'),
+      report.output_delivery && report.output_delivery.public_buffering_supported ? small('This host buffers replies before expanding helper placeholders. Streaming may wait for the final reply while this plugin is loaded.') : null,
       rawDetails('Public capability report', report)
     ] : []),
     state.error ? actionButton('Retry capability check', state.load) : null
@@ -1864,7 +1865,7 @@ function ChatControls({ ctx, sessionId, policy, observedTools = [], onSaved }) {
   const tools = [...new Set([...Object.keys(policy.tools || {}), ...observedTools])].sort()
   return bubble([
     row('Tool-result controls', selectMode(policy.default_mode || 'clean', value => save('*', value), 'Default tool-result mode')),
-    small('Exact keeps a result unchanged. Clean uses safe cleanup. Summary allows a helper call when its estimate pays back. Files and failed results stay exact.', C.soft),
+    small('Start with Clean: it removes redundant formatting without a model call. Exact keeps a result unchanged. Summary permits a paid helper when its estimate pays back; local checks must retain observable values, IDs, dates and URLs. Files and failed results stay exact.', C.soft),
     field('Task focus (optional)', jsx('textarea', { value: focus, rows: 2, maxLength: 2000, onChange: e => setFocus(e.target.value), style: fieldStyle, placeholder: 'What information matters for this task?' })),
     actionButton(pending ? 'Saving…' : 'Save task focus', () => save('*', policy.default_mode || 'clean', true), pending),
     jsxs('details', { key: 'tools', children: [
@@ -2022,6 +2023,11 @@ function ChatSession({ ctx, sessionId, focused }) {
       !current && !error ? small('Loading…') : null,
       current ? jsx(CompatibilityCard, { key: 'capabilities', state: compatibilityState }) : null,
       current ? jsx(ThisChat, { key: 'this', state: current, onToggle: toggle, pending, heading: focused ? 'This chat' : `Your last chat${current.title ? `: ${current.title}` : ''}` }) : null,
+      current ? small(!current.enabled
+        ? 'Start with lossless Clean after enabling this chat. A helper model is optional; your main model and reasoning stay unchanged.'
+        : current.routing && current.routing.cost_basis === 'unknown'
+          ? 'Helper cost/payback is unknown for this route. Clean needs no helper call; add an exact-route rate card to estimate paid handoffs.'
+          : 'Savings shown here are estimates. Review exact originals whenever a summary or excerpt lacks a needed fact.', C.soft) : null,
       current && sessionId ? jsx(ChatControls, { key: `controls:${sessionId}`, ctx, sessionId, policy: current.policy || { default_mode: 'clean', focus: '', tools: {} }, observedTools: current.tool_names || observedTools, onSaved: policy => { requests.current.version += 1; setState(old => old && old.session_id === sessionId ? { ...old, policy } : old) } }) : null,
       current && sessionId ? jsx(RereadControls, { key: `reread:${sessionId}`, ctx, sessionId, chatEnabled: current.enabled }) : null,
       current && sessionId ? jsx(ContextRent, { key: `rent:${sessionId}`, ctx, sessionId, refresh: current, onTools: setObservedTools }) : null,

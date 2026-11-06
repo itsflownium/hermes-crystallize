@@ -72,6 +72,7 @@ def make_post_tool_call(ctx: Any) -> Callable[..., None]:
                 "result_sha256": hashlib.sha256(result_text.encode("utf-8", "replace")).hexdigest(),
                 "result_len": len(result_text),
                 "result_preview": result_text[:preview_chars] if preview_chars > 0 else None,
+                "result_full": result_text if run is not None else None,
                 "status": status,
                 "duration_ms": duration_ms,
                 "cron_job_id": getattr(run, "job_id", None),

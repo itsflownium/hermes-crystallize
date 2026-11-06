@@ -415,7 +415,7 @@ def test_large_recent_write_can_repay_discounted_cache_on_first_replay(enabled, 
     monkeypatch.setattr(modelinfo, "token_prices", lambda *args: dict(PRICES))
     request = _new_request(_chat_write(text=TEXT * 20))
     assert reread.rewrite(request, "s") is None
-    _record({**USAGE, "input_tokens": 95_000, "cache_read_tokens": 94_000})
+    _record({**USAGE, "input_tokens": 1_000, "prompt_tokens": 95_000, "cache_read_tokens": 94_000})
     assert reread.rewrite(request, "s") is not None
     rows = next(iter(store.get_setting(reread._key("s"))["streams"].values()))["rows"].values()
     estimate = next(row["estimate"] for row in rows if row.get("estimate"))

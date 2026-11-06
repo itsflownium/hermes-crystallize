@@ -15,6 +15,8 @@ from typing import Any, Callable, Optional
 
 PLUGIN_NAME = "crystallize"
 logger = logging.getLogger(__name__)
+MAX_COMPLETE_TRACE_BYTES = 500_000
+MAX_COMPLETE_TRACE_ROWS = 256
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS traces (
@@ -37,6 +39,11 @@ CREATE TABLE IF NOT EXISTS traces (
 );
 CREATE INDEX IF NOT EXISTS idx_traces_session ON traces(session_id, ts);
 CREATE INDEX IF NOT EXISTS idx_traces_cron ON traces(cron_job_id, cron_execution_id, ts);
+
+CREATE TABLE IF NOT EXISTS complete_trace_results (
+    trace_id INTEGER PRIMARY KEY,
+    result_text TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS chats (
     session_id  TEXT PRIMARY KEY,
@@ -188,11 +195,21 @@ def add_trace(row: dict[str, Any]) -> None:
     values = [row.get(c) for c in cols]
     with _lock:
         conn = _db()
-        conn.execute(
-            f"INSERT INTO traces ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})",
-            values,
-        )
-        conn.commit()
+        try:
+            cursor = conn.execute(
+                f"INSERT INTO traces ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})", values)
+            full = row.get("result_full")
+            if (isinstance(full, str) and row.get("cron_execution_id")
+                    and len(full.encode("utf-8", "replace")) <= MAX_COMPLETE_TRACE_BYTES):
+                conn.execute("INSERT INTO complete_trace_results (trace_id, result_text) VALUES (?, ?)",
+                             (cursor.lastrowid, full))
+                conn.execute("DELETE FROM complete_trace_results WHERE trace_id NOT IN "
+                             "(SELECT trace_id FROM complete_trace_results ORDER BY trace_id DESC LIMIT ?)",
+                             (MAX_COMPLETE_TRACE_ROWS,))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def trace_stats() -> dict[str, Any]:
@@ -327,15 +344,33 @@ def routine_for_job(job_id: str) -> Optional[dict[str, Any]]:
 
 
 def execution_traces(execution_id: str) -> list[dict[str, Any]]:
-    """Tool calls recorded for one cron run, in order."""
-    cols = ("tool_name", "args_json", "result_preview", "result_len", "status")
+    """Chronological evidence, using a verified complete result when retained.
+
+    display_preview stays bounded for presentation. Legacy, oversized or evicted
+    results retain their preview and fail complete-evidence checks normally.
+    """
+    import hashlib
+
+    cols = ("tool_name", "args_json", "result_preview", "result_len", "status", "result_sha256")
     with _lock:
         rows = _db().execute(
-            f"SELECT {', '.join(cols)} FROM traces WHERE cron_execution_id = ? AND tool_name != '__run__' "
-            "ORDER BY ts, id",
+            f"SELECT {', '.join('t.' + key for key in cols)}, f.result_text FROM traces t "
+            "LEFT JOIN complete_trace_results f ON f.trace_id = t.id "
+            "WHERE t.cron_execution_id = ? AND t.tool_name != '__run__' ORDER BY t.ts, t.id",
             (execution_id,),
         ).fetchall()
-    return [dict(zip(cols, r)) for r in rows]
+    results = []
+    for raw in rows:
+        row = dict(zip(cols, raw))
+        row["display_preview"] = row["result_preview"]
+        full = raw[len(cols)]
+        valid = (isinstance(full, str) and len(full) == row["result_len"]
+                 and hashlib.sha256(full.encode("utf-8", "replace")).hexdigest() == row["result_sha256"])
+        if valid:
+            row["result_preview"] = full
+        row["complete_result_retained"] = valid
+        results.append(row)
+    return results
 
 
 def chat_enabled(session_id: Optional[str]) -> bool:

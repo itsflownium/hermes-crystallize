@@ -36,12 +36,21 @@ Crystallize does not read keys or OAuth stores. Helper calls incur provider
 usage, including unsuccessful attempts. The main model keeps its chosen route
 and reasoning.
 
+Start with **Clean**, which compacts redundant formatting without a model call.
+Optional summaries are checked for structured numeric values, recognizable IDs,
+dates, amounts and URLs. Failed or incomplete results stay exact. A summary that
+fails those checks is rejected, while its attempt cost remains in the receipt.
+These checks cannot prove factual correctness or semantic equivalence.
+
 Originals belong to their originating chat and expire after seven days.
 `crystal_full_result` retrieves exact text; asking a helper about it requires
 chat opt-in. Requested file reads/writes return non-executing plans for the normal
 agent to perform through its ordinary guarded tools.
 Placeholders expand only in eligible text fields before policy checks, and
 cannot become commands, URLs or file paths.
+On hosts exposing the public output-buffering option, replies are delivered after
+placeholder expansion; this can defer streaming for the profile while the plugin
+is loaded. Older hosts retain their supported output-hook contract.
 
 See [controls and recipes](docs/controls-and-recipes.md), [Rhythm](docs/rhythm.md),
 [Model Auction](docs/model-auction.md) and [validation](docs/validation.md) for
@@ -170,6 +179,9 @@ Schedule changes remain explicit choices.
 - Stores captured arguments/results, originals, caches, contracts, comparison
   answers, receipts and diagnostics under
   `<hermes home>/plugin-data/crystallize/`. Originals can contain sensitive text.
+  Complete Cron evidence is additionally bounded to 256 payloads of at most
+  500,000 UTF-8 bytes each; previews remain separate, and evicted evidence fails
+  completeness checks.
   Receipt export redacts common credential forms; arbitrary sensitive content
   is not guaranteed to be removed.
 - Helper/comparison features send supplied data through a host-owned model
