@@ -84,6 +84,29 @@ def make_post_tool_call(ctx: Any) -> Callable[..., None]:
     return on_post_tool_call
 
 
+def make_transform_tool_result(ctx: Any) -> Callable[..., Any]:
+    """Clean a tool's result before the AI reads it, for cron jobs in a Crystallize trial
+    or keeping its settings. Every later AI call re-reads it, so this saves on all of them."""
+    from . import prerun, tuning
+
+    def transform(tool_name: str = "", result: Any = None, **_: Any) -> Any:
+        try:
+            run = ctx.current_cron_execution()
+            name = getattr(run, "job_name", None) if run else None
+            if not name or tool_name not in prerun.CLEANED_TOOLS or not tuning.cleans_results(name):
+                return None
+            cleaned = prerun.clean_result(tool_name, result)
+            if cleaned is None:
+                return None
+            store.add_cleaned(name, len(result) - len(cleaned))
+            return cleaned
+        except Exception:  # noqa: BLE001 — a hook must never break the run
+            logger.debug("crystallize: cleaning a tool result failed", exc_info=True)
+            return None
+
+    return transform
+
+
 RUN_MARKER = "__run__"  # stands for a cron run that made no tool calls
 
 
@@ -91,7 +114,7 @@ def make_on_session_end(ctx: Any) -> Callable[..., None]:
     """After a scheduled cron run: make sure the run is on record (a live
     routine's run may make no tool calls at all), then test the job's routine
     if it's being tested."""
-    from . import lifecycle, tools
+    from . import lifecycle, tools, tuning
 
     def on_session_end(session_id: str = "", **_: Any) -> None:
         try:
@@ -107,6 +130,7 @@ def make_on_session_end(ctx: Any) -> Callable[..., None]:
                     "cron_execution_id": execution_id, "cron_scheduled": 1,
                 })
             lifecycle.test_after(execution_id, run.job_id, tools.dispatch)
+            tuning.refresh()
         except Exception:  # noqa: BLE001 — an observer must never break the run
             logger.debug("crystallize: after-run bookkeeping failed", exc_info=True)
 

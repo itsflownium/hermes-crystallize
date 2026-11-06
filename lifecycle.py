@@ -45,15 +45,20 @@ def _jobs_file() -> Path:
 
 def cron_job(job_id: str) -> Optional[dict[str, Any]]:
     """Read one cron job (read-only)."""
-    try:
-        data = json.loads(_jobs_file().read_text())
-    except (OSError, ValueError):
-        return None
-    jobs = data.get("jobs", data) if isinstance(data, dict) else data
-    for job in jobs if isinstance(jobs, list) else []:
+    for job in all_cron_jobs():
         if job.get("id") == job_id or job.get("name") == job_id:
             return job
     return None
+
+
+def all_cron_jobs() -> list[dict[str, Any]]:
+    """Every cron job Hermes knows about, including ones that have finished (read-only)."""
+    try:
+        data = json.loads(_jobs_file().read_text())
+    except (OSError, ValueError):
+        return []
+    jobs = data.get("jobs", data) if isinstance(data, dict) else data
+    return [j for j in jobs if isinstance(j, dict)] if isinstance(jobs, list) else []
 
 
 def _hermes_cmd() -> list[str]:
@@ -79,6 +84,18 @@ def _edit_job(job_id: str, *flags: str) -> None:
         raise LifecycleError(f"Hermes couldn't update the job: {(proc.stderr or proc.stdout).strip()[:300]}")
 
 
+def set_toolsets(job_id: str, toolsets: Optional[list[str]]) -> None:
+    """Limit a job to these toolsets. None goes back to Hermes's default for cron jobs.
+    Hermes's CLI has no flag for this, so it goes through Hermes's own job update."""
+    try:
+        from cron.jobs import update_job
+
+        if not update_job(job_id, {"enabled_toolsets": toolsets}):
+            raise LifecycleError("Hermes couldn't find that job to update its tools.")
+    except ImportError as exc:
+        raise LifecycleError("This version of Hermes can't limit a job's tools.") from exc
+
+
 def _set_prompt(job_id: str, prompt: str) -> None:
     _edit_job(job_id, "--prompt", prompt)
 
@@ -100,8 +117,9 @@ def prerun_prompt(routine_id: str, original: str) -> str:
         f"{MARKER} {routine_id}] The Script Output block above holds this job's data, collected "
         "just now by a tested Crystallize routine. It is current and complete: do not fetch, "
         "re-check or re-read it with tools, and do not open files it mentions unless their "
-        "content is missing. Write the answer straight from it. Only if the Script Output says "
-        "the routine failed, do the whole task yourself.\n\n"
+        "content is missing. Write the answer straight from it. If it says the data hasn't "
+        "changed, repeat the answer it gives word for word. Only if it says the routine failed, "
+        "do the whole task yourself.\n\n"
         f"Task:\n{original}"
     )
 
@@ -112,6 +130,9 @@ def try_job(job: str) -> dict[str, Any]:
     a = analyze.analyze_job(job)
     if a.job_id is None:
         raise LifecycleError(f"No recorded runs for {job!r}.")
+    found = cron_job(a.job_id) or cron_job(a.job_name or "")
+    if not found or found.get("state") == "completed":
+        raise LifecycleError(f"{a.job_name or job} has finished, so there's nothing left to test.")
     existing = store.routine_for_job(a.job_id)
     if existing and existing["status"] == "live":
         raise LifecycleError(f"{a.job_name} is already live.")
@@ -119,6 +140,8 @@ def try_job(job: str) -> dict[str, Any]:
         routine = steplist.build(a)
     except steplist.NotCrystallizable as exc:
         raise LifecycleError(str(exc)) from exc
+    if analyze.regular_actions(history.load_runs(a.job_name or a.job_id, only_usable=True)):
+        routine["leaves_to_ai"] = True  # the best-run path skips action steps, but the job still takes them
     rid = steplist.routine_id(a.job_id)
     store.save_routine(
         rid, name=a.job_name or a.job_id, source="cron", source_ref=a.job_id, status="testing",
@@ -200,6 +223,17 @@ def test_now(job: str, dispatch: runner.Dispatch) -> dict[str, Any]:
     return record_test(routine, ok, why, "manual")
 
 
+def action_prompt(routine_id: str, original: str) -> str:
+    """Prompt for a job whose routine fetches the data but which still acts on it."""
+    return (
+        f"{MARKER} {routine_id}] The Script Output block above holds the data this job fetches, "
+        "collected just now by a tested Crystallize routine. Don't fetch it again. Use it to do "
+        "the rest of the task, including anything it says to send or change. Only if the Script "
+        "Output says the routine failed, do the whole task yourself.\n\n"
+        f"Task:\n{original}"
+    )
+
+
 def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     """Switch the job over to its routine.
 
@@ -227,10 +261,13 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     original = job.get("prompt") or ""
     if MARKER in original:
         raise LifecycleError("This job's prompt already uses a Crystallize routine.")
-    if job.get("script"):
-        raise LifecycleError("This job already has its own pre-run script, so Crystallize leaves it alone.")
-    script = prerun.write_script(routine_id, routine["name"])
-    flags = ["--prompt", prerun_prompt(routine_id, original), "--script", script]
+    acts = isinstance(routine["steps"], dict) and routine["steps"].get("leaves_to_ai")
+    if mode == "no_ai" and acts:
+        raise LifecycleError("This job sends or changes something, so it needs the AI.")
+    own_script = job.get("script") or None
+    script = prerun.write_script(routine_id, routine["name"], own_script)
+    prompt = action_prompt(routine_id, original) if acts else prerun_prompt(routine_id, original)
+    flags = ["--prompt", prompt, "--script", script]
     if mode == "no_ai":
         flags.append("--no-agent")
     try:
@@ -246,8 +283,7 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     # if the routine was promoted before (re-promoted, or moved to a new mode).
     meta.setdefault("first_promoted_at", meta.get("promoted_at") or now)
     meta.update({"original_prompt": original, "promoted_at": now, "failures": 0, "live_runs": 0,
-                 "baseline_cost": baseline, "mode": mode, "skips": [], "no_ai_runs": [], "last_fingerprint": None,
-                 "skip_unchanged": meta.get("skip_unchanged", True)})
+                 "baseline_cost": baseline, "mode": mode, "own_script": own_script, "skips": [], "no_ai_runs": [], "last_fingerprint": None})
     store.update_routine(routine_id, status="live", meta=meta)
     return store.get_routine(routine_id)
 
@@ -262,7 +298,7 @@ def undo(routine_id: str, reason: str = "you chose Undo") -> dict[str, Any]:
     if routine["status"] == "live" and meta.get("original_prompt") is not None:
         flags = ["--prompt", meta["original_prompt"]]
         if meta.get("mode") in ("prerun", "no_ai"):
-            flags += ["--script", ""]
+            flags += ["--script", meta.get("own_script") or ""]
         if meta.get("mode") == "no_ai":
             flags.append("--agent")
         _edit_job(routine["source_ref"], *flags)
@@ -279,6 +315,8 @@ def set_mode(routine_id: str, mode: str) -> dict[str, Any]:
     if not routine or routine["status"] != "live":
         raise LifecycleError("Only a live routine can change mode.")
     meta = dict(routine.get("meta") or {})
+    if mode == "no_ai" and isinstance(routine["steps"], dict) and routine["steps"].get("leaves_to_ai"):
+        raise LifecycleError("This job sends or changes something, so it needs the AI.")
     current = meta.get("mode") or "tool"
     if current == mode:
         return routine
@@ -291,12 +329,18 @@ def set_mode(routine_id: str, mode: str) -> dict[str, Any]:
     return store.get_routine(routine_id)
 
 
-def set_skip_unchanged(routine_id: str, on: bool) -> None:
+def set_when_unchanged(routine_id: str, choice: str) -> None:
+    """What a run does when its data hasn't changed: "repeat", "quiet", "run", or "auto"."""
+    if choice not in ("auto", "repeat", "quiet", "run"):
+        raise LifecycleError(f"Unknown choice {choice!r}.")
     routine = store.get_routine(routine_id)
     if not routine:
         raise LifecycleError("That routine doesn't exist.")
     meta = dict(routine.get("meta") or {})
-    meta["skip_unchanged"] = bool(on)
+    meta.pop("skip_unchanged", None)
+    meta.pop("when_unchanged", None)
+    if choice != "auto":
+        meta["when_unchanged"] = choice
     store.update_routine(routine_id, meta=meta)
 
 

@@ -341,6 +341,18 @@ def analyze_runs(runs: list[Any], prompt: Optional[str] = None) -> Analysis:
     return base
 
 
+def run_actions(run: Any) -> set[str]:
+    """What a run sent or changed, by tool. Failed attempts don't count."""
+    return {s.tool_name for s in run.steps
+            if _is_side_effect(s.tool_name, s.args) and s.status in (None, "ok", "success")}
+
+
+def regular_actions(runs: list[Any]) -> set[str]:
+    """Actions most of these runs took. One-off actions aren't expected every time."""
+    tools = {t for r in runs for t in run_actions(r)}
+    return {t for t in tools if sum(t in run_actions(r) for r in runs) * 2 > len(runs)}
+
+
 def job_prompt(job_id: Optional[str]) -> Optional[str]:
     """The job's own task text (the original one if a routine has taken over)."""
     if not job_id:

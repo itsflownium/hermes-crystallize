@@ -16,10 +16,11 @@ import logging
 import os
 import sqlite3
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from . import store
+from . import modelinfo, store
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +49,22 @@ class Run:
     cost_usd: Optional[float] = None
     input_tokens: Optional[int] = None
     output_tokens: Optional[int] = None
+    reasoning_tokens: Optional[int] = None
+    cache_read_tokens: Optional[int] = None
+    cache_write_tokens: Optional[int] = None
+    included: bool = False                 # covered by a subscription, so cost_usd is 0
+    api_cost_usd: Optional[float] = None   # for an included run: its cost at API prices
+    session_started: Optional[float] = None
+    finished: bool = False
     api_calls: Optional[int] = None
     duration_s: Optional[float] = None
     model: Optional[str] = None
+
+    @property
+    def total_tokens(self) -> Optional[int]:
+        parts = [self.input_tokens, self.output_tokens, self.cache_read_tokens, self.cache_write_tokens]
+        known = [p for p in parts if p is not None]
+        return sum(known) if known else None
 
     @property
     def usable(self) -> bool:
@@ -115,9 +129,25 @@ def _ledger_outcomes(execution_ids: list[str]) -> dict[str, str]:
         conn.close()
 
 
+def running_job_ids() -> set[str]:
+    """Cron jobs with a run in progress right now, from Hermes's run ledger."""
+    conn = _open_readonly(_hermes_home() / "cron" / "executions.db")
+    if conn is None:
+        return set()
+    try:
+        return {r["job_id"] for r in conn.execute(
+            "SELECT DISTINCT job_id FROM executions WHERE status IN ('claimed', 'running')")}
+    except sqlite3.Error:
+        logger.debug("crystallize: reading running jobs failed", exc_info=True)
+        return set()
+    finally:
+        conn.close()
+
+
 _SESSION_COLS = (
     "estimated_cost_usd", "actual_cost_usd", "input_tokens", "output_tokens",
-    "api_call_count", "started_at", "ended_at", "model",
+    "api_call_count", "started_at", "ended_at", "model", "reasoning_tokens", "cache_read_tokens",
+    "cost_status", "cache_write_tokens", "billing_provider",
 )
 
 
@@ -176,6 +206,31 @@ def _parse_args(text: Optional[str]) -> Any:
         return text  # truncated or non-JSON args stay as text
 
 
+def _apply_session(run: Run, info: Optional[dict[str, Any]]) -> None:
+    """Fill in a run's cost, tokens and timing from its Hermes session."""
+    if not info:
+        return
+    run.cost_usd = info.get("actual_cost_usd") or info.get("estimated_cost_usd")
+    if info.get("cost_status") == "unknown":
+        run.cost_usd = None  # Hermes has no price for it. That isn't the same as free.
+    run.input_tokens = info.get("input_tokens")
+    run.output_tokens = info.get("output_tokens")
+    run.reasoning_tokens = info.get("reasoning_tokens")
+    run.cache_read_tokens = info.get("cache_read_tokens")
+    run.cache_write_tokens = info.get("cache_write_tokens")
+    run.session_started = info.get("started_at")
+    run.finished = bool(info.get("ended_at"))
+    run.included = info.get("cost_status") == "included"
+    if run.included:
+        run.api_cost_usd = modelinfo.api_cost(info.get("model"), info.get("billing_provider"), {
+            "input": run.input_tokens, "output": run.output_tokens, "cache_read": run.cache_read_tokens,
+            "cache_write": run.cache_write_tokens, "reasoning": run.reasoning_tokens})
+    run.api_calls = info.get("api_call_count")
+    run.model = info.get("model")
+    if info.get("started_at") and info.get("ended_at"):
+        run.duration_s = float(info["ended_at"]) - float(info["started_at"])
+
+
 # ---------------------------------------------------------------- public API
 
 def load_runs(job: Optional[str] = None, only_usable: bool = False) -> list[Run]:
@@ -213,19 +268,50 @@ def load_runs(job: Optional[str] = None, only_usable: bool = False) -> list[Run]
     costs = _session_costs([r.session_id for r in ordered if r.session_id])
     for run in ordered:
         run.outcome = outcomes.get(run.execution_id)
-        info = costs.get(run.session_id or "")
-        if info:
-            run.cost_usd = info.get("actual_cost_usd") or info.get("estimated_cost_usd")
-            run.input_tokens = info.get("input_tokens")
-            run.output_tokens = info.get("output_tokens")
-            run.api_calls = info.get("api_call_count")
-            run.model = info.get("model")
-            if info.get("started_at") and info.get("ended_at"):
-                run.duration_s = float(info["ended_at"]) - float(info["started_at"])
+        _apply_session(run, costs.get(run.session_id or ""))
 
     if only_usable:
         ordered = [r for r in ordered if r.usable]
     return ordered
+
+
+def ledger_runs(job_id: Optional[str], limit: int = 20) -> list[Run]:
+    """Finished runs of a job from Hermes's own records, including ones from before
+    Crystallize was recording. They have costs and answers but no step details, so a slow
+    job doesn't have to wait weeks for a trial to have something to compare with."""
+    conn = _open_readonly(_hermes_home() / "cron" / "executions.db")
+    state = _open_readonly(_hermes_home() / "state.db")
+    if conn is None or state is None or not job_id:
+        return []
+    try:
+        rows = conn.execute("SELECT id, started_at, finished_at FROM executions WHERE job_id = ? AND status = 'completed' "
+                            "AND scheduled_instant IS NOT NULL ORDER BY started_at DESC LIMIT ?", (job_id, limit)).fetchall()
+        out: list[Run] = []
+        used: set[str] = set()
+        for row in reversed(rows):
+            try:
+                start = datetime.fromisoformat(row["started_at"]).timestamp()
+                end = datetime.fromisoformat(row["finished_at"]).timestamp()
+            except (TypeError, ValueError):
+                continue
+            match = state.execute("SELECT id FROM sessions WHERE source = 'cron' AND started_at BETWEEN ? AND ? "
+                                  "AND api_call_count > 0 ORDER BY ABS(ended_at - ?) LIMIT 1",
+                                  (start - 5, end + 5, end)).fetchone()
+            if not match or match["id"] in used:
+                continue
+            used.add(match["id"])
+            out.append(Run(execution_id=row["id"], job_id=job_id, job_name=None, session_id=match["id"],
+                           scheduled=True, started_ts=start, outcome="completed"))
+        costs = _session_costs([r.session_id for r in out])
+        for run in out:
+            _apply_session(run, costs.get(run.session_id or ""))
+        return out
+    except sqlite3.Error:
+        logger.debug("crystallize: reading older runs failed", exc_info=True)
+        return []
+    finally:
+        conn.close()
+        state.close()
 
 
 def _avg(values: list[Optional[float]]) -> Optional[float]:

@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 # What crystal_run hands back to Hermes per step. Test comparisons use the full output.
 MAX_OUTPUT_CHARS = 60000
+RETRY_WAIT_S = 2  # pause before trying a failed step again
 
 Dispatch = Callable[[str, dict], str]
 
@@ -50,18 +51,29 @@ def step_failure(result: Any, check: Optional[dict] = None) -> Optional[str]:
     return None
 
 
+def _run_step(step: dict[str, Any], args: Any, dispatch: Dispatch) -> tuple[Optional[Any], Optional[str]]:
+    """One attempt at a step: (result, why it failed or None)."""
+    try:
+        result = dispatch(step["tool"], args if isinstance(args, dict) else {"input": args})
+    except Exception as exc:  # noqa: BLE001 — reported as a failed step
+        return None, f"the tool raised {type(exc).__name__}: {exc}"
+    return result, step_failure(result, step.get("check"))
+
+
 def run(routine: dict[str, Any], dispatch: Dispatch) -> dict[str, Any]:
-    """Run every step in order. Stops at the first step that fails its check."""
+    """Run every step in order. A step that fails is tried once more, because routine
+    steps only read data and one bad fetch shouldn't cost a full AI run. Stops at the
+    first step that fails twice."""
     outputs = []
     for i, step in enumerate(routine.get("steps", []), 1):
         args = steplist.fill(step["args"], step.get("fill_ins") or [])
         started = time.time()
-        try:
-            result = dispatch(step["tool"], args if isinstance(args, dict) else {"input": args})
-        except Exception as exc:  # noqa: BLE001 — reported as a failed step
-            return {"ok": False, "failed_step": i, "tool": step["tool"],
-                    "reason": f"the tool raised {type(exc).__name__}: {exc}", "outputs": outputs}
-        why = step_failure(result, step.get("check"))
+        result, why = _run_step(step, args, dispatch)
+        if why:
+            time.sleep(RETRY_WAIT_S)
+            result, why = _run_step(step, args, dispatch)
+        if result is None:
+            return {"ok": False, "failed_step": i, "tool": step["tool"], "reason": why, "outputs": outputs}
         text = result if isinstance(result, str) else json.dumps(result, default=str)
         outputs.append({"step": i, "tool": step["tool"], "output": text, "started": started, "args": args})
         if why:

@@ -52,6 +52,18 @@ CREATE TABLE IF NOT EXISTS routines (
     created_at  REAL NOT NULL,
     updated_at  REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS cleaned (
+    job_name    TEXT PRIMARY KEY,
+    chars       INTEGER NOT NULL,
+    results     INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tuning (
+    job_name    TEXT PRIMARY KEY,
+    data_json   TEXT NOT NULL,
+    updated_at  REAL NOT NULL
+);
 """
 
 _conn: Optional[sqlite3.Connection] = None
@@ -251,6 +263,41 @@ def set_chat_enabled(session_id: str, enabled: bool) -> None:
             (session_id, 1 if enabled else 0, time.time()),
         )
         conn.commit()
+
+
+def get_tuning(job_name: str) -> Optional[dict[str, Any]]:
+    with _lock:
+        row = _db().execute("SELECT data_json FROM tuning WHERE job_name = ?", (job_name,)).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def list_tuning() -> list[dict[str, Any]]:
+    with _lock:
+        rows = _db().execute("SELECT data_json FROM tuning ORDER BY updated_at DESC").fetchall()
+    return [json.loads(r[0]) for r in rows]
+
+
+def save_tuning(job_name: str, data: dict[str, Any]) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute("INSERT OR REPLACE INTO tuning (job_name, data_json, updated_at) VALUES (?, ?, ?)",
+                     (job_name, json.dumps(data, default=str), time.time()))
+        conn.commit()
+
+
+def add_cleaned(job_name: str, chars: int) -> None:
+    """Note characters removed from a job's tool results, kept apart from its trial state."""
+    with _lock:
+        conn = _db()
+        conn.execute("INSERT INTO cleaned (job_name, chars, results) VALUES (?, ?, 1) ON CONFLICT(job_name) "
+                     "DO UPDATE SET chars = chars + excluded.chars, results = results + 1", (job_name, chars))
+        conn.commit()
+
+
+def get_cleaned(job_name: str) -> int:
+    with _lock:
+        row = _db().execute("SELECT chars FROM cleaned WHERE job_name = ?", (job_name,)).fetchone()
+    return int(row[0]) if row else 0
 
 
 def now() -> float:

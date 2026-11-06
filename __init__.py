@@ -42,6 +42,7 @@ def register(ctx: Any) -> None:
     tools.set_context(ctx)
     ctx.register_hook("post_tool_call", capture.make_post_tool_call(ctx))
     ctx.register_hook("on_session_end", capture.make_on_session_end(ctx))
+    ctx.register_hook("transform_tool_result", capture.make_transform_tool_result(ctx))
 
     def _crystallize_command(raw_args: str = "", *, session_id: str = "", **_: Any) -> str:
         sub = (raw_args or "").strip().split(" ", 1)[0].lower()

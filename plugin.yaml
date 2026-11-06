@@ -1,11 +1,11 @@
 name: crystallize
-version: 0.1.0
+version: 0.2.0
 manifest_version: 2
 api_version: 1
 description: >-
-  Turns Hermes's repeated work into fast, cheap, reliable step lists. Spots routines
-  Hermes keeps redoing, proves a step list matches the original, and only switches
-  over when you approve.
+  Makes Hermes cron jobs cheaper on any cloud model. Trims the tools, AI calls, tool
+  results and reasoning each job pays for, turns repeated work into proven step lists,
+  and keeps a change only if the job's answers hold up and its cost really fell.
 author: itsflownium
 license: MIT
 homepage: https://github.com/itsflownium/hermes-crystallize
@@ -19,6 +19,7 @@ provides_tools:
 provides_hooks:
   - post_tool_call
   - on_session_end
+  - transform_tool_result
 
 config_schema:
   capture_enabled:

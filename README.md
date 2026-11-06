@@ -2,43 +2,74 @@
   <img src="assets/crystallize-logo.svg" alt="Crystallize" width="380">
 </p>
 
-**Hermes learns your routines, proves them, then runs them for almost nothing.**
+**Hermes cron jobs that cost a lot less, on any cloud model, with proof.**
 
-Hermes re-thinks the same steps every time a scheduled job runs: fetch these feeds,
-call this API, check these sites. Crystallize watches those runs, finds the steps that
-never really change, and saves them as a readable **routine**. After the routine has
-matched the real job three runs in a row, one click switches the job over: the
-routine collects the data with no AI reasoning, and Hermes makes one short call to
-write the result. If a routine ever fails, Hermes falls back to the original task, and
-two failures in a row undo the switch automatically.
+A cron job costs roughly **its prompt size × its AI calls, plus reasoning**. Crystallize shows where
+each job's money goes, works on all of it, and keeps a change only if the job's answers hold up and its
+cost really fell. If a change doesn't pay off, the old settings come back by themselves.
 
-## What you get
+It works with every cloud provider in Hermes: API keys, OAuth and subscriptions such as Codex. Levels
+and prices are read from Hermes, so new models and providers work without an update.
 
-- **Recording.** Tool calls in scheduled cron runs, and in chats where you turned Crystallize on.
-- **Analysis.** `hermes crystal analyze <job>` lines up a job's runs and labels each step:
-  - `fixed`: the same every run.
-  - `fill-in`: the same apart from dates, ids or temp paths, which are refreshed each run.
-  - `varies`: same tool, different inputs. Frozen from the latest run, then tested.
-  - `setup`: loads context for the agent (skills, todo lists). Skipped.
-  - `agent`: sends or changes something. Always stays with Hermes.
-- **Proof before switching.** After every scheduled run, the routine's steps run too
-  (tool calls only, no AI) and their outputs are compared with what the real run got.
-  It needs three matches in a row before it can be promoted.
-- **Promote and Undo.** Promote gives the job a pre-run script (Hermes's own cron `script`
-  field). The routine runs before the AI starts and its data goes straight into the prompt,
-  so the AI only writes the answer. Undo restores the original prompt exactly and removes
-  the script.
-- **Skip when nothing changed.** If a live job's data is the same as last time (timings
-  and timestamps aside), the AI is skipped and the run costs nothing. `hermes crystal skip
-  <job> off` turns this off.
-- **No-AI mode.** When a job's answers are just its data restated (a status check, for
-  example), Crystallize offers to run it with no AI at all: `hermes crystal mode <job> no-ai`.
-- **Fair numbers.** Before and after are medians, so one odd run can't hide the trend.
-- **Chat analysis.** For any chat, see what it cost, how many tool calls it made, exact
-  repeated steps, and patterns (the same kind of step many times in a row).
-- **Desktop panel.** A Crystallize button in the top bar and the status bar (or ⌘K →
-  "Crystallize: Open savings panel") opens a panel beside the chat with the chat's
-  analysis, a savings score, and Spotted / Testing / Live / Watching jobs.
+### Measured on real cron jobs
+
+The same feed-digest job per model, comparing its first 2 normal runs with its latest runs on full savings
+(1–2 runs each so far, so treat these as early numbers). Codex runs are included in the plan, so their cost
+is shown at API prices.
+
+| Model | Route | AI calls | Tokens | Time | Cost per run | Saved |
+|---|---|---|---|---|---|---|
+| DeepSeek V4.1 Flash | Nous Portal | 6.5 → 1 | 359k → 11k | 364s → 9s | $0.0247 → $0.0010 | **96%** |
+| GPT-6 Sol | Codex OAuth | 8 → 1 | 275k → 12k | 109s → 12s | $0.2418 → $0.0230 | **90%** |
+| GLM 5.3 Flash | Nous Portal | 4.5 → 1 | 90k → 6k | 79s → 16s | $0.0073 → $0.0008 | **89%** |
+| GPT-6 Luna | Codex OAuth | 5 → 1 | 141k → 11k | 107s → 12s | $0.0073 → $0.0012 | **84%** |
+| Kimi K3 | Nous Portal | 3 → 1 | 54k → 9k | 47s → 10s | $0.0408 → $0.0118 | **71%** |
+
+Savings vary by job and model, and these are the only models that have run the full trial. If a job doesn't
+get cheaper on yours, it goes back to its old settings by itself.
+
+## The savings ladder
+
+Each job uses every step it can, from the biggest saving down. The panel shows each job's ladder.
+
+| Step | What it does | Works on |
+|---|---|---|
+| **No AI at all** | The routine's output is the result, at $0 | Status-style jobs |
+| **Nothing changed** | Stays quiet at $0, or one short call repeats the last answer if someone expects a message | Jobs with a routine |
+| **Fetch before the AI starts** | A tested routine collects the data, so the AI often needs one call | Jobs with stable steps |
+| **Fewer AI calls** | A short instruction to use only the tools the task needs, once each | Any AI job |
+| **Cleaned tool results** | Removes markup and API link fields before the AI reads them, so no later call pays for them. Uses no AI and never touches file contents or errors | Any job using web or shell tools |
+| **New items only** | Sends what changed, plus the last answer to update | Live routines |
+| **Only the tools it uses** | Starts with the toolsets its cheapest good run used, for a smaller prompt on every call | Any AI job |
+| **Lower reasoning** | The weakest level the job's model takes, as reported by Hermes | Models with reasoning settings |
+
+## How it decides
+
+1. **Measure.** Real cost per run. A subscription run costs $0, so it's compared at its API price, from its tokens and Hermes's price list.
+2. **Trial.** Click **Make cheaper** (or **Make all jobs cheaper**), or run `hermes crystal tune <job>`. Earlier runs from Hermes's own records count, so a slow job doesn't wait weeks to start.
+3. **Check.** After 2 answers: did any run fail, did it stop an action it normally takes, are answers much shorter or missing items or links, and did the cost really fall? Close results get more runs.
+4. **Keep or adjust.** If answers suffer, tools and then reasoning come back a step at a time. If nothing works, or it wasn't cheaper, the old settings return. Your global settings never change.
+
+**What the checks can't catch:** subtle mistakes in an answer, or an action or tool a job only uses now and
+then. `hermes crystal tune <job> --status` shows an answer from before and after to read yourself.
+
+## Routines
+
+`hermes crystal analyze <job>` lines up a job's runs and labels each step: `fixed`, `fill-in` (dates, ids and
+temp paths are refreshed each run), `varies`, `setup` (skipped) or `agent` (always stays with the AI).
+After a routine matches real runs three times in a row, one click promotes it. Hermes's cron `script` field
+then runs it before the AI starts. If it fails, Hermes does the whole task itself, and two failures in a row
+undo the switch.
+
+- **Jobs that act.** A routine only fetches data that comes before a job's first action. The AI still sends or changes what the job is meant to.
+- **Jobs with their own script.** Your script still runs first, can still stop the run, and its output stays in the prompt.
+
+## The panel
+
+A Crystallize button in the top bar and the status bar (or ⌘K → "Crystallize: Open savings panel") opens a
+panel beside the chat. It updates from your real cron jobs: running jobs first, with their schedule, model,
+reasoning and tools; a cost graph for each job; time ranges that appear only when they have data; and
+finished jobs collapsed with their full history. Totals keep real money and plan API prices apart.
 
 ## Install
 
@@ -53,6 +84,10 @@ switch. Works on macOS, Windows and Linux. Requires Hermes 0.22.7 or newer.
 ## Use it
 
 ```bash
+hermes crystal tune                    # every AI job: reasoning share, cost, API price, tokens
+hermes crystal tune morning-brief      # make this job cheaper (or --all for every job)
+hermes crystal tune morning-brief --status   # the result, with an answer from before and after
+hermes crystal tune morning-brief --undo     # put its old settings back
 hermes crystal history                 # every cron job: runs, cost, time
 hermes crystal analyze morning-brief   # which steps repeat
 hermes crystal try morning-brief       # save the routine and start testing it
@@ -60,7 +95,7 @@ hermes crystal test morning-brief      # run one test now
 hermes crystal show morning-brief      # test results so far
 hermes crystal promote morning-brief   # switch over (after 3 matching tests)
 hermes crystal mode site-check no-ai   # a status check that needs no AI
-hermes crystal skip morning-brief off  # run the AI even when nothing changed
+hermes crystal skip morning-brief repeat   # when nothing changed: repeat, quiet, off or auto
 hermes crystal undo morning-brief      # put the original prompt back
 ```
 
@@ -68,7 +103,7 @@ Crystallize is **off for each chat until you turn it on.** Click **◆ Crystalli
 it puts `/crystallize on` in the box, and nothing changes until you press Enter. Click it again
 for `/crystallize off`. While a chat is on, its tool calls are recorded and the panel analyses it.
 Scheduled cron runs are always recorded. `/crystallize status` works in any chat, including
-Telegram and Discord. The Try / Promote / Undo actions are in the panel.
+Telegram and Discord. The Make cheaper, Try, Promote and Undo actions are in the panel.
 
 ## How a routine runs
 
@@ -94,11 +129,16 @@ source gets a fair share of the space, so no feed is dropped because another was
   tested, its routine's steps run once more through Hermes's tool registry. Routines
   never contain steps that send or change things (messages, file writes, `git push`,
   POST requests), and any step that needed approval stays with Hermes.
-- **Edits cron jobs** only when you Promote, change mode or Undo, using `hermes cron edit`
-  (prompt, `script`, and no-agent mode). Automatic undo after two failed runs also restores
-  the original prompt.
-- **Writes one small script per live job** in `<hermes home>/scripts/crystallize/`. It only
-  runs `hermes crystal prerun <routine>`, and Undo deletes it.
+- **Edits cron jobs** only when you Make cheaper, Promote, change mode or Undo: prompt, `script`,
+  no-agent mode and reasoning through `hermes cron edit`, and toolsets through Hermes's job update.
+  A trial that doesn't pass, and automatic undo after two failed runs, restore the earlier settings.
+- **Changes tool results for jobs on cheaper settings.** Web and shell results are cleaned before
+  the AI reads them (markup, whitespace and API link fields). File contents, errors and small results are untouched.
+- **Writes one small script per live job** in `<hermes home>/scripts/crystallize/`. It runs the
+  job's own pre-run script if it has one, then `hermes crystal prerun <routine>`. Undo deletes it.
+- **Uses some Hermes internals** for prices, reasoning levels and toolsets, which public plugin
+  APIs don't cover yet. Each falls back safely if a Hermes update moves it.
+- **Local models aren't a focus yet.** Crystallize is built and tested for cloud providers.
 - **No network calls of its own, no telemetry, no credentials.**
 
 ## Develop

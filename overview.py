@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import statistics
+import time
 from typing import Any, Optional
 
-from . import analyze, chat, history, store
+from . import analyze, chat, history, lifecycle, prerun, store, tuning
 
 WEEK_S = 7 * 24 * 3600
 
@@ -16,6 +17,47 @@ def _runs_per_week(runs: list[history.Run]) -> Optional[float]:
     if not gaps:
         return None
     return WEEK_S / statistics.median(gaps)
+
+
+def cron_state(job: Optional[dict[str, Any]], running: set[str]) -> dict[str, Any]:
+    """What a cron job is doing right now, as Hermes has it. The panel shows only this."""
+    if not job:
+        return {"status": "finished", "gone": True}
+    repeat = job.get("repeat") if isinstance(job.get("repeat"), dict) else {}
+    if job.get("state") == "completed":
+        status = "finished"
+    elif job.get("id") in running:
+        status = "running"
+    elif job.get("state") == "paused" or job.get("enabled") is False:
+        status = "paused"
+    else:
+        status = "scheduled"
+    return {
+        "status": status,
+        "schedule": job.get("schedule_display"),
+        "next_run_at": job.get("next_run_at"),
+        "last_run_at": job.get("last_run_at"),
+        "last_error": job.get("last_error") if job.get("last_status") == "error" else None,
+        "runs_done": repeat.get("completed"),
+        "runs_total": repeat.get("times"),
+        "no_ai": bool(job.get("no_agent")),
+        "settings": tuning.job_settings(job),
+    }
+
+
+def _schedule_runs_per_week(job: Optional[dict[str, Any]]) -> Optional[float]:
+    """Runs a week from the job's own schedule, when it's a plain interval."""
+    schedule = (job or {}).get("schedule")
+    minutes = schedule.get("minutes") if isinstance(schedule, dict) else None
+    return WEEK_S / (float(minutes) * 60) if minutes else None
+
+
+def _capped_per_week(per_week: Optional[float], cron: dict[str, Any]) -> Optional[float]:
+    """A job limited to a few more runs can't keep saving at its weekly rate."""
+    if per_week is None or cron.get("status") == "finished":
+        return None if per_week is None else 0.0
+    total, done = cron.get("runs_total"), cron.get("runs_done") or 0
+    return min(per_week, max(0, total - done)) if total else per_week
 
 
 def _stats(runs: list[history.Run]) -> dict[str, Optional[float]]:
@@ -30,6 +72,8 @@ def _stats(runs: list[history.Run]) -> dict[str, Optional[float]]:
         "tool_calls": mid([len(r.steps) for r in runs]),
         "ai_calls": mid([r.api_calls for r in runs]),
         "skipped": sum(1 for r in runs if r.model == SKIPPED),
+        "api_cost_usd": mid([r.api_cost_usd for r in runs]),
+        "tokens": mid([r.total_tokens for r in runs]),
     }
 
 
@@ -55,12 +99,121 @@ def _live_runs(name: str, meta: dict[str, Any]) -> list[history.Run]:
     return sorted(ran + _skipped_runs(meta, name), key=lambda r: r.started_ts)
 
 
+_WINDOWS = (("24h", "24 hours", 86400), ("7d", "7 days", 7 * 86400), ("30d", "30 days", 30 * 86400), ("all", "All time", None))
+
+
+def period_rows(runs: list[history.Run], baseline: Optional[float] = None,
+                after: Optional[list[history.Run]] = None, now: Optional[float] = None) -> list[dict[str, Any]]:
+    """Totals for each time range. A figure with nothing behind it stays None, so the
+    panel leaves it out. Savings only count runs after Promote, in real money."""
+    now = time.time() if now is None else now
+    after_ids = {id(r) for r in after or []}
+    rows = []
+    for key, label, span in _WINDOWS:
+        since = now - span if span else None
+        inside = [r for r in runs if since is None or r.started_ts >= since]
+        costs = [r.cost_usd for r in inside if r.cost_usd is not None]
+        apis = [r.api_cost_usd for r in inside if r.api_cost_usd is not None]
+        tokens = [r.total_tokens for r in inside if r.total_tokens]
+        times = [r.duration_s for r in inside if r.duration_s]
+        free = sum(1 for r in inside if r.model in (SKIPPED, NO_AI))
+        saved = _saved_since([r for r in inside if id(r) in after_ids], baseline) if baseline is not None else None
+        rows.append({
+            "key": key, "label": label, "since": since, "runs": len(inside),
+            "spent_usd": sum(costs) if costs else None,
+            "api_cost_usd": sum(apis) if apis else None,
+            "tokens": sum(tokens) if tokens else None,
+            "seconds": statistics.median(times) if times else None,
+            "free_runs": free or None,
+            "saved_usd": saved if saved else None,
+        })
+    return rows
+
+
+def visible_periods(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A longer range only appears if it adds runs. A job that has only run today has no
+    "7 days" of data to show."""
+    shown: list[dict[str, Any]] = []
+    for row in rows:
+        if row["runs"] > (shown[-1]["runs"] if shown else 0):
+            shown.append(row)
+    return shown
+
+
+def total_periods(all_rows: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    """Every job's ranges added together."""
+    totals = []
+    for i, (key, label, _) in enumerate(_WINDOWS):
+        rows = [r[i] for r in all_rows]
+
+        def add(field: str) -> Optional[float]:
+            values = [x[field] for x in rows if x[field] is not None]
+            return sum(values) if values else None
+        totals.append({"key": key, "label": label, "since": rows[0]["since"] if rows else None,
+                       "runs": sum(x["runs"] for x in rows), "spent_usd": add("spent_usd"),
+                       "api_cost_usd": add("api_cost_usd"), "tokens": add("tokens"), "seconds": None,
+                       "free_runs": add("free_runs"), "saved_usd": add("saved_usd")})
+    return totals
+
+
+def cost_parts(runs: list[history.Run], prices: Optional[dict[str, float]]) -> Optional[dict[str, float]]:
+    """Where a job's money goes, as shares: prompt and data, thinking, the written answer."""
+    if not prices or not runs:
+        return None
+    prompt = thinking = answer = 0.0
+    for r in runs:
+        prompt += ((r.input_tokens or 0) * prices["input"] + (r.cache_read_tokens or 0) * prices["cache_read"]
+                   + (r.cache_write_tokens or 0) * prices["cache_write"])
+        think = r.reasoning_tokens or 0
+        thinking += think * prices["output"]
+        answer += max(0, (r.output_tokens or 0) - think) * prices["output"]
+    total = prompt + thinking + answer
+    if total <= 0:
+        return None
+    return {"prompt": prompt / total, "thinking": thinking / total, "answer": answer / total}
+
+
+def ladder(routine: Optional[dict[str, Any]], tune: Optional[dict[str, Any]], card: dict[str, Any], *,
+           routine_possible: bool, can_tune: bool) -> list[dict[str, str]]:
+    """Every way a job can save, biggest first, and where it stands on each.
+    A state is "on", "trying", "available" or "n/a"."""
+    status = (routine or {}).get("status")
+    meta = (routine or {}).get("meta") or {}
+    live = status == "live"
+    acts = isinstance((routine or {}).get("steps"), dict) and routine["steps"].get("leaves_to_ai")
+    tuning_state = (tune or {}).get("status")
+
+    def from_tune(flag: bool) -> str:
+        if flag and tuning_state == "kept":
+            return "on"
+        if flag and tuning_state == "trial":
+            return "trying"
+        return "available" if can_tune else "n/a"
+
+    mode = meta.get("mode")
+    no_ai = "on" if live and mode == "no_ai" else "available" if live and card.get("no_ai_fit") else "n/a"
+    fetch = ("on" if live else "trying" if status == "testing" else "available" if routine_possible else "n/a")
+    unchanged = "on" if live and not acts and card.get("when_unchanged") in ("quiet", "repeat") else "available" if routine_possible and not acts and not live else "n/a"
+    new_only = from_tune(bool((tune or {}).get("new_only"))) if live and not acts and mode != "no_ai" else "n/a"
+    t = tune or {}
+    return [
+        {"key": "no_ai", "label": "No AI at all", "state": no_ai},
+        {"key": "unchanged", "label": "Nothing changed: no full AI run", "state": unchanged},
+        {"key": "fetch", "label": "Fetch data before the AI starts", "state": fetch},
+        {"key": "calls", "label": "Fewer AI calls", "state": from_tune(bool(t.get("hint")))},
+        {"key": "clean", "label": "Cleaned tool results", "state": from_tune(bool(t.get("clean")))},
+        {"key": "new", "label": "New items only", "state": new_only},
+        {"key": "tools", "label": "Only the tools it uses", "state": from_tune(t.get("toolsets") is not None)},
+        {"key": "reasoning", "label": "Lower reasoning", "state": from_tune(bool(t.get("level")))},
+    ]
+
+
 def _before_after(before: list[history.Run], after: Optional[list[history.Run]]) -> dict[str, Any]:
     """Measured numbers: runs before Promote vs runs after it."""
     return {"before": _stats(before), "after": _stats(after) if after is not None else None}
 
 
-def _timeline(before: list[history.Run], after: list[history.Run], limit: int = 16) -> list[dict[str, Any]]:
+def _timeline(before: list[history.Run], after: list[history.Run], limit: int = 48) -> list[dict[str, Any]]:
     rows = [(r, False) for r in before] + [(r, True) for r in after]
     return [{
         "cost_usd": r.cost_usd,
@@ -71,6 +224,8 @@ def _timeline(before: list[history.Run], after: list[history.Run], limit: int = 
         "seconds": r.duration_s,
         "tool_calls": len(r.steps),
         "ai_calls": r.api_calls,
+        "api_cost_usd": r.api_cost_usd,
+        "tokens": r.total_tokens,
     } for r, is_after in rows[-limit:]]
 
 
@@ -78,7 +233,7 @@ def _saved_since(after: list[history.Run], baseline: Optional[float]) -> float:
     """Money saved since Promote: what each run would have cost minus what it did."""
     if baseline is None:
         return 0.0
-    return sum(max(0.0, baseline - (r.cost_usd or 0.0)) for r in after)
+    return sum(max(0.0, baseline - r.cost_usd) for r in after if r.cost_usd is not None)
 
 
 def _chat_spent(session_id: Optional[str]) -> Optional[float]:
@@ -90,13 +245,24 @@ def _chat_spent(session_id: Optional[str]) -> Optional[float]:
     return info.get("actual_cost_usd") or info.get("estimated_cost_usd")
 
 
+def routine_full(row: dict[str, Any]) -> dict[str, Any]:
+    return store.get_routine(row["id"]) or row
+
+
 def build(session_id: Optional[str] = None) -> dict[str, Any]:
+    tuning.refresh()
     routines: dict[str, Any] = {}
     for r in store.list_routines():
         if r["source"] == "cron":
             routines[r["source_ref"]] = r
             routines.setdefault(f"name:{r['name']}", r)  # a re-created job keeps its routine
-    spotted, testing, live, watching = [], [], [], []
+    jobs = {j.get("name") or j.get("id"): j for j in lifecycle.all_cron_jobs()}
+    running = history.running_job_ids()
+    spotted, testing, live, watching, finished = [], [], [], [], []
+    all_rows: list[list[dict[str, Any]]] = []
+    saved_api = 0.0
+    api_week = 0.0
+    seen: set[str] = set()
     could_save_week = 0.0
     saved = 0.0
     # Score: how much of the repeatable work is already handled by routines,
@@ -106,9 +272,14 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
 
     for summary in history.job_summaries():
         job_id = summary["job_id"]
+        name = summary["job_name"] or job_id
+        seen.add(name)
+        job = jobs.get(name)
+        cron = cron_state(job, running)
+        active = cron["status"] != "finished"
         runs = history.load_runs(summary["job_name"] or job_id, only_usable=True)
         a = analyze.analyze_runs(runs, analyze.job_prompt(job_id))
-        per_week = _runs_per_week(runs)
+        per_week = _capped_per_week(_schedule_runs_per_week(job) or _runs_per_week(runs), cron)
         per_run_saving = None
         if a.avg_cost_usd is not None and a.est_cost_after_usd is not None:
             per_run_saving = max(0.0, a.avg_cost_usd - a.est_cost_after_usd)
@@ -116,6 +287,7 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         fetch_steps = sum(1 for s in a.steps if s.kind in ("fixed", "fill-in", "varies", "frozen"))
         card = {
             "fetch_steps": fetch_steps,
+            "cron": cron,
             "strategy": a.strategy,
             "job_id": job_id,
             "name": summary["job_name"] or job_id,
@@ -139,16 +311,54 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         after = _live_runs(summary["job_name"] or job_id, meta) if is_live else None
         card.update(_before_after(before, after))
         card["timeline"] = _timeline(before, after or [])
+        tune = store.get_tuning(name)
+        tuned = tuning.measured(name, tune) if tune and not is_live else None
+        tuned_saving = 0.0
+        tuned_runs = None
+        if tuned:
+            tuned_runs = tuned.pop("run_list")
+            tuned_saving = tuned["saved"] or 0.0
+            rate = max(0.0, tuned["before"] - tuned["after"])
+            tuned["per_week"] = rate * per_week if per_week is not None and tuned["metric"] in ("cost", "api cost") else None
+            card["tuned"] = tuned
+            if tuned["metric"] == "api cost":
+                saved_api += tuned_saving
+                api_week += tuned["per_week"] or 0.0
+            else:
+                saved += tuned_saving
+        promoted = (promoted_at or 0)
+        earlier = [r for r in history.load_runs(name)
+                   if r.scheduled and r.finished and not (is_live and r.started_ts >= promoted)]
+        everything = earlier + (after or [])
+        if tuned and tuned["metric"] == "cost":
+            tuned_ids = {r.execution_id for r in tuned_runs}
+            rows = period_rows(everything, tuned["before"], [r for r in everything if r.execution_id in tuned_ids])
+        else:
+            rows = period_rows(everything, (card["before"].get("cost_usd") or meta.get("baseline_cost")) if is_live else None, after)
+        all_rows.append(rows)
+        card["periods"] = visible_periods(rows)
         if is_live:
             card["mode"] = meta.get("mode") or "tool"
-            card["skip_unchanged"] = meta.get("skip_unchanged", True)
+            card["when_unchanged"] = prerun.unchanged_action(routine_full(routine))
             fit, why = analyze.no_ai_fit(before)
             card["no_ai_fit"], card["no_ai_why"] = fit, why
-        weight = a.avg_cost_usd or 0.0
+        weight = a.avg_cost_usd or max([r.api_cost_usd or 0.0 for r in runs[-8:]] or [0.0]) or 1e-6
+        if active and tuned and not is_live:
+            score_weight += weight
+            score_done += weight * (1.0 if tune["status"] == "kept" else 0.5)
+        elif active and not routine:
+            score_weight += weight
         week_saving = per_run_saving * per_week if per_run_saving is not None and per_week is not None else 0.0
         card["saving_per_week"] = week_saving
         card["runs_per_week"] = per_week
-        if routine and routine["status"] == "live":
+        if not active:  # nothing it can do now, so no promises and no buttons: only what it saved
+            job_saved = 0.0
+            if is_live:
+                job_saved = _saved_since(after or [], card["before"].get("cost_usd") or meta.get("baseline_cost"))
+                saved += job_saved
+            card["saving_per_week"] = 0.0
+            finished.append({**card, "saved_usd": job_saved + tuned_saving, "was_live": is_live or bool(tuned)})
+        elif routine and routine["status"] == "live":
             score_weight += weight
             score_done += weight
             job_saved = _saved_since(after or [], card["before"].get("cost_usd") or meta.get("baseline_cost"))
@@ -156,6 +366,10 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
             b, af = card["before"], card["after"]
             if b and af and b.get("cost_usd") is not None and af.get("cost_usd") is not None and per_week:
                 card["saving_per_week"] = max(0.0, b["cost_usd"] - af["cost_usd"]) * per_week
+            free_share = (af or {}).get("skipped", 0) / af["runs"] if af and af.get("runs") else 0.0
+            if af and af.get("runs", 0) >= 4 and free_share >= 0.5:
+                card["schedule_hint"] = (f"Nothing changed on {af['skipped']} of its last {af['runs']} runs, "
+                                         "so it could run less often.")
             live.append({**card, "routine_id": routine["id"], "saved_usd": job_saved,
                          "live_runs": meta.get("live_runs", 0), "failures": meta.get("failures", 0)})
         elif routine and routine["status"] == "testing":
@@ -169,14 +383,36 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
                             "last_test": tests[-1] if tests else None})
         elif a.ready:
             spotted.append(card)
-            score_weight += weight
             could_save_week += week_saving
         else:
-            watching.append(card)
+            watching.append({**card, "reason": f"Routine: {a.reason}"})
+
+    for name, job in jobs.items():  # scheduled, but no runs recorded yet
+        if name in seen or job.get("state") == "completed":
+            continue
+        cron = cron_state(job, running)
+        watching.append({"job_id": job.get("id"), "name": name, "cron": cron, "reason": (
+            "Runs with no AI, so there's nothing to save." if cron["no_ai"] else "Waiting for its first runs.")})
 
     score = round(100 * score_done / score_weight) if score_weight > 0 else None
 
+    quick = tuning.cards()
+    tune_by_name = {c["name"]: c for c in quick}
+    routine_rows = {r["name"]: store.get_routine(r["id"]) for r in store.list_routines()
+                    if r["source"] == "cron" and r["status"] != "retired"}
+    for card in spotted + testing + live + watching:
+        name = card["name"]
+        card["tune"] = tune_by_name.get(name)
+        job = jobs.get(name) or {}
+        route = tuning.modelinfo.route(job)
+        recent = [r for r in history.load_runs(name) if r.scheduled and r.finished][-8:]
+        card["cost_parts"] = cost_parts(recent, tuning.modelinfo.token_prices(route.get("model"), route.get("provider")))
+        card["ladder"] = ladder(routine_rows.get(name), store.get_tuning(name), card,
+                                routine_possible=card in spotted, can_tune=bool((card["tune"] or {}).get("can_try")))
+
     live_week = sum(x.get("saving_per_week") or 0.0 for x in live)
+    live_week += sum((c.get("tuned") or {}).get("per_week") or 0.0
+                     for c in spotted + testing + watching if (c.get("tuned") or {}).get("metric") == "cost")
     return {
         "live_saving_usd_per_week": live_week,
         "session_id": session_id,
@@ -185,9 +421,15 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         "chat_spent_usd": _chat_spent(session_id),
         "score": score,
         "saved_usd": saved,
+        "saved_api_usd": saved_api or None,
+        "api_saving_usd_per_week": api_week or None,
         "could_save_usd_per_week": could_save_week,
         "spotted": spotted,
         "testing": testing,
         "live": live,
         "watching": watching,
+        "finished": finished,
+        "quick": quick,
+        "trial_runs": tuning.TRIAL_RUNS,
+        "periods": visible_periods(total_periods(all_rows)) if all_rows else [],
     }

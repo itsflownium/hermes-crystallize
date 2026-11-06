@@ -1,6 +1,8 @@
 """The pre-run step: cleaning data, spotting unchanged runs, and the no-AI check."""
 
 import json
+import subprocess
+import sys
 import time
 
 from crystallize import analyze, history, lifecycle, prerun, store
@@ -84,8 +86,8 @@ def _routine(meta=None):
                                  "check": {"min_len": 1}}]}}
 
 
-def test_unchanged_data_skips_the_ai(monkeypatch):
-    saved = _fake_store(monkeypatch, _routine())
+def test_unchanged_data_can_stay_quiet(monkeypatch):
+    saved = _fake_store(monkeypatch, _routine({"when_unchanged": "quiet"}))
     dispatch = lambda name, args: json.dumps({"output": "https://a.com HTTP 200 120 ms", "exit_code": 0})
     text, code = prerun.run("cr_1", dispatch)
     assert code == 0 and "HTTP 200" in text and prerun.SKIP_GATE not in text
@@ -94,8 +96,59 @@ def test_unchanged_data_skips_the_ai(monkeypatch):
     assert len(saved["r"]["meta"]["skips"]) == 1
 
 
+def test_unchanged_data_repeats_the_last_answer(monkeypatch):
+    saved = _fake_store(monkeypatch, _routine({"when_unchanged": "repeat"}))
+    monkeypatch.setattr(prerun, "_recent_answers", lambda name: ["old", "All sites are up."])
+    dispatch = lambda name, args: json.dumps({"output": "same data", "exit_code": 0})
+    prerun.run("cr_1", dispatch)
+    text, _ = prerun.run("cr_1", dispatch)
+    assert "All sites are up." in text and "same data" not in text and prerun.SKIP_GATE not in text
+    assert not saved["r"]["meta"].get("skips")
+
+
+def test_repeat_stays_quiet_if_the_last_answer_was_silent(monkeypatch):
+    _fake_store(monkeypatch, _routine({"when_unchanged": "repeat"}))
+    monkeypatch.setattr(prerun, "_recent_answers", lambda name: ["[SILENT]"])
+    dispatch = lambda name, args: json.dumps({"output": "same data", "exit_code": 0})
+    prerun.run("cr_1", dispatch)
+    assert prerun.SKIP_GATE in prerun.run("cr_1", dispatch)[0]
+
+
+def test_repeat_falls_back_to_the_data_with_no_last_answer(monkeypatch):
+    _fake_store(monkeypatch, _routine({"when_unchanged": "repeat"}))
+    monkeypatch.setattr(prerun, "_recent_answers", lambda name: [])
+    dispatch = lambda name, args: json.dumps({"output": "same data", "exit_code": 0})
+    prerun.run("cr_1", dispatch)
+    assert "same data" in prerun.run("cr_1", dispatch)[0]
+
+
+def test_no_ai_job_still_delivers_unchanged_data(monkeypatch):
+    _fake_store(monkeypatch, _routine({"mode": "no_ai"}))
+    dispatch = lambda name, args: json.dumps({"output": "a.com HTTP 200", "exit_code": 0})
+    prerun.run("cr_1", dispatch)
+    text, _ = prerun.run("cr_1", dispatch)
+    assert "HTTP 200" in text and prerun.SKIP_GATE not in text
+
+
+def _job(monkeypatch, job):
+    monkeypatch.setattr(lifecycle, "cron_job", lambda ref: job)
+
+
+def test_default_is_quiet_only_when_no_one_is_waiting(monkeypatch):
+    routine = _routine()
+    monkeypatch.setattr(prerun, "_recent_answers", lambda name: ["An answer"])
+    _job(monkeypatch, {"deliver": "local"})
+    assert prerun.unchanged_action(routine) == "quiet"
+    _job(monkeypatch, {"deliver": "telegram"})
+    assert prerun.unchanged_action(routine) == "repeat"
+    monkeypatch.setattr(prerun, "_recent_answers", lambda name: ["[SILENT]", "An answer"])
+    assert prerun.unchanged_action(routine) == "quiet"
+    assert prerun.unchanged_action(_routine({"skip_unchanged": False})) == "run"
+    assert prerun.unchanged_action(_routine({"when_unchanged": "repeat"})) == "repeat"
+
+
 def test_skip_can_be_turned_off(monkeypatch):
-    _fake_store(monkeypatch, _routine({"skip_unchanged": False}))
+    _fake_store(monkeypatch, _routine({"when_unchanged": "run"}))
     dispatch = lambda name, args: json.dumps({"output": "same data", "exit_code": 0})
     prerun.run("cr_1", dispatch)
     text, _ = prerun.run("cr_1", dispatch)
@@ -151,3 +204,93 @@ def test_promote_attaches_the_script_and_undo_removes_it(monkeypatch, tmp_path):
     _, flags = edits[-1]
     assert flags[:2] == ("--prompt", "Check the sites.") and flags[2:4] == ("--script", "")
     assert not (tmp_path / "cr_1.py").exists()
+
+
+def test_script_uses_the_python_hermes_started_it_on(monkeypatch, tmp_path):
+    monkeypatch.setattr(prerun, "scripts_dir", lambda: tmp_path)
+    prerun.write_script("cr_1", "job")
+    body = (tmp_path / "cr_1.py").read_text()
+    assert "sys.executable" in body and '"crystal", "prerun", "cr_1"' in body
+    compile(body, "cr_1.py", "exec")
+
+
+def test_clean_result_keeps_the_shape_and_shrinks():
+    page = "# Title\n\n\n" + "\\[item\\]   with   spaces\n\n" * 200
+    out = prerun.clean_result("web_extract", json.dumps({"results": [{"url": "https://e.com", "title": "T", "content": page}]}))
+    data = json.loads(out)
+    assert data["results"][0]["url"] == "https://e.com" and len(out) < len(page)
+    assert "[item] with spaces" in data["results"][0]["content"]
+
+
+def test_clean_result_keeps_long_text_whole():
+    body = "word " * 300
+    links = {f"{k}_url": "https://api.github.com/repos/a/b/issues/1/" + k for k in ("labels", "comments", "events", "timeline")}
+    issue = [{"title": "Bug", "body": body, "html_url": "https://g/1", "node_id": "x", **links}] * 3
+    data = json.loads(prerun.clean_result("terminal", json.dumps({"output": json.dumps(issue), "exit_code": 0})))
+    line = json.loads(data["output"].splitlines()[0])
+    assert line["body"].strip() == body.strip() and line["html_url"] and "node_id" not in line
+    assert data["exit_code"] == 0
+
+
+def test_clean_result_leaves_alone_what_it_should():
+    big = "x y " * 1000
+    assert prerun.clean_result("read_file", big) is None                     # files stay exact
+    assert prerun.clean_result("terminal", "short") is None                  # too small to matter
+    assert prerun.clean_result("terminal", json.dumps({"error": big})) is None  # errors stay exact
+    assert prerun.clean_result("terminal", big) is None                      # nothing to remove
+    assert prerun.clean_result("terminal", None) is None
+
+
+def test_new_only_sends_changes_and_the_last_answer():
+    old = "\n".join(f"item {i}" for i in range(10))
+    seen = set(prerun._line_hashes(old))
+    text = prerun._new_only_text(old + "\nbrand new thing", seen, "My answer")
+    assert "brand new thing" in text and "My answer" in text and "item 3" not in text
+    assert prerun._new_only_text(old, set(), "My answer") is None            # nothing to compare with
+    assert prerun._new_only_text("all\ndifferent", seen, "My answer") is None  # mostly new: send it all
+    assert prerun._new_only_text(old + "\nnew", seen, "") is None            # nothing to update
+
+
+def test_a_job_that_acts_always_runs(monkeypatch):
+    routine = _routine({"when_unchanged": "quiet"})
+    routine["steps"]["leaves_to_ai"] = True
+    assert prerun.unchanged_action(routine) == "run"
+
+
+def _run_script(path, cwd):
+    # hermes_cli isn't importable here, so the routine call itself fails: that's expected.
+    return subprocess.run([sys.executable, str(path)], capture_output=True, text=True, cwd=cwd)
+
+
+def test_script_runs_for_a_job_with_no_script_of_its_own(monkeypatch, tmp_path):
+    d = tmp_path / "crystallize"
+    monkeypatch.setattr(prerun, "scripts_dir", lambda: d)
+    prerun.write_script("cr_1", "job")
+    out = _run_script(d / "cr_1.py", tmp_path)
+    assert "NameError" not in out.stderr and "SyntaxError" not in out.stderr and "OWN_SCRIPT = None" in (d / "cr_1.py").read_text()
+
+
+def test_own_script_output_comes_first(monkeypatch, tmp_path):
+    d = tmp_path / "crystallize"
+    monkeypatch.setattr(prerun, "scripts_dir", lambda: d)
+    (tmp_path / "own.py").write_text("print('team note')")
+    prerun.write_script("cr_1", "job", "own.py")
+    out = _run_script(d / "cr_1.py", tmp_path)
+    assert out.stdout.startswith("team note") and "NameError" not in out.stderr
+
+
+def test_own_script_can_still_stop_the_run(monkeypatch, tmp_path):
+    d = tmp_path / "crystallize"
+    monkeypatch.setattr(prerun, "scripts_dir", lambda: d)
+    (tmp_path / "own.py").write_text("print('{" + chr(34) + "wakeAgent" + chr(34) + ": false}')")
+    prerun.write_script("cr_1", "job", "own.py")
+    out = _run_script(d / "cr_1.py", tmp_path)
+    assert out.returncode == 0 and "wakeAgent" in out.stdout and "hermes_cli" not in out.stderr
+
+
+def test_own_script_failure_is_passed_on(monkeypatch, tmp_path):
+    d = tmp_path / "crystallize"
+    monkeypatch.setattr(prerun, "scripts_dir", lambda: d)
+    (tmp_path / "own.py").write_text("import sys; print('broken'); sys.exit(3)")
+    prerun.write_script("cr_1", "job", "own.py")
+    assert _run_script(d / "cr_1.py", tmp_path).returncode == 3
