@@ -34,6 +34,9 @@ MAX_SUMMARY_TOKENS = 2000
 MAX_ROUTED_TOKENS = 4000
 CONDENSE_SECONDS = 20.0         # the longest a chat waits for the cheap model
 PAUSE_AFTER_PROBLEM_SECONDS = 600.0
+REPEATABLE_TOOLS = {"terminal", "execute_code", "web_extract", "web_search", "web_crawl", "search_files"}
+MIN_REPEAT_CHARS = 1000
+MAX_TRACKED_CHATS = 200
 MIN_ORIGINAL_SHARE = 0.2        # cleaning that removes more than this keeps the original
 CHARS_PER_TOKEN = 4             # a rough rule, for estimates only
 FULL_RESULT_DAYS = 7
@@ -344,6 +347,26 @@ def _condense(ctx: Any, tool: str, text: str, picked: dict[str, Optional[str]]) 
     return (summary, answer.usage) if summary and len(summary) <= len(text) * MAX_SUMMARY_SHARE else None
 
 
+_seen: "dict[str, set[str]]" = {}
+
+
+def _repeat_note(session_id: str, tool: str, current: str, result: str) -> Optional[str]:
+    """A short note when a tool returns what it already returned in this chat, timings aside.
+    The main model has the earlier copy, and the exact text stays available. Uses no AI."""
+    if tool not in REPEATABLE_TOOLS or len(current) < MIN_REPEAT_CHARS or _is_error(result):
+        return None
+    if len(_seen) > MAX_TRACKED_CHATS:
+        _seen.clear()
+    seen = _seen.setdefault(session_id, set())
+    print_ = prerun.fingerprint(current)
+    if print_ not in seen:
+        seen.add(print_)
+        return None
+    return json.dumps({"same_as_earlier_result": True, "full_result_id": _keep_full(result), "original_chars": len(result),
+                       "note": ("This returned the same output as an earlier call in this chat, timings aside. "
+                                "Call crystal_full_result with this id if you need the exact text.")})
+
+
 def _with_original(cleaned: str, result: str) -> str:
     """Cleaning can remove a lot, so a noticeably smaller result says how to get the original."""
     if len(cleaned) > len(result) * (1 - MIN_ORIGINAL_SHARE):
@@ -372,6 +395,10 @@ def shrink(ctx: Any, session_id: str, tool: str, result: Any) -> Optional[str]:
         return None
     cleaned = prerun.clean_result(tool, result)
     current = cleaned if cleaned is not None else result
+    repeat = _repeat_note(session_id, tool, current, result)
+    if repeat is not None:
+        store.add_chat_saving(session_id, len(result) - len(repeat), 0, 0.0)
+        return repeat
     usage = None
     picked = chosen_model()
     if (tool in CONDENSED_TOOLS and len(current) >= MIN_CONDENSE_CHARS and picked["model"]

@@ -30,6 +30,7 @@ def world(monkeypatch, tmp_path):
     monkeypatch.setattr(cs, "_is_cheaper", lambda *a: True)
     monkeypatch.setattr(cs, "_worth_condensing", lambda *a: True)
     monkeypatch.setattr(cs, "_paused_until", 0.0)
+    monkeypatch.setattr(cs, "_seen", {})
     monkeypatch.setattr(cs.modelinfo, "token_prices", lambda *a: {"input": 1e-6, "output": 2e-6, "cache_read": 0, "cache_write": 0})
     return saved
 
@@ -256,3 +257,29 @@ def test_lightly_cleaned_results_stay_simple(world, monkeypatch):
     result = "x" * 1000
     monkeypatch.setattr(cs.prerun, "clean_result", lambda tool, res: "x" * 900)
     assert cs.shrink(FakeCtx(), "s1", "terminal", result) == "x" * 900
+
+
+def _output(text):
+    return json.dumps({"output": text, "exit_code": 0, "error": None})
+
+
+def test_a_repeated_result_becomes_a_note_and_stays_available(world, monkeypatch):
+    monkeypatch.setattr(cs, "chosen_model", lambda: {"provider": None, "model": None})
+    monkeypatch.setattr(cs, "_seen", {})
+    first = _output("Ran 300 tests in 0.014s\n" + "x y " * 500)
+    again = _output("Ran 300 tests in 0.027s\n" + "x y " * 500)
+    assert "same_as_earlier_result" not in (cs.shrink(FakeCtx(), "s1", "terminal", first) or "")
+    note = json.loads(cs.shrink(FakeCtx(), "s1", "terminal", again))
+    assert note["same_as_earlier_result"] and json.loads(cs.read_full(note["full_result_id"]))["result"] == again
+
+
+def test_repeats_are_per_chat_and_skip_failures_and_files(world, monkeypatch):
+    monkeypatch.setattr(cs, "chosen_model", lambda: {"provider": None, "model": None})
+    monkeypatch.setattr(cs, "_seen", {})
+    text = _output("a b " * 500)
+    cs.shrink(FakeCtx(), "s1", "terminal", text)
+    assert "same_as_earlier_result" not in (cs.shrink(FakeCtx(), "s2", "terminal", text) or "")
+    failed = json.dumps({"output": "a b " * 500, "exit_code": 1, "error": None})
+    cs.shrink(FakeCtx(), "s3", "terminal", failed)
+    assert "same_as_earlier_result" not in (cs.shrink(FakeCtx(), "s3", "terminal", failed) or "")
+    assert cs._repeat_note("s4", "read_file", "a b " * 500, "a b " * 500) is None
