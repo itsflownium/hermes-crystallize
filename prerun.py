@@ -505,6 +505,12 @@ def _run(routine_id: str, dispatch: runner.Dispatch) -> tuple[str, int]:
         state = routine["status"] if routine else "missing"
         return (f"Crystallize: routine {routine_id} is {state}. Do the whole task yourself.",
                 1 if no_ai else 0)
+    if not lifecycle._replay_available():
+        lifecycle.restore_unsupported_replay(routine)
+        return ("Crystallize: automatic routine execution is unavailable because the public Hermes SDK has no verified "
+                "guarded nested-tool dispatcher. No routine tools ran. The job's owned attachment is being restored; "
+                "Do the whole task yourself using normal host tools and the configured model and reasoning.",
+                1 if no_ai else 0)
     if not lifecycle.check_drift(routine):
         return ("Crystallize: this job's configuration changed, so the routine must be tested again. "
                 "Do the whole task yourself.", 1 if no_ai else 0)
@@ -642,7 +648,12 @@ OWN_SCRIPT = {own_script!r}
 OWN_INTERPRETER = {own_interpreter!r}
 OWN_WORKDIR = {own_workdir!r}
 HERMES_PYTHON = {hermes_python!r}
-env = dict(os.environ)
+def sanitized_child_env():
+    child = dict(os.environ)
+    child.pop("HERMES_YOLO_MODE", None)
+    return child
+
+env = sanitized_child_env()
 if OWN_SCRIPT:
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     path = os.path.abspath(os.path.join(root, os.path.expanduser(OWN_SCRIPT)))
@@ -656,7 +667,8 @@ if OWN_SCRIPT:
     own_cmd = [*interpreter, path]
     own_cwd = os.path.expanduser(OWN_WORKDIR) if OWN_WORKDIR else os.path.dirname(path)
     try:
-        own = subprocess.run(own_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=own_cwd)
+        own = subprocess.run(own_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=own_cwd,
+                             env=sanitized_child_env())
     except OSError as exc:
         sys.stderr.write("Crystallize: the original pre-run script could not start: " + str(exc) + "\\n")
         sys.exit(1)

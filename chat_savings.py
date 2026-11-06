@@ -148,7 +148,10 @@ ROUTING_NOTE = (
     "repay its input, output and extra main-model call costs. Call shape: "
     'crystal_cheap({"input":"Complete instruction and source text","expected_output_tokens":1200}). '
     "The required input must contain a complete nonempty instruction, including when input_files is supplied. "
-    "For source files, pass input_files:[paths]; save_to:path writes accepted output through the normal guarded file tool. "
+    "input_files:[paths] returns pending read instructions before any helper call on the current SDK; read completely "
+    "through your ordinary tools, append source text to input and call once without input_files. save_to:path retains "
+    "accepted text and returns a pending normal write_file plan with its placeholder. Perform and verify the actual "
+    "write through your own tools; the handoff itself does not write a file or justify repeating the paid call. "
     "For a self-contained text subtask set subtask:true. If it isn't loaded, find it with tool_search. When its output is right, "
     "reuse its placeholder in your answer or a supported text tool field instead of retyping it. Include all needed context: "
     "the helper cannot see this chat or use tools. Keep consequential decisions and verification with the main model. "
@@ -295,27 +298,10 @@ def _answered_by(answer: Any, picked: dict[str, Optional[str]]) -> bool:
 
 
 def connected_models() -> list[dict[str, Any]]:
-    """Your connected cloud subscriptions and their models, as Hermes's own model picker has
-    them. The models Hermes features come first, then the cheapest."""
-    from hermes_cli.inventory import build_model_options_payload, load_picker_context
+    """Compatibility name for configured/declared routes, not verified sign-ins."""
+    from . import configured_models
 
-    payload = build_model_options_payload(load_picker_context())
-    out = []
-    for p in payload.get("providers") or []:
-        if not p.get("authenticated") or p.get("is_user_defined") or p.get("slug") in ("lmstudio", "ollama", "custom"):
-            continue
-        featured = list(p.get("featured_models") or [])
-        caps = p.get("capabilities") or {}
-        rows = []
-        for name in p.get("models") or []:
-            prices = modelinfo.token_prices(name, p["slug"])
-            rows.append({"id": name, "featured": name in featured,
-                         "input_per_million": prices["input"] * 1e6 if prices else None,
-                         "output_per_million": prices["output"] * 1e6 if prices else None,
-                         "reasoning": bool((caps.get(name) or {}).get("reasoning"))})
-        rows.sort(key=lambda r: (not r["featured"], r["output_per_million"] is None, r["output_per_million"] or 0.0))
-        out.append({"slug": p["slug"], "name": p.get("name") or p["slug"], "models": rows})
-    return out
+    return configured_models.inventory()["providers"]
 
 
 # ---------------------------------------------------------------- full results

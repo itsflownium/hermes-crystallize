@@ -93,11 +93,11 @@ def test_unknown_tool_means_leave_tools_alone(monkeypatch):
     assert modelinfo.toolsets_for({"web_extract", "web_search", "tool_search"}) == ["web"]
 
 
-def test_price_route_uses_only_exact_catalog_name_matches(monkeypatch):
+def test_price_route_cannot_borrow_another_catalog_or_vendor_price(monkeypatch):
     monkeypatch.setattr(modelinfo, "_token_usage", lambda tokens: tokens)
     monkeypatch.setattr(modelinfo, "_listed_models", lambda: {"some-model": ("vendor/some-model", "catalog")})
     monkeypatch.setattr(modelinfo, "_estimate", lambda name, vendor, usage: .5 if (name, vendor) == ("vendor/some-model", "catalog") else None)
-    assert modelinfo._price_route("SOME-MODEL", "direct-provider") == ("vendor/some-model", "catalog")
+    assert modelinfo._price_route("SOME-MODEL", "direct-provider") is None
     assert modelinfo._price_route("some-model-highspeed", "direct-provider") is None
 
 
@@ -110,12 +110,12 @@ def test_arbitrary_hyphenated_provider_is_not_rewritten_as_a_vendor(monkeypatch)
     assert seen and set(seen) == {"local-thing"}
 
 
-def test_declared_provider_pricing_id_works_without_a_named_branch(monkeypatch):
+def test_metadata_identity_does_not_assert_billing_equivalence(monkeypatch):
     monkeypatch.setattr(modelinfo, "_token_usage", lambda tokens: tokens)
     monkeypatch.setattr(modelinfo, "_profile", lambda provider: types.SimpleNamespace(name="p", models_dev_id="vendor"))
     monkeypatch.setattr(modelinfo, "_listed_models", lambda: {})
     monkeypatch.setattr(modelinfo, "_estimate", lambda name, vendor, usage: .1 if vendor == "vendor" else None)
-    assert modelinfo._price_route("m", "p-alias") == ("m", "vendor")
+    assert modelinfo._price_route("m", "p-alias") is None
 
 
 def test_known_exact_price_avoids_catalog_fetch_and_preserves_zero(monkeypatch):
@@ -125,15 +125,12 @@ def test_known_exact_price_avoids_catalog_fetch_and_preserves_zero(monkeypatch):
     assert modelinfo._price_route("m", "p") == ("m", "p")
 
 
-def test_subscription_api_equivalent_mapping_is_explicit_and_separate(monkeypatch):
+def test_subscription_model_does_not_invent_a_direct_api_vendor_price(monkeypatch):
     monkeypatch.setattr(modelinfo, "_token_usage", lambda tokens: tokens)
     monkeypatch.setattr(modelinfo, "_estimate", lambda name, vendor, usage: .1 if vendor == "openai" else None)
-    assert modelinfo._price_route("m", "openai-codex") == ("m", "openai")
+    assert modelinfo._price_route("m", "openai-codex") is None
 
 
-def test_missing_cache_rate_fallback_remains_an_estimate(monkeypatch):
-    monkeypatch.setattr(modelinfo, "_price_route", lambda *args: ("m", "p"))
-    monkeypatch.setattr(modelinfo, "_token_usage", lambda tokens: None)
-    monkeypatch.setattr(modelinfo, "_estimate", lambda *args: None)
-    monkeypatch.setattr(modelinfo, "token_prices", lambda *args: {"input": 2.0, "output": 3.0, "cache_read": 2.0, "cache_write": 2.0})
-    assert modelinfo.api_cost("m", "p", {"input": 1, "output": 1, "cache_read": 1}) == 7.0
+def test_missing_native_quote_does_not_fall_back_to_guessed_bucket_prices(monkeypatch):
+    monkeypatch.setattr(modelinfo, "token_prices", lambda *args: pytest.fail("A total quote cannot be invented from unrelated prices"))
+    assert modelinfo.api_cost("m", "p", {"input": 1, "output": 1, "cache_read": 1}) is None

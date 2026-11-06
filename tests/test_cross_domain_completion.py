@@ -367,7 +367,10 @@ def test_catalog_bundle_pins_real_existing_commit_and_never_claims_admission(tmp
     assert report["catalog_ready"] is False and report["publication_verified"] is False
     assert report["upstream_catalog_pr"] is None and report["maintainer_approval"] == "not_obtained"
     assert report["hermes_plugins_validate"]["status"] == "not_run_by_generator"
-    assert report["source_analysis"]["core_imports_requiring_public_api_review"]
+    audit = report["source_analysis"]["public_api_audit"]
+    assert audit["ok"] == (not audit["findings"])
+    assert report["technical_static_ready"] == (audit["ok"] and report["technical_checks"]["reviewable_payloads"])
+    assert report["technical_ready_for_submission"] is False  # no exact-pin verification/screenshots supplied
     assert "No upstream" in (tmp_path / "submission.md").read_text()
 
 

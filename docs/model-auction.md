@@ -1,10 +1,13 @@
 # Optional Model Auction
 
 Model Auction is an explicitly started, answer-only comparison of 2–6 routes from
-Hermes's current connected model inventory. The user chooses every provider and
+configured routes, public provider declarations or explicitly added routes. The user chooses every provider and
 model, the maximum output tokens, and a dollar cap. Opening a panel, previewing a
 selection, reading history, or reading a receipt makes no answer-generation calls.
-There is no automatic model selection or automatic winner.
+There is no automatic model selection or automatic winner. Configured/declared
+means authentication, entitlement and availability are unverified; Hermes checks
+those only at the explicitly requested call. No credential store or private
+connected inventory is read.
 
 Every route receives one copy of the same complete frozen benchmark: the current
 job prompt, the answer-only system instruction, and one completed recorded
@@ -37,19 +40,27 @@ plugins:
       llm:
         allow_provider_override: true
         allow_model_override: true
-        allowed_providers: [your-connected-provider]
+        allowed_providers: [your-configured-provider]
         allowed_models: [your-selected-model-one, your-selected-model-two]
 ```
 
 The `allowed_providers` and `allowed_models` lists are optional Hermes restrictions.
 When present, the auction honors them. An empty list allows no selections; `"*"`
 has Hermes's wildcard meaning. No auction code writes these grants. The grant is
-checked before inventory and pricing access and before each subsequent model
+checked before configured/declaration metadata and pricing access and before each subsequent model
 call. A lookalike `allow_request_overrides` field does not authorize routing.
 
-Before the first call, all routes must have known exact-route input and output
-prices from Hermes. API-equivalent prices borrowed from another provider do not
-satisfy admission. Explicit known zero prices are valid. The reservation uses
+Before the first call, all routes need an explicitly authorized exact-route rate
+card with known input, output, cache-read/write rates, request fee and context-tier
+semantics. Missing cache rates do not inherit the input rate; a missing request
+fee is not zero. Tiered routes require every above-threshold bucket and threshold.
+The card must identify the exact provider/model/default endpoint, currency USD
+and explicit per-token or per-million-token units, provenance/version and any
+expiry. User cards are estimates, not verified provider invoices. Explicit known
+zero prices are valid. Public `ProviderProfile.get_usage_cost` total quotes can
+inform estimates but cannot be divided into separate rate buckets to admit an
+auction. No private pricing table, model-name/vendor alias or another provider's
+API equivalent satisfies admission. The reservation uses
 twice the UTF-8 byte count of the full message envelope plus 1,024 estimated input
 tokens, the maximum output token count, the highest known context-tier/cache
 rates, and any per-request fee. The sum of every selected route's reservation
@@ -69,7 +80,7 @@ its first answer.
 
 An additional explicit opt-in, `accept_estimated_cap: true`, allows an **estimated
 cap**. When actual cost is absent, this mode requires measured positive input and
-output token counts and computes a conservative exact-route API-equivalent cost,
+output token counts and computes a conservative exact-route rate-card estimate,
 including reported cache/reasoning tokens. It uses the larger of that value and
 any reported host estimate. Zero placeholder usage, unknown pricing, or an
 unverified served route still stops later calls. Estimated amounts remain labeled
@@ -118,8 +129,8 @@ loop. All auction calls count as experiment overhead in receipts.
 from crystallize import auction
 
 routes = [
-    {"provider": "your-provider", "model": "connected-model-one"},
-    {"provider": "your-provider", "model": "connected-model-two"},
+    {"provider": "your-provider", "model": "configured-model-one"},
+    {"provider": "your-provider", "model": "configured-model-two"},
 ]
 preview = auction.preview(
     job_id, routes, max_tokens=1024, cost_cap_usd=0.50,

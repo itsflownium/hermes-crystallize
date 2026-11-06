@@ -14,8 +14,8 @@ hermes crystal chat-policy SESSION_ID --tool terminal --mode exact
 ```
 
 The main model stays unchanged. Helper calls record their cost, latency and
-accepted/rejected/failed outcome by turn. Routing uses both listed prices and
-observed helper behavior. Unknown prices remain unknown, and generated output
+accepted/rejected/failed outcome by turn. Routing uses explicit user rate cards/public provider quotes and
+observed helper behavior, without decomposing a quote into inferred rates. Unknown prices remain unknown, and generated output
 is counted as avoided only when its placeholder actually expands. These are
 estimates, not provider bills or guaranteed future savings.
 
@@ -135,26 +135,50 @@ for a nested object use a path such as `["results", 0, "id"]`.
 ```bash
 hermes crystal recipe JOB recipe.json
 hermes crystal test JOB
-hermes crystal promote JOB
+hermes crystal promote JOB --mode tool
 ```
 
-Import starts a new testing period and never overwrites a live routine.
-Promotion still needs matching tests. `leaves_to_ai: true` keeps the remaining
-task with the agent; only the validated read prefix is automated.
+Import starts a new observation period and never overwrites a live routine.
+On the audited public SDK, `try`/`test` inspect fresh normal-host scheduled runs;
+they do not execute a shadow recipe or make extra model calls. Matching complete
+observations, current configuration and safe explicit bindings are required
+before explicit `promote --mode tool`. That mode installs recipe guidance: the
+main agent calls `crystal_run` to obtain a **pending, non-executing host-tool plan**,
+then makes/validates each ordinary tool call under normal host approvals.
+
+No read prefix is automatically replayed. The default pre-run/script and no-AI
+modes are unsupported because the public dispatch implementation does not verify
+the full guard pipeline. `leaves_to_ai: true` preserves all remaining task work
+and reasoning. Plans do not constitute results or successful actions.
 
 Other binding values:
 
 - `{"$date": {"offset_days": -7, "timezone": "Australia/Sydney"}}` preserves
   relative date windows in the specified timezone. `format` can be `date` or `datetime`.
 - `{"$artifact": "feed.json"}` names one file in a fresh run-local directory.
-  Every producer/consumer gets the same path. Complete text is snapshotted for
-  the answer and the directory is removed afterward. Missing, oversized, binary
-  or linked artifacts cause fallback rather than invisible data loss.
+  The normal agent must choose an authorized scratch location and use the same
+  resolved path for every producer/consumer. The public-only plugin does not
+  create, read, snapshot or remove artifacts automatically. Inspect complete
+  ordinary tool results; missing/oversized/binary/linked artifacts require the
+  normal agent to handle the task, not an invented successful snapshot.
 - `{"$argv": ["curl", "--output", {"$artifact": "feed.json"}, "https://example.com/feed"]}`
-  assembles quoted shell arguments. Executables stay literal and the resolved
-  command still has to pass the supported read subset. Arbitrary bound code and
-  literal scratch writes are rejected.
+  describes quoted shell arguments. Executables stay literal; the normal agent
+  must resolve bindings from fresh evidence and use its ordinary guarded tool.
+  The plugin does not launch this command. Arbitrary bound code and literal
+  scratch writes are rejected as recipe candidates.
 
-Unresolved bindings fail normally so the agent can finish the original task.
+Never pass unresolved binding objects directly as actual host-tool arguments.
+The plan marks required fresh bindings; the main agent resolves and verifies them
+or finishes the original task itself.
 Legacy implicit date/ID/temp substitution is rejected at execution; reimport
 an explicit recipe rather than trusting a stale saved plan.
+
+## Public route and pricing controls
+
+`hermes crystal model-route` lists configured/declared routes with provenance, not
+verified sign-ins. `--provider ID --model EXACT_ID` explicitly adds a route without
+activating it. `hermes crystal rate-card` lists user estimates; `--file card.json
+--confirm` saves a card with explicit currency, units and exact-route identity.
+No credential store or private inventory is read. Unknown fees/cache/tier rates
+remain unknown. See [Model Auction](model-auction.md) for budget admission and
+[public boundaries](sdk-gaps.md) for unsupported features.

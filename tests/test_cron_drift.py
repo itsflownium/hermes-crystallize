@@ -9,6 +9,9 @@ from crystallize.history import Run
 
 
 def env(monkeypatch, *, prompt="Summarize https://example.com/feed", own_script="own.sh"):
+    # This fixture tests restoration with an injected, non-executing fake host.
+    # Real public SDK support remains false and is tested separately.
+    monkeypatch.setattr(lifecycle, "replay_support", lambda: {"guarded_dispatch_available": True, "automatic_nested_tools": True})
     job = {"id": "j1", "name": "job", "prompt": prompt, "model": "test-model", "provider": "test",
            "reasoning_effort": "high", "enabled_toolsets": ["web", "messaging"], "script": own_script,
            "no_agent": False}

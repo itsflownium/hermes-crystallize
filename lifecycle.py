@@ -39,6 +39,10 @@ class LifecycleError(RuntimeError):
     """A user-facing reason an action can't happen."""
 
 
+class PublicToolsetRecovery(LifecycleError):
+    """A legacy value needs a normal host edit that the public CLI cannot perform."""
+
+
 # ---------------------------------------------------------------- cron job access
 
 STALE_PROMOTE = 300         # a Promote still unfinished after this many seconds was cut short
@@ -86,7 +90,14 @@ def _hermes_cmd() -> list[str]:
 
 def hermes_env() -> dict[str, str]:
     """Keep CLI children in the caller's resolved Hermes profile."""
-    return {**os.environ, "HERMES_HOME": str(history._hermes_home())}
+    return {**sanitized_child_env(), "HERMES_HOME": str(history._hermes_home())}
+
+
+def sanitized_child_env() -> dict[str, str]:
+    """Public CLI edits inherit normal profile context, never a YOLO override."""
+    env = dict(os.environ)
+    env.pop("HERMES_YOLO_MODE", None)
+    return env
 
 
 def _edit_job(job_id: str, *flags: str) -> None:
@@ -100,20 +111,80 @@ def _edit_job(job_id: str, *flags: str) -> None:
 
 
 def set_toolsets(job_id: str, toolsets: Optional[list[str]]) -> None:
-    """Limit a job to these toolsets. None goes back to Hermes's default for cron jobs.
-    Hermes's documented CLI has no flag for this. The private compatibility
-    dependency is deliberate and remains a catalog SDK gap (docs/sdk-gaps.md).
+    """Confirm a legacy restoration, or retain recovery for a manual host edit.
+
+    Hermes has no documented CLI toolset mutation. Never patch its job files or
+    call private job APIs to work around that missing public operation.
     """
     if toolsets is not None and (not isinstance(toolsets, list) or any(
             not isinstance(name, str) or not name.strip() for name in toolsets)):
         raise LifecycleError("Toolsets must be a list of nonempty names, or null for the cron default.")
-    try:
-        from cron.jobs import update_job
+    job = _bound_job(job_id)
+    if not job or _same_tools(job.get("enabled_toolsets"), toolsets):
+        return  # deleted jobs and already-restored fields require no mutation
+    desired = "the host's default toolsets" if toolsets is None else (", ".join(toolsets) or "an explicit empty toolset list")
+    raise PublicToolsetRecovery(f"Legacy toolset recovery for cron job {job_id} is pending. Hermes has no public "
+                         f"CLI toolset edit flag. Ask Hermes through its normal cronjob_manage job controls to restore {desired}; "
+                         "then retry Undo. Crystallize has kept the recovery record and will not edit jobs.json.")
 
-        if not update_job(job_id, {"enabled_toolsets": toolsets}):
-            raise LifecycleError("Hermes couldn't find that job to update its tools.")
-    except ImportError as exc:
-        raise LifecycleError("This version of Hermes can't limit a job's tools.") from exc
+
+def replay_support() -> dict[str, Any]:
+    """Current documented guarded-dispatch support; raw method presence is insufficient."""
+    from . import dispatch_support
+
+    return dispatch_support.support()
+
+
+def _replay_available() -> bool:
+    support = replay_support()
+    return bool(support.get("guarded_dispatch_available") and support.get("automatic_nested_tools"))
+
+
+def promotion_availability(routine: Any) -> dict[str, Any]:
+    """Read-only prerequisites for UI controls, including the public host-plan fallback."""
+    if isinstance(routine, str):
+        routine = store.get_routine(routine)
+    support = replay_support()
+    guarded = bool(support.get("guarded_dispatch_available") and support.get("automatic_nested_tools"))
+    routine = routine or {}
+    meta = routine.get("meta") or {}
+    job = _bound_job(routine.get("source_ref") or "") if routine.get("source_ref") else None
+    saved = meta.get("config_snapshot") or {}
+    current = configuration_fingerprint(job, routine) if job else {}
+    binding = bool(job and saved.get("fingerprint") == current.get("fingerprint") and not meta.get("promoting"))
+    try:
+        safe = bool(routine.get("steps") and analyze.replay_safety_error(routine["steps"]) is None)
+    except (ValueError, TypeError, KeyError):
+        safe = False
+    ready = bool(meta.get("ready"))
+    eligible = bool(job and not job.get("no_agent") and job.get("state") != "completed" and binding and safe and ready
+                    and routine.get("status") == "testing")
+    reason = support.get("reason") or "The public Hermes SDK has no verified guarded nested-tool dispatch."
+    ordinary_reason = ("Ready for the main agent to execute and verify the recipe through normal host tools."
+                       if eligible else "A current read-only recipe and matching normal host observations are required.")
+    spec = contracts.get(job["id"]) if job else None
+    actions = bool((routine.get("steps") or {}).get("leaves_to_ai") or (spec or {}).get("required_actions"))
+    prerequisites = {"job_present": bool(job), "configuration_current": binding, "read_recipe_safe": safe,
+                     "observations_ready": ready, "main_agent_present": bool(job and not job.get("no_agent")),
+                     "guarded_dispatch_available": guarded}
+    return {"default_mode": "prerun", "suggested_available_mode": "tool", "ready": ready,
+            "available": bool(eligible and guarded), "automatic_replay_available": guarded,
+            "guarded_dispatch_available": guarded,
+            "public_dispatch_method_present": bool(support.get("public_dispatch_method_present")),
+            "validation_mode": meta.get("validation_mode", "legacy_unspecified"),
+            "automatic_replay_validated": bool(guarded and meta.get("automatic_replay_validated")),
+            "fallback": "normal_host_tool_plan", "reason": reason, "prerequisites": prerequisites,
+            "try_available": bool(job and job.get("state") != "completed" and routine.get("status") != "live"),
+            "try_execution": "guarded_replay" if guarded else "observe_normal_host_runs",
+            "test_available": bool(job and binding and safe and routine.get("status") == "testing"),
+            "test_execution": "guarded_replay" if guarded else "observe_normal_host_runs",
+            "modes": {"tool": {"available": eligible, "reason": ordinary_reason, "execution": "normal_host_tools",
+                                "requires": ["current learned read-only recipe", "normal host observations", "main agent tool pipeline"]},
+                      "prerun": {"available": bool(eligible and guarded), "reason": ordinary_reason if guarded else reason,
+                                 "execution": "guarded_replay"},
+                      "no_ai": {"available": bool(eligible and guarded and not actions),
+                                "reason": "The job's actions require its main agent." if actions else ordinary_reason if guarded else reason,
+                                "execution": "guarded_replay"}}}
 
 
 def _set_job_fields(job_id: str, fields: dict[str, Any]) -> None:
@@ -131,13 +202,25 @@ def _set_prompt(job_id: str, prompt: str) -> None:
     _edit_job(job_id, "--prompt", prompt)
 
 
-def crystallized_prompt(routine_id: str, original: str) -> str:
-    """Prompt for the older tool-call mode (kept for routines promoted that way)."""
+def _legacy_crystallized_prompt(routine_id: str, original: str) -> str:
     return (
         f"{MARKER} {routine_id}] First call the crystal_run tool with routine_id \"{routine_id}\". "
         "It runs this job's data-collection steps and returns their output. Use that output to "
         "complete the task below without fetching the same data again. If crystal_run returns "
         "ok=false or an error, ignore it and do the whole task yourself.\n\n"
+        f"Task:\n{original}"
+    )
+
+
+def crystallized_prompt(routine_id: str, original: str) -> str:
+    """A recipe for the main agent's ordinary, guarded host tool calls."""
+    return (
+        f"{MARKER} {routine_id}] Call crystal_run with routine_id \"{routine_id}\" to read this job's learned tool plan. "
+        "A pending_host_tools plan is guidance, not executed work or current results. Resolve every date, identifier, "
+        "dependency and file for this run, then use your normal host tools and approvals to execute and verify the task. "
+        "Use all additional tools, skills, research and checks needed for the best answer. Do every requested action on "
+        "every run. Keep the configured main model and reasoning. If the plan is unavailable or unsuitable, do the whole "
+        "task yourself.\n\n"
         f"Task:\n{original}"
     )
 
@@ -166,7 +249,7 @@ def unwrap_prompt(prompt: str, routine_id: Optional[str] = None) -> Optional[str
     match = re.match(r"^\[Crystallize routine ([^\]\n]+)\]", prompt)
     if not match or (routine_id and match[1] != routine_id):
         return None
-    for builder in (crystallized_prompt, prerun_prompt, action_prompt):
+    for builder in (crystallized_prompt, _legacy_crystallized_prompt, prerun_prompt, action_prompt):
         prefix = builder(match[1], "")
         if prompt.startswith(prefix):
             return prompt[len(prefix):]
@@ -264,7 +347,12 @@ def _snapshot_campaign(routine: Optional[dict[str, Any]]) -> None:
             snapshot(routine)
 
 
-def _restore_attachment(routine: dict[str, Any], meta: dict[str, Any]) -> bool:
+SDK_FALLBACK_NOTE = ("[Crystallize SDK fallback] Automatic nested tool replay is unavailable. Complete this job with its "
+                     "configured main model and reasoning, using the normal host tools and approvals. Any Crystallize "
+                     "wrapper below is recipe context, not evidence of current data.\n\n")
+
+
+def _restore_attachment(routine: dict[str, Any], meta: dict[str, Any], *, unsupported_dispatch: bool = False) -> bool:
     """Detach only fields we still own; return whether the script can be removed."""
     job = _bound_job(meta.get("job_id") or routine["source_ref"])
     if not job:
@@ -287,17 +375,20 @@ def _restore_attachment(routine: dict[str, Any], meta: dict[str, Any]) -> bool:
     # fallback mode. Their text stays intact and the agent sees a failed routine.
     unrecognized_wrapper = MARKER in prompt and body is None
     installed_script = meta.get("installed_script", f"crystallize/{routine['id']}.py")
-    script_owned = job.get("script") == installed_script
-    if script_owned and not unrecognized_wrapper:
+    script_owned = bool(installed_script) and job.get("script") == installed_script
+    if unsupported_dispatch and unrecognized_wrapper and not prompt.startswith(SDK_FALLBACK_NOTE):
+        flags += ["--prompt", SDK_FALLBACK_NOTE + prompt]
+    if script_owned and (not unrecognized_wrapper or unsupported_dispatch):
         flags += ["--script", meta.get("own_script") or ""]
     if meta.get("mode") == "no_ai" and job.get("no_agent"):
-        flags.append("--agent")
-    if (not unrecognized_wrapper and meta.get("installed_interpreter") and
+        if not meta.get("original_no_agent", False):
+            flags.append("--agent")
+    if ((not unrecognized_wrapper or unsupported_dispatch) and meta.get("installed_interpreter") and
             job.get("interpreter") == meta["installed_interpreter"]):
         flags += ["--interpreter", meta.get("own_interpreter") or ""]
     if flags:
         _edit_job(job["id"], *flags)
-    if script_owned and unrecognized_wrapper:
+    if script_owned and unrecognized_wrapper and not unsupported_dispatch:
         from . import prerun
 
         kwargs = ({"own_interpreter": meta.get("own_interpreter"), "own_workdir": meta.get("own_workdir"),
@@ -306,7 +397,54 @@ def _restore_attachment(routine: dict[str, Any], meta: dict[str, Any]) -> bool:
         # The retained script must return a normal-agent fallback even when the
         # attachment previously skipped the agent entirely.
         store.update_routine(routine["id"], meta={**_fresh_meta(routine), "mode": "prerun"})
-    return not (script_owned and unrecognized_wrapper)
+    return not (script_owned and unrecognized_wrapper and not unsupported_dispatch)
+
+
+def _uses_automatic_replay(routine: dict[str, Any]) -> bool:
+    meta = routine.get("meta") or {}
+    return meta.get("mode") in ("prerun", "no_ai") or bool(meta.get("installed_script") and meta.get("mode") != "tool")
+
+
+def restore_unsupported_replay(routine: Any) -> bool:
+    """Restore owned attachments on SDK downgrade; keep pending recovery on failure.
+
+    A cron job remains scheduled. Its original agent/script settings are restored
+    through public CLI fields, while later user edits remain intact.
+    """
+    from . import prerun
+
+    if isinstance(routine, str):
+        routine = store.get_routine(routine)
+    if not routine or routine.get("status") != "live" or not _uses_automatic_replay(routine) or _replay_available():
+        return False
+    meta = _fresh_meta(routine)
+    _snapshot_campaign(routine)
+    reason = replay_support().get("reason") or "Guarded nested tool dispatch is unavailable in the public Hermes SDK."
+    try:
+        if _restore_attachment(routine, meta, unsupported_dispatch=True):
+            prerun.remove_script(routine["id"])
+    except Exception as exc:  # noqa: BLE001 — never discard the only recovery record
+        meta["dispatch_recovery"] = {"pending": True, "reason": reason, "error": str(exc),
+            "instructions": "Retry Undo in Crystallize. If Hermes CLI edits remain unavailable, use Hermes job controls "
+                            "to restore the saved original script/interpreter and enable the job's main agent."}
+        meta["ready"] = False
+        store.update_routine(routine["id"], meta=meta)
+        logger.warning("crystallize: public SDK attachment recovery pending for %s", routine["id"], exc_info=True)
+        return True
+    now = time.time()
+    meta = _fresh_meta(routine)
+    meta.update({"mode": "tool", "matches": 0, "ready": False, "automatic_replay_validated": False,
+                 "last_fingerprint": None, "undone_at": now, "undo_reason": reason,
+                 "dispatch_recovery": {"pending": False, "restored_at": now, "reason": reason},
+                 "revalidation": {"at": now, "reason": reason, "needs_rebuild": False,
+                                  "previous_mode": (routine.get("meta") or {}).get("mode"),
+                                  "validation_mode": "normal_host_observations"}})
+    job = _bound_job(routine["source_ref"])
+    if job:
+        meta["config_snapshot"] = configuration_fingerprint(job, {**routine, "meta": meta})
+    store.update_routine(routine["id"], status="testing", meta=meta)
+    _snapshot_campaign(store.get_routine(routine["id"]))
+    return True
 
 
 def invalidate(routine_id: str, reason: str = "source schema changed", *,
@@ -339,6 +477,8 @@ def check_drift(routine: Any) -> bool:
     if isinstance(routine, str):
         routine = store.get_routine(routine)
     if not routine or routine.get("status") == "retired":
+        return False
+    if restore_unsupported_replay(routine):
         return False
     if (routine.get("meta") or {}).get("promoting"):
         return False  # an in-flight/crash-recovery transaction is not configuration drift
@@ -393,9 +533,14 @@ def try_job(job: str) -> dict[str, Any]:
         rid, name=a.job_name or a.job_id, source="cron", source_ref=a.job_id, status="testing",
         steps=routine,
         meta={"matches": 0, "needed": MATCHES_NEEDED, "tests": [], "created_at": time.time(),
+              "validation_mode": "guarded_replay" if _replay_available() else "normal_host_observations",
+              "automatic_replay_validated": False,
               "config_snapshot": configuration_fingerprint(found, data)},
     )
-    return store.get_routine(rid)
+    saved = store.get_routine(rid)
+    if saved:
+        saved["promotion_availability"] = promotion_availability(saved)
+    return saved
 
 
 def _align(routine_steps: list[dict], traces: list[dict]) -> list[Optional[dict]]:
@@ -442,13 +587,17 @@ def compare(routine: dict[str, Any], result: dict[str, Any], traces: list[dict],
 
 
 def record_test(routine: dict[str, Any], ok: bool, why: str, source: str, *,
-                outputs: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
+                outputs: Optional[list[dict[str, Any]]] = None, execution_id: Optional[str] = None,
+                validation_mode: str = "guarded_replay") -> dict[str, Any]:
     meta = _fresh_meta(routine)
     meta["matches"] = (meta.get("matches", 0) + 1) if ok else 0
     tests = list(meta.get("tests", []))[-9:]
-    tests.append({"at": time.time(), "ok": ok, "why": why, "source": source})
+    tests.append({"at": time.time(), "ok": ok, "why": why, "source": source,
+                  "execution_id": execution_id, "validation_mode": validation_mode})
     meta["tests"] = tests
     meta["ready"] = meta["matches"] >= meta.get("needed", MATCHES_NEEDED)
+    meta["validation_mode"] = validation_mode
+    meta["automatic_replay_validated"] = bool(meta["ready"] and validation_mode == "guarded_replay")
     if ok and outputs is not None:
         from . import prerun
 
@@ -457,6 +606,68 @@ def record_test(routine: dict[str, Any], ok: bool, why: str, source: str, *,
         meta["revalidation"] = {**meta["revalidation"], "validated_at": time.time()}
     store.update_routine(routine["id"], meta=meta)
     return meta
+
+
+def _observation_match(routine: dict[str, Any], traces: list[dict], answer: Any) -> tuple[bool, str]:
+    """Validate recorded normal host work without dispatching any recipe step."""
+    steps = (routine.get("steps") or {}).get("steps") or []
+    if not steps or analyze.replay_safety_error(routine["steps"]):
+        return False, "The learned read recipe is incomplete or unsafe."
+    aligned = _align(steps, traces)
+    for step, trace in zip(steps, aligned):
+        if trace is None:
+            return False, f"The normal run did not use recipe tool {step['tool']}."
+        try:
+            args = json.loads(trace.get("args_json") or "{}")
+        except (ValueError, TypeError):
+            return False, "A recorded tool's arguments are incomplete."
+        if analyze.observation_safety_error(step["tool"], args):
+            return False, "A normal run used a tool operation outside the supported read recipe."
+        text = trace.get("result_preview")
+        length = trace.get("result_len")
+        if not isinstance(text, str) or not isinstance(length, int) or len(text) != length:
+            return False, "Complete current result evidence is required for a normal host observation."
+        if trace.get("status") not in (None, "ok", "success", "succeeded", "completed") or runner.step_failure(text):
+            return False, "A normal host read did not complete successfully."
+        digest = trace.get("result_sha256")
+        if digest and digest != hashlib.sha256(text.encode("utf-8", "replace")).hexdigest():
+            return False, "The captured result does not match its complete-result digest."
+    spec = contracts.get(routine["source_ref"])
+    report = contracts.evaluate(spec, answer=answer, sources=traces, actions=traces)
+    if not report["ok"]:
+        return False, "outcome contract: " + report["why"]
+    return True, "Normal host observations match the read recipe; no routine tools were executed."
+
+
+def observe_host_runs(routine: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Learn readiness from fresh normal host runs when nested replay is unavailable."""
+    meta = _fresh_meta(routine)
+    since = (meta.get("revalidation") or {}).get("at", meta.get("created_at", 0))
+    seen = {test.get("execution_id") for test in meta.get("tests") or [] if test.get("execution_id")}
+    cursor = meta.get("observation_cursor") or {}
+    cursor_at = cursor.get("started", since)
+    cursor_ids = set(cursor.get("execution_ids_at_started") or [])
+    runs = [run for run in history.load_runs(routine["source_ref"])
+            if run.scheduled and run.finished and run.outcome in (None, "completed")
+            and (run.session_started or run.started_ts) >= max(since, cursor_at)
+            and not ((run.session_started or run.started_ts) == cursor_at and run.execution_id in cursor_ids)
+            and run.execution_id not in seen]
+    if not runs:
+        return None
+    answers = history.final_answers([run.session_id for run in runs if run.session_id])
+    for run in sorted(runs, key=lambda item: (item.session_started or item.started_ts, item.execution_id))[-10:]:
+        traces = store.execution_traces(run.execution_id)
+        if not traces:
+            continue
+        ok, why = _observation_match(routine, traces, answers.get(run.session_id or ""))
+        meta = record_test(routine, ok, why, "normal host observation", execution_id=run.execution_id,
+                           validation_mode="normal_host_observations")
+        started = run.session_started or run.started_ts
+        ids = cursor_ids | {run.execution_id} if started == cursor_at else {run.execution_id}
+        meta["observation_cursor"] = {"started": started, "execution_ids_at_started": sorted(ids)}
+        cursor_at, cursor_ids = started, ids
+        store.update_routine(routine["id"], meta=meta)
+    return {**meta, "execution": "normal_host_observations", "executed": False}
 
 
 def _rebuild_after_drift(routine: dict[str, Any]) -> Optional[dict[str, Any]]:
@@ -505,6 +716,8 @@ def test_after(execution_id: str, job_id: str, dispatch: runner.Dispatch) -> Opt
     routine = _rebuild_after_drift(routine)
     if not routine:
         return None
+    if not _replay_available():
+        return observe_host_runs(routine)
     traces = _reference_traces(routine, execution_id)
     if not traces:
         return None
@@ -527,6 +740,12 @@ def test_now(job: str, dispatch: runner.Dispatch) -> dict[str, Any]:
     routine = _rebuild_after_drift(routine)
     if not routine:
         raise LifecycleError("More fresh scheduled runs are needed to rebuild this changed job's routine.")
+    if not _replay_available():
+        observed = observe_host_runs(routine)
+        if observed is not None:
+            return observed
+        return {**_fresh_meta(routine), "execution": "normal_host_observations", "executed": False,
+                "why": "No fresh completed normal host runs are available yet. Crystallize did not execute any tools."}
     result = runner.run(routine["steps"], dispatch)
     answer = history.final_answers([a_runs[-1].session_id]).get(a_runs[-1].session_id) if a_runs[-1].session_id else None
     ok, why = compare(routine, result, _reference_traces(routine, a_runs[-1].execution_id), answer=answer)
@@ -548,13 +767,12 @@ def action_prompt(routine_id: str, original: str) -> str:
 def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     """Switch the job over to its routine.
 
-    mode "prerun" (default): a pre-run script runs the routine, the AI gets the
-    data in its prompt and writes the answer; unchanged data skips the AI.
-    mode "no_ai": the routine's output is the job's result; no AI at all.
+    "tool" installs recipe guidance for normal main-agent tool calls. Automatic
+    "prerun"/"no_ai" require a documented, verified guarded nested-dispatch SDK.
     """
     from . import prerun
 
-    if mode not in ("prerun", "no_ai"):
+    if mode not in ("tool", "prerun", "no_ai"):
         raise LifecycleError(f"Unknown mode {mode!r}.")
     routine = store.get_routine(routine_id)
     if not routine:
@@ -563,8 +781,21 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     meta = dict(routine.get("meta") or {})
     if routine["status"] == "live":
         raise LifecycleError("Already live.")
+    if mode in ("prerun", "no_ai") and not _replay_available():
+        raise LifecycleError("Automatic pre-run and no-AI modes are unavailable: the public Hermes SDK has no verified "
+                             "guarded nested-tool dispatch. Choose explicit mode 'tool' for a plan the main agent "
+                             "executes through its normal tools and approvals; its model and reasoning stay unchanged.")
     if not check_drift(routine):
         raise LifecycleError("The job changed and its routine needs fresh matching tests before promotion.")
+    from . import parameters
+
+    try:
+        parameters.validate(routine["steps"])
+        unsafe = analyze.replay_safety_error(routine["steps"])
+    except (ValueError, TypeError, KeyError) as exc:
+        raise LifecycleError("The learned read recipe is incomplete and needs fresh observations.") from exc
+    if unsafe:
+        raise LifecycleError("The learned read recipe cannot be promoted: " + unsafe)
     meta = _fresh_meta(routine)
     if not meta.get("ready"):
         raise LifecycleError(
@@ -573,6 +804,8 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     job = _bound_job(routine["source_ref"])
     if not job:
         raise LifecycleError("The cron job no longer exists.")
+    if mode == "tool" and job.get("no_agent"):
+        raise LifecycleError("Host-tool plans need the job's main agent. Enable it in Hermes job controls before promoting this mode.")
     original = job.get("prompt") or ""
     if MARKER in original:
         raise LifecycleError("This job's prompt already uses a Crystallize routine.")
@@ -584,30 +817,34 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     own_interpreter, own_workdir = job.get("interpreter"), job.get("workdir")
     script_kwargs = ({"own_interpreter": own_interpreter, "own_workdir": own_workdir,
                       "hermes_python": sys.executable} if own_interpreter or own_workdir else {})
-    script = prerun.write_script(routine_id, routine["name"], own_script, mode == "no_ai", **script_kwargs)
-    prompt = action_prompt(routine_id, original) if acts else prerun_prompt(routine_id, original)
-    flags = ["--prompt", prompt, "--script", script]
+    script = None if mode == "tool" else prerun.write_script(routine_id, routine["name"], own_script, mode == "no_ai", **script_kwargs)
+    prompt = crystallized_prompt(routine_id, original) if mode == "tool" else action_prompt(routine_id, original) if acts else prerun_prompt(routine_id, original)
+    flags = ["--prompt", prompt]
+    if mode != "tool":
+        flags += ["--script", script]
     if mode == "no_ai":
         flags.append("--no-agent")
-    if own_interpreter:
+    if own_interpreter and mode != "tool":
         flags += ["--interpreter", sys.executable]
     # Saved first, so a failure or a crash during the change can always be undone.
     recovery = {"job_id": job["id"], "original_prompt": original, "own_script": own_script, "at": time.time(),
                 "installed_prompt": prompt, "installed_script": script, "mode": mode,
                 "own_interpreter": own_interpreter, "own_workdir": own_workdir,
-                "installed_interpreter": sys.executable if own_interpreter else None,
+                "installed_interpreter": sys.executable if own_interpreter and mode != "tool" else None,
                 "original_no_agent": bool(job.get("no_agent"))}
     store.update_routine(routine_id, meta={**meta, "promoting": recovery})
     try:
         _edit_job(job["id"], *flags)
-    except LifecycleError:
+    except Exception as exc:
         try:
             if _restore_attachment(routine, recovery):
                 prerun.remove_script(routine_id)
             store.update_routine(routine_id, meta=meta)
-        except LifecycleError:
+        except Exception:
             logger.warning("crystallize: unfinished promotion needs recovery for %s", routine_id, exc_info=True)
-        raise
+        if isinstance(exc, LifecycleError):
+            raise
+        raise LifecycleError("Hermes could not finish the public CLI update. Recovery data is preserved; retry Undo.") from exc
     if job["id"] != routine["source_ref"]:
         store.set_routine_job(routine_id, job["id"])
     baseline = (routine["steps"].get("baseline") or {}).get("cost_usd") if isinstance(routine["steps"], dict) else None
@@ -618,16 +855,13 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     meta.pop("promoting", None)
     meta.update({**{k: v for k, v in recovery.items() if k != "at"}, "promoted_at": now, "failures": 0, "live_runs": 0,
                  "baseline_cost": baseline, "skips": [], "no_ai_runs": [], "last_fingerprint": None})
-    # A job with cheaper settings already on gets new-items-only too, unless it acts on its data.
-    tune = _tuning_for_job(job)
-    if tune and tune.get("status") in ("trial", "kept") and mode == "prerun" and not acts:
-        meta["new_only"] = True
-        tune["new_only"] = True
-        store.save_tuning(tune.get("job_name") or routine["name"], tune)
+    meta["new_only"] = False  # legacy delta flags cannot omit current source evidence
     # Canonicalization makes the installed wrapper/interpreter/no-agent setting
     # equivalent to the user's original configuration.
-    installed = {**job, "prompt": prompt, "script": script, "no_agent": mode == "no_ai"}
-    if own_interpreter:
+    installed = {**job, "prompt": prompt}
+    if mode != "tool":
+        installed.update({"script": script, "no_agent": mode == "no_ai"})
+    if own_interpreter and mode != "tool":
         installed["interpreter"] = sys.executable
     meta["config_snapshot"] = configuration_fingerprint(installed, {**routine, "meta": meta})
     meta.pop("revalidation", None)
@@ -636,6 +870,8 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     store.update_routine(routine_id, status="live", meta=meta)
     saved = store.get_routine(routine_id)
     _snapshot_campaign(saved)
+    if saved:
+        saved["promotion_availability"] = promotion_availability(saved)
     return saved
 
 
@@ -646,16 +882,27 @@ def recover_promotions() -> None:
     for routine in store.list_routines():
         meta = dict(routine.get("meta") or {})
         recovery = meta.get("promoting")
-        if not recovery or routine["status"] == "live" or time.time() - recovery.get("at", 0) < STALE_PROMOTE:
+        unsupported = bool(recovery and recovery.get("mode") in {"prerun", "no_ai"} and not _replay_available())
+        if not recovery or routine["status"] == "live" or (time.time() - recovery.get("at", 0) < STALE_PROMOTE and not unsupported):
             continue
         try:
-            if _restore_attachment(routine, recovery):
+            if _restore_attachment(routine, recovery, unsupported_dispatch=unsupported):
                 prerun.remove_script(routine["id"])
-        except LifecycleError:
+        except Exception as exc:
+            if unsupported:
+                meta["dispatch_recovery"] = {"pending": True, "error": str(exc), "reason": replay_support().get("reason"),
+                    "instructions": "Retry Undo to restore this unfinished script/no-agent attachment through Hermes CLI."}
+                store.update_routine(routine["id"], meta=meta)
             logger.warning("crystallize: couldn't put %s back yet", routine["name"], exc_info=True)
             continue
         meta = _fresh_meta(routine)
         meta.pop("promoting", None)
+        if unsupported:
+            now = time.time()
+            meta.update({"ready": False, "matches": 0, "automatic_replay_validated": False,
+                         "dispatch_recovery": {"pending": False, "restored_at": now, "reason": replay_support().get("reason")},
+                         "revalidation": {"at": now, "needs_rebuild": False, "validation_mode": "normal_host_observations",
+                                          "reason": "An unfinished automatic attachment was restored because guarded dispatch is unavailable."}})
         store.update_routine(routine["id"], meta=meta)
 
 
@@ -666,10 +913,16 @@ def undo(routine_id: str, reason: str = "you chose Undo") -> dict[str, Any]:
     if not routine:
         raise LifecycleError("That routine doesn't exist.")
     meta = _fresh_meta(routine)
-    if routine["status"] == "live" and meta.get("original_prompt") is not None:
-        if _restore_attachment(routine, meta):
+    recovery = meta.get("promoting")
+    attachment = recovery if isinstance(recovery, dict) else meta
+    if recovery or (routine["status"] == "live" and meta.get("original_prompt") is not None):
+        unsupported = attachment.get("mode") in {"prerun", "no_ai"} and not _replay_available()
+        if _restore_attachment(routine, attachment, unsupported_dispatch=unsupported):
             prerun.remove_script(routine_id)
     meta = _fresh_meta(routine)
+    meta.pop("promoting", None)
+    if meta.get("dispatch_recovery"):
+        meta["dispatch_recovery"] = {**meta["dispatch_recovery"], "pending": False, "restored_at": time.time()}
     meta.update({"undone_at": time.time(), "undo_reason": reason})
     store.update_routine(routine_id, status="retired", meta=meta)
     saved = store.get_routine(routine_id)
@@ -682,8 +935,11 @@ def set_mode(routine_id: str, mode: str) -> dict[str, Any]:
     A routine promoted the older way (crystal_run tool) is moved to the script."""
     from . import prerun
 
-    if mode not in ("prerun", "no_ai"):
+    if mode not in ("tool", "prerun", "no_ai"):
         raise LifecycleError(f"Unknown mode {mode!r}.")
+    if mode in ("prerun", "no_ai") and not _replay_available():
+        raise LifecycleError("Automatic pre-run/no-AI mode requires verified public guarded nested-tool dispatch. "
+                             "The main agent can use explicit 'tool' plan mode with its current model and reasoning.")
     routine = store.get_routine(routine_id)
     if not routine or routine["status"] != "live":
         raise LifecycleError("Only a live routine can change mode.")
@@ -696,8 +952,9 @@ def set_mode(routine_id: str, mode: str) -> dict[str, Any]:
     current = meta.get("mode") or "tool"
     if current == mode:
         return routine
-    if current == "tool":
+    if current == "tool" or mode == "tool":
         undo(routine_id, reason=f"switching to {mode}")
+        store.update_routine(routine_id, status="testing")
         return promote(routine_id, mode=mode)
     script_kwargs = ({"own_interpreter": meta.get("own_interpreter"), "own_workdir": meta.get("own_workdir"),
                       "hermes_python": sys.executable} if meta.get("own_interpreter") or meta.get("own_workdir") else {})
@@ -719,12 +976,19 @@ def set_mode(routine_id: str, mode: str) -> dict[str, Any]:
 
 def set_when_unchanged(routine_id: str, choice: str) -> None:
     """What a run does when its data hasn't changed: "repeat", "quiet", "run", or "auto"."""
+    choice = "run" if choice == "off" else choice
     if choice not in ("auto", "repeat", "quiet", "run"):
         raise LifecycleError(f"Unknown choice {choice!r}.")
     routine = store.get_routine(routine_id)
     if not routine:
         raise LifecycleError("That routine doesn't exist.")
+    if choice != "run" and not _replay_available():
+        raise LifecycleError("Automatic unchanged-run behavior is unavailable without verified public guarded nested-tool "
+                             "dispatch. Use 'run' or 'off' to keep normal main-agent execution and clear legacy choices.")
     meta = _fresh_meta(routine)
+    if choice != "run" and meta.get("mode") == "tool":
+        raise LifecycleError("Host-tool plan mode does not execute automatic unchanged-run checks. Keep 'run', or use "
+                             "a supported automatic mode after verified public guarded dispatch becomes available.")
     meta.pop("skip_unchanged", None)
     meta.pop("when_unchanged", None)
     if choice != "auto":

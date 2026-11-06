@@ -441,6 +441,13 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         card["cost_parts"] = cost_parts(recent, tuning.modelinfo.token_prices(route.get("model"), route.get("provider")))
         card["ladder"] = ladder(routine_rows.get(name), store.get_tuning(name), card,
                                 routine_possible=card in spotted, can_tune=bool((card["tune"] or {}).get("can_try")))
+        # Capability facts reach every control, including a newly spotted job
+        # with no saved routine. Missing SDK guards must never look executable.
+        candidate = routine_rows.get(name) or {"source_ref": job.get("id"), "status": "spotted", "meta": {}}
+        card["promotion_availability"] = lifecycle.promotion_availability(candidate)
+    for card in finished:
+        card["promotion_availability"] = {"try_available": False, "available": False,
+            "automatic_replay_available": False, "reason": "This job has finished.", "modes": {}}
 
     live_week = sum(x.get("saving_per_week") or 0.0 for x in live)
     live_week += sum((c.get("tuned") or {}).get("per_week") or 0.0

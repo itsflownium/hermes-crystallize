@@ -1,12 +1,11 @@
 """Offline coverage for public, domain-neutral handoffs and guarded delivery."""
 
 import json
-import sys
 from types import SimpleNamespace
 
 import pytest
 
-from crystallize import chat, chat_savings as cs, handoffs, overview, schemas, store, tools
+from crystallize import chat, chat_savings as cs, dispatch_support, handoffs, overview, schemas, store, tools
 
 
 PICKED = {"provider": "provider-a", "model": "helper"}
@@ -43,9 +42,20 @@ def world(monkeypatch, tmp_path):
     monkeypatch.setattr(cs.modelinfo, "token_prices", lambda model, provider: PRICES.get(model))
     monkeypatch.setattr(cs, "_filled", {})
     monkeypatch.setattr(cs, "_pauses", {})
-    monkeypatch.setattr(tools, "_builtins_loaded", True)
     store.set_chat_enabled("s1", True)
     return originals
+
+
+@pytest.fixture
+def guarded_test_io(monkeypatch):
+    """Exercise dormant I/O validators with an explicitly isolated test dispatcher.
+
+    This does not certify the SDK. Current-host fallback is covered separately
+    without this fixture and must never execute nested tools.
+    """
+    real_support = dispatch_support.support
+    monkeypatch.setattr(dispatch_support, "support", lambda ctx=None: {
+        **real_support(ctx), "guarded_dispatch_available": True})
 
 
 def attempts(session="s1"):
@@ -172,7 +182,7 @@ def test_completion_filter_rejects_partial_safety_or_tool_call_responses(world):
     assert response["completion"]["rejected"] and attempts()[0]["status"] == "rejected"
 
 
-def test_saved_output_keeps_exact_bytes_and_returns_only_a_preview(world, monkeypatch):
+def test_saved_output_keeps_exact_bytes_and_returns_only_a_preview(world, guarded_test_io, monkeypatch):
     output = "  Heading ☀\n\n" + ("detail line\n" * 1000) + "\n  "
     helper = Helper(text=output, finish_reason="stop")
     writes = []
@@ -204,7 +214,7 @@ def test_saved_output_keeps_exact_bytes_and_returns_only_a_preview(world, monkey
     {"bytes_written": 1}, {"bytes_written": True}, {"bytes_written": 22, "verified": False},
     {"success": False, "bytes_written": 22}, {"error": "host policy blocked"},
 ])
-def test_write_requires_affirmative_complete_success_without_losing_the_paid_answer(world, monkeypatch, write_result):
+def test_write_requires_affirmative_complete_success_without_losing_the_paid_answer(world, guarded_test_io, monkeypatch, write_result):
     helper = Helper(text="complete saved output\n")
     monkeypatch.setattr(tools, "dispatch", lambda *a, **kw: json.dumps(write_result))
     response = json.loads(handoffs.execute(helper, "Write the complete report.", "s1", save_to="report.txt"))
@@ -214,7 +224,7 @@ def test_write_requires_affirmative_complete_success_without_losing_the_paid_ans
     assert attempts()[0]["cheap_cost"] == pytest.approx(0.00012)
 
 
-def test_guarded_write_exception_returns_recoverable_output_and_counts_response(world, monkeypatch):
+def test_guarded_write_exception_returns_recoverable_output_and_counts_response(world, guarded_test_io, monkeypatch):
     def denied(*args, **kwargs):
         raise PermissionError("approval required")
 
@@ -227,7 +237,7 @@ def test_guarded_write_exception_returns_recoverable_output_and_counts_response(
     assert store.list_chat_savings("s1")[0]["added_input_chars"] == len(response)
 
 
-def test_input_files_page_through_host_guards_with_identity_and_strip_only_display_gutters(world, monkeypatch):
+def test_input_files_page_through_host_guards_with_identity_and_strip_only_display_gutters(world, guarded_test_io, monkeypatch):
     helper = Helper()
     calls = []
 
@@ -256,21 +266,21 @@ def test_input_files_page_through_host_guards_with_identity_and_strip_only_displ
     {"content": "data", "total_lines": 4, "truncated": False},
     {"content": "1|data", "truncated": True, "next_offset": 99, "total_lines": 3},
 ])
-def test_incomplete_or_denied_input_is_never_sent_to_the_helper(world, monkeypatch, file_result):
+def test_incomplete_or_denied_input_is_never_sent_to_the_helper(world, guarded_test_io, monkeypatch, file_result):
     helper = Helper()
     monkeypatch.setattr(tools, "dispatch", lambda *a, **kw: json.dumps(file_result))
     response = json.loads(handoffs.execute(helper, "Use the complete input.", "s1", input_files=["notes.txt"]))
     assert "error" in response and not helper.calls and not attempts()
 
 
-def test_input_file_budget_includes_source_wrappers_and_never_silently_truncates(world, monkeypatch):
+def test_input_file_budget_includes_source_wrappers_and_never_silently_truncates(world, guarded_test_io, monkeypatch):
     helper = Helper()
     monkeypatch.setattr(tools, "dispatch", lambda *a, **kw: json.dumps({"content": "x" * cs.MAX_INPUT_CHARS}))
     response = json.loads(handoffs.execute(helper, "Use this.", "s1", input_files=["notes.txt"]))
     assert "budget" in response["error"] and not helper.calls
 
 
-def test_changed_file_between_pages_is_rejected(world, monkeypatch):
+def test_changed_file_between_pages_is_rejected(world, guarded_test_io, monkeypatch):
     helper = Helper()
     pages = iter([{"content": "1|first", "truncated": True, "total_lines": 2, "file_size": 10},
                   {"content": "2|second", "truncated": False, "total_lines": 2, "file_size": 11}])
@@ -279,26 +289,19 @@ def test_changed_file_between_pages_is_rejected(world, monkeypatch):
     assert "changed" in response["error"] and not helper.calls
 
 
-def test_nested_file_dispatch_uses_the_public_host_pipeline_and_never_raw_registry(world, monkeypatch):
+def test_file_operations_become_normal_host_plans_without_raw_or_private_dispatch(world, monkeypatch):
     helper = Helper()
-    calls = []
-
-    def guarded(name, args, **identity):
-        calls.append((name, args, identity))
-        if name == "read_file":
-            return json.dumps({"content": "1|source notes", "truncated": False, "total_lines": 1})
-        return json.dumps({"bytes_written": len(args["content"].encode("utf-8"))})
-
-    monkeypatch.setitem(sys.modules, "model_tools", SimpleNamespace(handle_function_call=guarded))
-    monkeypatch.setattr(tools, "_ctx", SimpleNamespace(dispatch_tool=lambda *a, **kw: pytest.fail("raw registry used")))
+    monkeypatch.setattr(tools, "_ctx", SimpleNamespace(dispatch_tool=lambda *a, **kw: pytest.fail("raw SDK dispatch used")))
     with tools.caller_context(session_id="s1", task_id="host-task", user_task="Summarize my notes"):
         response = json.loads(handoffs.execute(helper, "Summarize the source.", "s1", "host-turn",
                                               input_files=["notes.txt"], save_to="summary.txt"))
-    assert response["written"]
-    assert [call[0] for call in calls] == ["read_file", "write_file"]
-    assert all(call[2]["session_id"] == "s1" and call[2]["turn_id"] == "host-turn" and
-               call[2]["task_id"] == "host-task" and call[2]["tool_call_id"].startswith("crystal-") for call in calls)
-    assert calls[0][2]["tool_call_id"] != calls[1][2]["tool_call_id"]
+    assert response["status"] == "pending_host_tools" and not response["written"]
+    assert response["helper_called"] is False and not helper.calls
+    assert response["host_tool_plan"]["actions"] == [
+        {"tool": "read_file", "arguments": {"path": "notes.txt", "offset": 1, "limit": 1000}}]
+    resume = response["host_tool_plan"]["continuation"]["arguments"]
+    assert resume["input"] == "Summarize the source." and resume["save_to"] == "summary.txt"
+    assert "input_files" not in resume and tools._caller.get() == {}
 
 
 @pytest.mark.parametrize("field", sorted(handoffs.TEXT_FIELDS))

@@ -203,6 +203,29 @@ def _save(name: str, data: dict[str, Any]) -> None:
     receipts.snapshot_tuning(data)
 
 
+def _restore_pending(t: dict[str, Any], exc: Exception) -> None:
+    """Keep recovery actionable when a legacy field has no public mutation API."""
+    t["needs_restore"] = True
+    t["restore_error"] = str(exc)
+    toolsets = isinstance(exc, lifecycle.PublicToolsetRecovery)
+    t["recovery"] = {"pending": True, "job_id": t.get("job_id"), "reason": str(exc),
+                     "desired_toolsets": t.get("previous_toolsets"),
+                     "instructions": ("Ask Hermes through its normal cronjob_manage controls to restore the saved enabled_toolsets. "
+                                      "Then retry Undo; Crystallize will confirm the value without editing jobs.json."
+                                      if toolsets else "Retry Undo after Hermes CLI edits become available. The recovery record is preserved.")}
+    if toolsets and t.get("previous_toolsets") is not None:
+        t["recovery"]["normal_host_tool_plan"] = {"tool": "cronjob_manage", "executed": False,
+            "arguments": {"action": "update", "job_id": t.get("job_id"), "enabled_toolsets": t["previous_toolsets"]}}
+    _save(t["job_name"], t)
+
+
+def _clear_restore_pending(t: dict[str, Any]) -> None:
+    t.pop("needs_restore", None)
+    t.pop("restore_error", None)
+    if t.get("recovery"):
+        t["recovery"] = {**t["recovery"], "pending": False, "restored_at": time.time()}
+
+
 def _tool_choices(found: dict[str, Any], name: str) -> tuple[Optional[list[str]], Optional[list[str]]]:
     """Compatibility planner retaining the union of every observed job branch."""
     runs = [r for r in history.load_runs(name) if r.scheduled and r.steps]
@@ -337,10 +360,9 @@ def _roll_back(name: str, data: dict[str, Any], kept: Optional[dict[str, Any]]) 
     """Put a job back after a failed change. If that fails too, it's tried again on the next check."""
     try:
         _restore(data)
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         logger.warning("crystallize: couldn't restore %s yet", name, exc_info=True)
-        data["needs_restore"] = True
-        _save(name, data)
+        _restore_pending(data, exc)
         return
     _save(name, kept or {**data, "status": "reverted", "finished_at": time.time(),
                                      "result": {"ok": False, "why": "its settings couldn't be changed"}})
@@ -381,13 +403,12 @@ def _migrate_legacy(t: dict[str, Any]) -> bool:
                                      "stages": t.get("stages") or []})
     try:
         _restore(t)
-    except Exception:  # noqa: BLE001 — retain recovery data and retry next refresh
-        t["needs_restore"] = True
-        _save(t["job_name"], t)
+    except Exception as exc:  # noqa: BLE001 — retain recovery data and retry next refresh
+        _restore_pending(t, exc)
         logger.warning("crystallize: legacy settings still need restoration for %s", t["job_name"], exc_info=True)
         return True
     now = time.time()
-    t.pop("needs_restore", None)
+    _clear_restore_pending(t)
     t.update({"status": "revalidation", "revalidation_at": now, "reverted_at": now, "finished_at": now,
               "level": None, "stages": [], "reasoning_preserved": True, "policy_version": 2,
               "schema_pruning": False, "new_only": False,
@@ -434,7 +455,12 @@ def undo(job: str) -> dict[str, Any]:
     t = status(job)
     if not t or t["status"] not in ("starting", "trial", "kept"):
         raise lifecycle.LifecycleError(f"{name} has no cheaper settings to undo.")
-    _restore(t)
+    try:
+        _restore(t)
+    except Exception as exc:
+        _restore_pending(t, exc)
+        raise
+    _clear_restore_pending(t)
     now = time.time()
     if t.get("status") == "kept":
         t.setdefault("kept_at", t.get("finished_at"))
@@ -448,10 +474,11 @@ def _finish_restore(t: dict[str, Any]) -> None:
     """A change was cut short, by a failure or a crash. Put the job back."""
     try:
         _restore(t)
-    except lifecycle.LifecycleError:
+    except lifecycle.LifecycleError as exc:
         logger.warning("crystallize: couldn't restore %s yet", t["job_name"], exc_info=True)
+        _restore_pending(t, exc)
         return
-    t.pop("needs_restore", None)
+    _clear_restore_pending(t)
     t.update({"status": "reverted", "finished_at": time.time(),
               "result": {**(t.get("result") or {}), "ok": False, "why": "its settings couldn't be changed"}})
     _save(t["job_name"], t)
@@ -657,6 +684,8 @@ def _settings(t: dict[str, Any]) -> str:
 def status_text(t: Optional[dict[str, Any]]) -> str:
     if not t:
         return "Not tried yet"
+    if t.get("needs_restore"):
+        return "Restoration pending: " + (t.get("restore_error") or "retry Undo after checking the saved Hermes job settings")
     res = t.get("result") or {}
     if t["status"] == "trial":
         before, trial = _trial_runs(t)

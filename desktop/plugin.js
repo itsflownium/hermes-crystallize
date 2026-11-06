@@ -400,6 +400,7 @@ function AuctionResult({ auction, ctx }) {
 function ModelAuction({ ctx, jobId, onChanged = () => {} }) {
   const [open, setOpen] = useState(false)
   const [providers, setProviders] = useState(null)
+  const [inventoryMetadata, setInventoryMetadata] = useState(null)
   const [providerId, setProviderId] = useState('')
   const [search, setSearch] = useState('')
   const [models, setModels] = useState([])
@@ -421,8 +422,8 @@ function ModelAuction({ ctx, jobId, onChanged = () => {} }) {
     Promise.allSettled([ctx.rest('/chat-models'), ctx.rest(`/auction?job_id=${encodeURIComponent(jobId)}`)]).then(results => {
       if (scope.current.scope !== jobId || scope.current.version !== version) return
       const [inventory, history] = results.map(result => result.status === 'fulfilled' ? result.value : null)
-      if (!inventory || inventory.error || inventory.ok === false) setInventoryError(errorText(inventory, 'Connected model discovery failed.'))
-      else { setProviders(inventory.providers || []); setInventoryError(null) }
+      if (!inventory || inventory.error || inventory.ok === false) setInventoryError(errorText(inventory, 'Configured-route discovery failed.'))
+      else { setProviders(inventory.providers || []); setInventoryMetadata(inventory); setInventoryError(null) }
       if (!history || history.error || history.ok === false) setError(errorText(history, 'Could not load auction history.'))
       else { setAuctions(history.auctions || []); setError(null) }
     })
@@ -458,15 +459,18 @@ function ModelAuction({ ctx, jobId, onChanged = () => {} }) {
   const term = search.trim().toLowerCase()
   const matching = (provider && provider.models || []).filter(model => !term || model.id.toLowerCase().includes(term))
   return jsxs('div', { style: { ...panelStyle, borderTop: `0.5px solid ${C.stroke}`, paddingTop: 5 }, children: [
-    sectionButton('Model auction · compare connected routes', open, () => setOpen(v => !v)),
+    sectionButton('Model auction · compare declared routes', open, () => setOpen(v => !v)),
     ...(open ? [
-      small('Choose 2–6 connected routes to answer the same captured input. This is a paid, answer-only comparison; review quality and spend before choosing any model for future work.', C.soft),
-      !providers && !inventoryError ? statusLine('Discovering connected models…') : null,
-      inventoryError ? jsxs('div', { style: panelStyle, children: [statusLine(inventoryError, C.yellow), actionButton('Retry connected model discovery', load, !!pending)] }) : null,
-      providers && !providers.length ? small('No connected models were returned. Connect a provider in Hermes and refresh this panel.', C.soft) : null,
-      provider ? field('Connected provider', jsx('select', { style: fieldStyle, value: provider.slug, disabled: !!pending, onChange: e => { setProviderId(e.target.value); setSearch('') }, children: providers.map(provider => jsx('option', { key: provider.slug, value: provider.slug, children: provider.name || provider.slug })) })) : null,
+      small('Choose 2–6 configured or declared routes to answer the same captured input. This is a paid, answer-only comparison; review quality and spend before choosing any model for future work.', C.soft),
+      small(inventoryNotice, C.soft),
+      small('Budgeting requires an explicit user rate card for each exact route. Missing rates remain unknown.', C.soft),
+      ...metadataWarnings(inventoryMetadata).map((message, index) => jsx('div', { key: `auction-inventory-${index}`, children: small(message, C.soft) })),
+      !providers && !inventoryError ? statusLine('Loading configured and declared models…') : null,
+      inventoryError ? jsxs('div', { style: panelStyle, children: [statusLine(inventoryError, C.yellow), actionButton('Retry route discovery', load, !!pending)] }) : null,
+      providers && !providers.length ? small('No configured or declared model choices were returned. Add an exact provider and model route below, then refresh.', C.soft) : null,
+      provider ? field('Configured or declared provider', jsx('select', { style: fieldStyle, value: provider.slug, disabled: !!pending, onChange: e => { setProviderId(e.target.value); setSearch('') }, children: providers.map(provider => jsx('option', { key: provider.slug, value: provider.slug, children: provider.name || provider.slug })) })) : null,
       provider ? field('Find a model', jsx('input', { style: fieldStyle, value: search, disabled: !!pending, onChange: e => setSearch(e.target.value), placeholder: `Search ${provider.name || provider.slug}`, type: 'search' })) : null,
-      provider ? jsx('div', { role: 'group', 'aria-label': 'Connected candidate models', style: { ...panelStyle, maxHeight: 180, overflowY: 'auto', padding: 7, border: `0.5px solid ${C.stroke}`, borderRadius: 7 }, children: matching.length ? matching.slice(0, 80).map(model => {
+      provider ? jsx('div', { role: 'group', 'aria-label': 'Declared candidate models', style: { ...panelStyle, maxHeight: 180, overflowY: 'auto', padding: 7, border: `0.5px solid ${C.stroke}`, borderRadius: 7 }, children: matching.length ? matching.slice(0, 80).map(model => {
         const route = { provider: provider.slug, model: model.id }
         const checked = selected(route)
         return jsx('div', { key: model.id, children: checkField(model.id, checked, () => toggle(route), !!pending || !checked && models.length >= 6) })
@@ -474,13 +478,15 @@ function ModelAuction({ ctx, jobId, onChanged = () => {} }) {
       matching.length > 80 ? small(`${matching.length} matches. Refine your search to see more.`) : null,
       label(`Selected candidates · ${models.length} / 6`),
       ...models.map(route => jsx('div', { key: `${route.provider}:${route.model}`, children: row(`${route.provider} / ${route.model}`, actionButton('Remove', () => toggle(route), !!pending)) })),
-      !models.length ? small('Select candidates from your connected providers. No model is selected automatically.') : null,
+      !models.length ? small('Select candidate route choices above. Add another provider or model below if needed.') : null,
+      jsx(RouteEntry, { key: 'auction-route-entry', ctx, onAdded: load }),
+      jsx(PricingCard, { key: 'auction-pricing', ctx, route: models[0] || null, onSaved: load }),
       jsx('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7 }, children: [
         field('Total cost cap (USD)', jsx('input', { type: 'number', min: 0.0001, max: 100, step: 'any', value: cap, disabled: !!pending, placeholder: 'Set a cap', style: fieldStyle, onChange: e => { invalidate(); setCap(e.target.value) } })),
         field('Max output tokens per route', jsx('input', { type: 'number', min: 1, max: 4096, step: 1, value: maxTokens, disabled: !!pending, style: fieldStyle, onChange: e => { invalidate(); setMaxTokens(e.target.value) } }))
       ] }),
-      checkField('Use an estimated cap when actual billed cost is unavailable', acceptEstimatedCap, value => { invalidate(); setAcceptEstimatedCap(value) }, !!pending, 'Optional. Uses listed prices and recorded token usage; it cannot guarantee your provider bill.'),
-      small(acceptEstimatedCap ? 'Estimated-cap mode: calls may continue using known prices and recorded usage. Missing prices or usage stop further calls.' : 'Strict mode: unknown billed spend stops further calls. The cap reserves estimated cost before each call; it is not a provider billing limit.'),
+      checkField('Use an estimated cap when actual billed cost is unavailable', acceptEstimatedCap, value => { invalidate(); setAcceptEstimatedCap(value) }, !!pending, 'Optional. Uses supplied exact-route prices and recorded token usage; it cannot guarantee your provider bill.'),
+      small(acceptEstimatedCap ? 'Estimated-cap mode: calls may continue using supplied exact-route prices and recorded usage. Missing prices or usage stop further calls.' : 'Strict mode: unknown billed spend stops further calls. The cap reserves estimated cost before each call; it is not a provider billing limit.'),
       actionButton(pending === '/auction-preview' ? 'Checking routes and budget…' : 'Preview auction budget', () => request('/auction-preview'), !!pending || !valid),
       preview ? jsxs('div', { style: { ...panelStyle, background: C.tile, borderRadius: 7, padding: 8 }, children: [
         label('Auction preview · no calls made'),
@@ -596,7 +602,7 @@ function DelegationControls({ ctx, picked }) {
       small('This separate setting permits a helper route for explicit delegated subtasks across this Hermes profile. Each task must request the helper. Regular tasks inherit their configured route and reasoning.', C.soft),
       !data && !error ? statusLine('Loading profile consent…') : null,
       data ? small(data.enabled ? `Saved helper: ${data.provider} / ${data.model}` : 'Profile helper consent is off.', C.soft) : null,
-      provider && model ? small(`Selected helper to save: ${provider} / ${model}`, C.text) : small('Choose a connected helper model above before enabling this option.'),
+      provider && model ? small(`Selected helper to save: ${provider} / ${model}`, C.text) : small('Choose a configured helper route above before enabling this option. Hermes verifies authentication on an explicit call.'),
       data ? checkField('Permit this selected helper for explicit delegated subtasks', enabled, value => { setEnabled(value); setConfirmed(false); setMessage(null) }, pending || !model && !data.enabled) : null,
       data ? checkField('I approve saving this profile-wide delegation consent', confirmed, setConfirmed, pending) : null,
       data ? actionButton(pending ? 'Saving…' : 'Save profile delegation consent', save, pending || !confirmed || enabled && (!provider || !model)) : null,
@@ -607,6 +613,157 @@ function DelegationControls({ ctx, picked }) {
     ] : [])
   ].filter(Boolean), 'delegation')
 }
+
+// Public metadata describes configured choices, never credential verification.
+const inventoryNotice = 'Choices come from configured and user-declared routes. The public SDK does not expose a verified authenticated-model inventory; Hermes checks authentication when an explicit model call runs.'
+const routeLabel = route => route && [route.provider, route.model].filter(Boolean).join(' / ') || 'No route selected'
+const metadataWarnings = inventory => Array.isArray(inventory && inventory.warnings) ? inventory.warnings.filter(value => typeof value === 'string') : []
+
+function RouteEntry({ ctx, onAdded = () => {} }) {
+  const [open, setOpen] = useState(false)
+  const [provider, setProvider] = useState('')
+  const [model, setModel] = useState('')
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState(null)
+  const [message, setMessage] = useState(null)
+  const scope = useRequestScope('route-entry')
+  const running = useRef(false)
+  const save = () => {
+    if (running.current || !provider.trim() || !model.trim()) return
+    running.current = true; setPending(true); setError(null); setMessage(null)
+    ctx.rest('/model-route', { method: 'POST', body: { provider: provider.trim(), model: model.trim() } }).then(res => {
+      if (scope.current.scope !== 'route-entry') return
+      if (!res || !res.ok) setError(errorText(res, 'Could not add this route choice.'))
+      else { setMessage('Route choice added. Select it separately when you want to use it as the helper. Authentication is checked by Hermes on an explicit call.'); onAdded(res) }
+    }).catch(() => { if (scope.current.scope === 'route-entry') setError('Could not add this route choice.') })
+      .finally(() => { running.current = false; if (scope.current.scope === 'route-entry') setPending(false) })
+  }
+  const edit = (setter, value) => { setter(value); setMessage(null); setError(null) }
+  return jsxs('div', { style: panelStyle, children: [
+    sectionButton('Add a provider / model route', open, () => setOpen(value => !value)),
+    ...(open ? [
+      small('Enter the exact identifiers accepted by your Hermes setup. This adds a choice for this profile; selecting a helper is a separate action. Credentials stay with Hermes.', C.soft),
+      field('Provider identifier', jsx('input', { style: fieldStyle, type: 'text', value: provider, maxLength: 200, autoComplete: 'off', spellCheck: false, disabled: pending, onChange: event => edit(setProvider, event.target.value) })),
+      field('Model identifier', jsx('input', { style: fieldStyle, type: 'text', value: model, maxLength: 400, autoComplete: 'off', spellCheck: false, disabled: pending, onChange: event => edit(setModel, event.target.value) })),
+      actionButton(pending ? 'Adding route choice…' : 'Add route choice', save, pending || !provider.trim() || !model.trim()),
+      error ? statusLine(error, C.yellow) : null,
+      message ? statusLine(message, C.green) : null
+    ] : [])
+  ] })
+}
+
+const newRateCard = route => ({ schema_version: 1, provider: route && route.provider || '', model: route && route.model || '', base_url: null,
+  currency: 'USD', unit: 'per_million_tokens', input: null, output: null, cache_read: null, cache_write: null, request_cost: null, pricing_version: null, source_url: null })
+function PricingCard({ ctx, route, onSaved = () => {} }) {
+  const [open, setOpen] = useState(false)
+  const [cards, setCards] = useState(null)
+  const [draft, setDraft] = useState(() => JSON.stringify(newRateCard(route), null, 2))
+  const [confirmed, setConfirmed] = useState(false)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState(null)
+  const [message, setMessage] = useState(null)
+  const scope = useRequestScope('pricing-card')
+  const running = useRef(false)
+  const load = useCallback(() => {
+    if (!open) return
+    const version = ++scope.current.version
+    ctx.rest('/pricing-cards').then(res => {
+      if (scope.current.scope !== 'pricing-card' || scope.current.version !== version) return
+      if (!res || !res.ok || !Array.isArray(res.cards)) setError(errorText(res, 'Could not load saved rate cards.'))
+      else { setCards(res.cards); setError(null) }
+    }).catch(() => { if (scope.current.scope === 'pricing-card' && scope.current.version === version) setError('Could not load saved rate cards.') })
+  }, [ctx, open])
+  useEffect(() => { load(); return () => { scope.current.version += 1 } }, [load])
+  const card = (() => { try { const value = JSON.parse(draft); return value && typeof value === 'object' && !Array.isArray(value) ? value : null } catch { return null } })()
+  const edit = value => { setDraft(value); setConfirmed(false); setError(null); setMessage(null) }
+  const patch = value => { if (card) edit(JSON.stringify({ ...card, ...value }, null, 2)) }
+  const rate = key => card && card[key] != null ? card[key] : ''
+  const changeRate = (key, value) => patch({ [key]: value === '' ? null : Number(value) })
+  const valid = card && typeof card.provider === 'string' && card.provider.trim() && typeof card.model === 'string' && card.model.trim()
+  const save = () => {
+    if (running.current || !valid || !confirmed) return
+    running.current = true; setPending(true); setError(null); setMessage(null)
+    const version = ++scope.current.version
+    ctx.rest('/pricing-card', { method: 'POST', body: { card, confirmed: true } }).then(res => {
+      if (scope.current.scope !== 'pricing-card' || scope.current.version !== version) return
+      if (!res || !res.ok) setError(errorText(res, 'Could not save this user rate card.'))
+      else { setConfirmed(false); setMessage('User rate card saved for this exact route. Future cost estimates use these supplied values; recorded bills remain separate.'); load(); onSaved(res) }
+    }).catch(() => { if (scope.current.scope === 'pricing-card' && scope.current.version === version) setError('Could not save this user rate card.') })
+      .finally(() => { running.current = false; if (scope.current.scope === 'pricing-card') setPending(false) })
+  }
+  const per = card && card.unit === 'per_token' ? 'token' : 'million tokens'
+  return jsxs('div', { style: panelStyle, children: [
+    sectionButton('User-supplied pricing card', open, () => setOpen(value => !value)),
+    ...(open ? [
+      small('Enter rates you obtained for this exact billing route. This profile’s cost estimates use saved cards. Prices are user-supplied estimates. Blank or null values remain unknown; enter 0 only when you know the price is zero.', C.soft),
+      cards && cards.length ? field('Load a saved rate card', jsx('select', { style: fieldStyle, value: '', disabled: pending, onChange: event => { const value = cards[Number(event.target.value)]; if (value) edit(JSON.stringify(value, null, 2)) }, children: [jsx('option', { value: '', children: 'Choose a saved card…' }), ...cards.map((saved, index) => jsx('option', { key: `${saved.provider}:${saved.model}:${saved.base_url || ''}`, value: index, children: `${routeLabel(saved)}${saved.base_url ? ` · ${saved.base_url}` : ''}` }))] })) : null,
+      card ? jsx('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7 }, children: [
+        field('Rate-card provider', jsx('input', { style: fieldStyle, value: card.provider || '', maxLength: 200, autoComplete: 'off', spellCheck: false, disabled: pending, onChange: event => patch({ provider: event.target.value }) })),
+        field('Rate-card model', jsx('input', { style: fieldStyle, value: card.model || '', maxLength: 400, autoComplete: 'off', spellCheck: false, disabled: pending, onChange: event => patch({ model: event.target.value }) }))
+      ] }) : null,
+      card ? field('Token rate units (USD)', jsx('select', { style: fieldStyle, value: card.unit || 'per_million_tokens', disabled: pending, onChange: event => patch({ unit: event.target.value }), children: [jsx('option', { value: 'per_million_tokens', children: 'USD per million tokens' }), jsx('option', { value: 'per_token', children: 'USD per token' })] })) : null,
+      card ? jsx('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 7 }, children: [
+        field(`Input USD per ${per}`, jsx('input', { type: 'number', min: 0, step: 'any', value: rate('input'), disabled: pending, style: fieldStyle, placeholder: 'Unknown', onChange: event => changeRate('input', event.target.value) })),
+        field(`Output USD per ${per}`, jsx('input', { type: 'number', min: 0, step: 'any', value: rate('output'), disabled: pending, style: fieldStyle, placeholder: 'Unknown', onChange: event => changeRate('output', event.target.value) }))
+      ] }) : null,
+      card ? field('Fixed fee (USD per request)', jsx('input', { type: 'number', min: 0, step: 'any', value: rate('request_cost'), disabled: pending, style: fieldStyle, placeholder: 'Unknown', onChange: event => changeRate('request_cost', event.target.value) })) : null,
+      card ? checkField('I know this rate card has no volume tiers', card.tiers_known !== false && Object.prototype.hasOwnProperty.call(card, 'tier_threshold_tokens') && card.tier_threshold_tokens === null, value => { if (value) patch({ tier_threshold_tokens: null, tiers_known: true }); else { const next = { ...card, tiers_known: false }; delete next.tier_threshold_tokens; edit(JSON.stringify(next, null, 2)) } }, pending, 'Leave unchecked when tier rules are unknown. Use the advanced JSON for a known threshold and above-threshold rates.') : null,
+      jsxs('details', { children: [jsx('summary', { style: { fontSize: '0.6875rem', color: C.soft, cursor: 'pointer' }, children: 'Advanced rate card (JSON)' }),
+        small('Cache rates, volume tiers, base_url, source_url and pricing_version can be entered here. Credentials are not part of a pricing card.'),
+        field('Rate-card JSON', jsx('textarea', { rows: 11, maxLength: 16000, value: draft, disabled: pending, onChange: event => edit(event.target.value), style: { ...fieldStyle, marginTop: 5, fontFamily: 'monospace' } }))] }),
+      !card ? statusLine('Use one JSON object for the rate card.', C.yellow) : null,
+      checkField('I confirm these are human-provided rates for this exact route and should be used only as estimates', confirmed, setConfirmed, pending),
+      actionButton(pending ? 'Saving rate card…' : 'Save user rate card', save, pending || !valid || !confirmed),
+      error ? jsxs('div', { style: panelStyle, children: [statusLine(error, C.yellow), actionButton('Reload saved rate cards', load, pending)] }) : null,
+      message ? statusLine(message, C.green) : null
+    ] : [])
+  ] })
+}
+
+function useCompatibility(ctx) {
+  const [data, setData] = useState(null)
+  const [error, setError] = useState(null)
+  const scope = useRequestScope('host-capabilities')
+  const load = useCallback(() => {
+    const version = ++scope.current.version
+    ctx.rest('/compatibility').then(res => {
+      if (scope.current.scope !== 'host-capabilities' || scope.current.version !== version) return
+      if (!res || res.ok === false || res.error) { setData(null); setError(errorText(res, 'Could not read host capabilities.')); return }
+      setData(res); setError(null)
+    }).catch(() => { if (scope.current.scope === 'host-capabilities' && scope.current.version === version) { setData(null); setError('Could not read host capabilities.') } })
+  }, [ctx])
+  useEffect(() => { load(); return () => { scope.current.version += 1 } }, [load])
+  return { data, error, load }
+}
+const dispatchCapability = report => report && (report.dispatch || report.dispatch_support) || {}
+const guardedReplay = report => {
+  const dispatch = dispatchCapability(report)
+  return dispatch.guarded_dispatch_available === true && dispatch.automatic_nested_tools === true
+}
+function CompatibilityCard({ state }) {
+  const [open, setOpen] = useState(false)
+  const report = state.data
+  const dispatch = dispatchCapability(report)
+  const guarded = guardedReplay(report)
+  return bubble([
+    row('Host capabilities', chip(!report ? state.error ? 'Unavailable' : 'Checking' : guarded ? 'Guarded dispatch' : 'Normal host-tool flow', report ? C.soft : C.muted)),
+    !report ? statusLine(state.error || 'Checking supported execution paths…', state.error ? C.yellow : C.soft) : small(guarded ? 'The host reports guarded nested-tool execution. Each routine still needs its own readiness checks.' : 'Tool reads and writes use Hermes’s regular tool flow. Automatic pre-run replay and zero-AI execution need a verified guarded-dispatch capability.', C.soft),
+    sectionButton('Capability details', open, () => setOpen(value => !value)),
+    ...(open && report ? [
+      dispatch.reason ? small(dispatch.reason, C.soft) : null,
+      small(`File inputs: ${dispatch.input_files_mode === 'normal_host_tool_plan' ? 'explicit host-tool read plan' : 'host capability required'} · Saved output: ${dispatch.save_to_mode === 'normal_host_tool_plan' ? 'explicit host-tool write plan' : 'host capability required'}`),
+      small('Model and pricing choices are declarations until checked on the actual route. Compatibility details describe support, not a paid-call test.'),
+      rawDetails('Public capability report', report)
+    ] : []),
+    state.error ? actionButton('Retry capability check', state.load) : null
+  ].filter(Boolean), 'host-capabilities')
+}
+
+const promotionPolicy = item => item && item.promotion_availability || {}
+const modePolicy = (item, mode) => promotionPolicy(item).modes && promotionPolicy(item).modes[mode] || {}
+const canUseMode = (item, mode, compatibility) => modePolicy(item, mode).available === true && (mode === 'tool' || guardedReplay(compatibility))
+const unavailableMode = (item, mode) => modePolicy(item, mode).reason || promotionPolicy(item).reason || 'Readiness and the required public host capability have not been verified for this mode.'
+const promotionTarget = (item, compatibility) => !item || !item.ready ? null : canUseMode(item, 'prerun', compatibility) ? { label: 'Promote', mode: 'prerun' } : canUseMode(item, 'tool', compatibility) ? { label: 'Use host-tool plan', mode: 'tool' } : null
 
 // ---------------------------------------------------------------- pieces
 
@@ -855,44 +1012,45 @@ function settingsLine(settings) {
 function explain(item, status) {
   const n = item.fetch_steps || 0
   if (!n) return null
+  if (item.mode === 'tool') return 'The learned read plan guides the main agent. Hermes executes each tool through its normal permissions and tool flow; your main model and reasoning stay configured.'
+  if (promotionPolicy(item).automatic_replay_available !== true) return 'Automatic replay is unavailable on this host. Use the explicit host-tool plan or normal Hermes execution; tool permissions and approvals stay with Hermes.'
   const what = n === 1 ? 'the fetch step' : `${n} fetch steps`
-  if (status === 'live' && item.mode === 'no_ai') return `The routine runs ${what} and its output is the result. No AI is used.`
-  if (status === 'live' && item.mode !== 'tool') {
-    return `The routine runs ${what} before the AI starts, so the AI only writes the result.` +
-      ({ quiet: ' When nothing has changed, no AI runs and no message goes out, so the run costs nothing.',
-         repeat: ' When nothing has changed, one short AI call repeats the last answer.' }[item.when_unchanged] || '')
-  }
-  return `The routine runs ${what} for Hermes, so the AI only has to read the data and write the result.`
+  if (status === 'live' && item.mode === 'no_ai') return `The verified routine runs ${what} and returns its output in the approved no-AI mode.`
+  return `The verified routine runs ${what} before the AI writes the result. Review the capability report and per-job requirements.`
 }
 
-// Live job options: how the answer is written, and whether unchanged runs skip the AI.
-function LiveOptions({ item, act }) {
+// Every execution mode needs its explicit public capability and per-job readiness.
+function LiveOptions({ item, act, compatibility }) {
   const id = { routine_id: item.routine_id }
   const opts = []
-  if (item.mode === 'tool') {
-    opts.push(pill('Use pre-run', () => act('/mode', { ...id, mode: 'prerun' }), C.accent))
-  } else {
-    if (item.mode !== 'no_ai') {
-      const next = { repeat: 'quiet', quiet: 'run', run: 'repeat' }[item.when_unchanged] || 'repeat'
-      const words = { repeat: 'repeat last answer', quiet: 'stay quiet', run: 'run the AI' }
-      opts.push(pill(`If unchanged: ${words[item.when_unchanged] || words.repeat}`,
-        () => act('/skip', { ...id, when: next }), item.when_unchanged === 'run' ? C.muted : C.green))
-    }
-    if (item.mode === 'no_ai') opts.push(pill('Let AI write it', () => act('/mode', { ...id, mode: 'prerun' }), C.muted))
-    else if (item.no_ai_fit) opts.push(pill('Run with no AI', () => act('/mode', { ...id, mode: 'no_ai' }), C.accent))
+  const prerun = canUseMode(item, 'prerun', compatibility)
+  const tool = canUseMode(item, 'tool', compatibility)
+  const noAI = canUseMode(item, 'no_ai', compatibility)
+  const unchangedAvailable = item.mode === 'prerun' && prerun
+  const savedSkip = ['repeat', 'quiet', 'auto'].includes(item.when_unchanged)
+  const savedSkipLabel = { repeat: 'repeat last answer', quiet: 'stay quiet', auto: 'automatic skip' }[item.when_unchanged]
+  if (item.mode !== 'tool' && tool) opts.push(pill('Use host-tool plan', () => act('/mode', { ...id, mode: 'tool' }), C.accent))
+  if (item.mode === 'tool' && prerun) opts.push(pill('Use verified pre-run', () => act('/mode', { ...id, mode: 'prerun' }), C.accent))
+  if (unchangedAvailable) {
+    const next = { repeat: 'quiet', quiet: 'run', run: 'repeat' }[item.when_unchanged] || 'repeat'
+    const words = { repeat: 'repeat last answer', quiet: 'stay quiet', run: 'run the AI' }
+    opts.push(pill(`If unchanged: ${words[item.when_unchanged] || words.repeat}`, () => act('/skip', { ...id, when: next }), C.soft))
   }
+  if (!unchangedAvailable && savedSkip) opts.push(pill('Run always / clear saved skip', () => act('/skip', { ...id, when: 'run' }), C.accent))
+  if (item.mode === 'no_ai' && prerun) opts.push(pill('Let AI write it', () => act('/mode', { ...id, mode: 'prerun' }), C.muted))
+  if (item.mode !== 'no_ai' && item.no_ai_fit && noAI) opts.push(pill('Run with no AI', () => act('/mode', { ...id, mode: 'no_ai' }), C.accent))
   return jsxs('div', {
-    key: 'opts',
-    style: { display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2 },
-    children: [
-      jsx('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 }, children: opts }),
-      item.mode !== 'no_ai' && item.no_ai_fit
-        ? small(`No AI needed: ${item.no_ai_why}.`, C.soft) : null
+    key: 'opts', style: { display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2 }, children: [
+      opts.length ? jsx('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 }, children: opts }) : null,
+      !unchangedAvailable && savedSkip ? small(`Saved unchanged-input choice “${savedSkipLabel}” is unavailable in this mode. Clear it to keep the normal scheduled execution policy.`, C.yellow) : null,
+      !prerun ? small(`Pre-run unavailable: ${unavailableMode(item, 'prerun')}`, C.soft) : null,
+      !noAI ? small(`No-AI mode unavailable: ${unavailableMode(item, 'no_ai')}`, C.soft) : null,
+      item.mode === 'tool' ? small('Host-tool plan active. The main agent executes its tools normally.', C.soft) : null
     ]
   })
 }
 
-function JobBubble({ item, status, trialRuns, act, exp, ctx }) {
+function JobBubble({ item, status, trialRuns, act, exp, ctx, compatibility }) {
   const tone = status === 'live' ? C.green : status === 'testing' ? C.yellow : C.accent
   let headline, sub, action
   if (status === 'live') {
@@ -914,19 +1072,22 @@ function JobBubble({ item, status, trialRuns, act, exp, ctx }) {
   } else if (status === 'testing') {
     headline = big(perWeek(item.saving_per_week))
     sub = `estimated · ${perMonth(item.saving_per_week)}`
+    const target = promotionTarget(item, compatibility)
     action = item.ready
-      ? pill('Promote', () => act('/promote', { routine_id: item.routine_id }), C.green)
-      : jsx('span', { style: { fontSize: '0.6875rem', color: C.muted }, children: `${item.matches} of ${item.needed} tests` })
+      ? target ? pill(target.label, () => act('/promote', { routine_id: item.routine_id, mode: target.mode }), C.accent) : chip('Capability unavailable', C.muted)
+      : jsx('span', { style: { fontSize: '0.6875rem', color: C.muted }, children: `${item.matches} of ${item.needed} observations` })
   } else {
     headline = big(perWeek(item.saving_per_week))
     sub = `estimated · ${perMonth(item.saving_per_week)}`
-    action = pill('Try', () => act('/try', { job_id: item.job_id }))
+    action = promotionPolicy(item).try_available === true
+      ? pill('Observe next runs', () => act('/try', { job_id: item.job_id }))
+      : chip('Observation unavailable', C.muted)
   }
   const open = isOpen(exp, item.job_id, item.cron)
   const running = item.cron && item.cron.status === 'running'
   const header = jsx(JobHeader, {
     item, open, toggle: exp.toggle, action, hide: exp.hide,
-    tag: chip(running ? 'Running' : status === 'live' ? 'Live routine' : status === 'testing' ? (item.ready ? 'Ready' : 'Testing') : 'Spotted', tone)
+    tag: chip(running ? 'Running' : status === 'live' ? (item.mode === 'tool' ? 'Host-tool plan' : 'Live routine') : status === 'testing' ? (item.ready ? 'Ready' : 'Observing') : 'Spotted', tone)
   })
   const line = small(cronLine(item.cron), running ? C.green : C.soft)
   if (!open) return bubble([header, line, headline, small(sub)], item.job_id)
@@ -941,7 +1102,9 @@ function JobBubble({ item, status, trialRuns, act, exp, ctx }) {
     jsx(Compare, { key: 'c', before: item.before, after: status === 'live' ? item.after : null }),
     jsx(Periods, { key: 'p', periods: item.periods, timeline: item.timeline }),
     explain(item, status) ? small(explain(item, status), C.soft) : null,
-    status === 'live' ? jsx(LiveOptions, { key: 'o', item, act }) : null,
+    status === 'live' ? jsx(LiveOptions, { key: 'o', item, act, compatibility }) : null,
+    status !== 'live' && promotionPolicy(item).test_execution === 'observe_normal_host_runs' ? small('Learns from fresh, normally executed Hermes runs. Background tool replay is unavailable on this host.', C.soft) : null,
+    status === 'testing' && item.ready && !canUseMode(item, 'prerun', compatibility) ? small(`Automatic Promote unavailable: ${unavailableMode(item, 'prerun')}`, C.soft) : null,
     item.schedule_hint ? small(item.schedule_hint, C.soft) : null,
     jsx(SavingsMap, { key: 'm', item }),
     jsx(TuneRow, { key: 't', tune: item.tune, trialRuns, act }),
@@ -1031,12 +1194,12 @@ function HowItWorks({ onHide }) {
   return bubble([
     row('How Crystallize Cron saves', pill('Got it', onHide, C.muted)),
     small('A cron job costs roughly its prompt size times its AI calls, plus reasoning. Crystallize shows where each job\'s money goes and works on all of it.', C.soft),
-    small('Settings trials try fewer AI calls, narrower tool access and safe result cleanup. Your main reasoning setting is preserved. A stage stays when its recorded checks pass and its measured cost falls; failed stages restore the prior settings.', C.soft),
-    small('A job that repeats the same steps can also get a routine that fetches its data before the AI starts, after matching test runs. If nothing changed, the run can skip the AI, or repeat its last answer if someone expects a message.', C.soft)
+    small('Trials use supported controls and recorded cost and outcome checks. Your main reasoning setting is preserved. A stage stays only when its checks pass and comparable cost falls; failed stages restore the prior settings.', C.soft),
+    small('Repeated jobs can learn a read plan from normal runs. When guarded nested execution is unavailable, the main agent follows the plan through normal Hermes tools. Automatic pre-run and no-AI modes stay unavailable until their host capability is verified.', C.soft)
   ], 'how')
 }
 
-function Jobs({ data, act, exp, ctx }) {
+function Jobs({ data, act, exp, ctx, compatibility }) {
   const items = [
     ...data.testing.filter(x => x.ready).map(x => ['testing', x]),
     ...data.live.map(x => ['live', x]),
@@ -1051,8 +1214,8 @@ function Jobs({ data, act, exp, ctx }) {
         .map((pair, i) => ({ pair, i, rank: pair[1].cron && pair[1].cron.status === 'running' ? 0 : 1 }))
         .sort((a, b) => a.rank - b.rank || a.i - b.i)  // running jobs first
         .map(({ pair: [status, item] }) => status === 'waiting'
-          ? jsx(WaitingBubble, { key: item.job_id || item.name, item, trialRuns: data.trial_runs, act, exp, ctx })
-          : jsx(JobBubble, { key: item.job_id, item, status, trialRuns: data.trial_runs, act, exp, ctx })),
+          ? jsx(WaitingBubble, { key: item.job_id || item.name, item, trialRuns: data.trial_runs, act, exp, ctx, compatibility })
+          : jsx(JobBubble, { key: item.job_id, item, status, trialRuns: data.trial_runs, act, exp, ctx, compatibility })),
       ...(items.length || (data.watching || []).length ? [] : [small('No active scheduled jobs. New ones show up here as soon as they are created.')])
     ]
   })
@@ -1273,7 +1436,7 @@ function ReceiptSummary({ receipt }) {
       jsx(Tile, { title: 'Recorded overhead', value: money(costs && costs.overhead_usd) }),
       jsx(Tile, { title: 'Qualified net', value: money(net), color: net == null ? C.soft : net >= 0 ? C.green : C.yellow })
     ] }),
-    small(basis === 'actual' ? 'Uses recorded actual costs with matching comparison settings.' : basis === 'estimated' ? 'Uses listed-price estimates with matching comparison settings.' : 'Qualified net is unknown until comparable costs and settings are recorded.'),
+    small(basis === 'actual' ? 'Uses recorded actual costs with matching comparison settings.' : basis === 'estimated' ? 'Uses cost estimates with matching comparison settings.' : 'Qualified net is unknown until comparable costs and settings are recorded.'),
     receipt.efficiency_savings_proven !== true ? small('Efficiency savings are not established by the available evidence. A model switch or missing reasoning identity cannot qualify as same-settings efficiency savings.', C.yellow) : null,
     costs && (costs.unproven_settings_comparison_count || costs.excluded_settings_comparison_count) ? small(`${costs.unproven_settings_comparison_count || 0} comparisons lack complete settings evidence · ${costs.excluded_settings_comparison_count || 0} excluded from matching-settings savings.`) : null,
     costs && costs.historical_savings_usd != null && qualified == null ? small(`Historical counterfactual: ${money(costs.historical_savings_usd)} reduction before overhead. This unqualified estimate is separate from the qualified totals.`) : null,
@@ -1360,7 +1523,7 @@ function tunedHeadline(item) {
 }
 
 // An active cron job with no routine yet: what it's doing, and what it can do.
-function WaitingBubble({ item, trialRuns, act, exp, ctx }) {
+function WaitingBubble({ item, trialRuns, act, exp, ctx, compatibility }) {
   const cron = item.cron || {}
   const id = item.job_id || item.name
   const open = isOpen(exp, id, cron)
@@ -1422,13 +1585,14 @@ function Settings({ prefs, setPref }) {
     label('Show'),
     opt('explain', 'How Crystallize Cron saves'),
     opt('jobs', 'Scheduled jobs'),
-    opt('popups', 'Pop-ups when a job is ready to promote')
+    opt('popups', 'Pop-ups when a read plan is ready for review')
   ], 'settings')
 }
 
 // ---------------------------------------------------------------- message-box toggle
 
 function Panel({ ctx }) {
+  const compatibilityState = useCompatibility(ctx)
   // Stored (durable) id of the chat being looked at: the id Hermes keys costs
   // and messages by, and it follows focus between split tiles.
   const sessionId = useValue(host.state.focusedStoredSessionId)
@@ -1533,9 +1697,9 @@ function Panel({ ctx }) {
       watching: (data.watching || []).filter(seen) }
     const finishedShown = (data.finished || []).filter(seen)
     const hiddenCount = [...data.testing, ...data.live, ...data.spotted, ...(data.watching || []), ...(data.finished || [])].filter(x => !seen(x)).length
-    body = [jsx(Hero, { key: 'hero', data, act }), jsx(RunawayBrake, { key: 'brake', ctx, act, refresh: data })]
+    body = [jsx(Hero, { key: 'hero', data, act }), jsx(CompatibilityCard, { key: 'capabilities', state: compatibilityState }), jsx(RunawayBrake, { key: 'brake', ctx, act, refresh: data })]
     if (prefs.explain !== false) body.push(jsx(HowItWorks, { key: 'how', onHide: () => setPref('explain', false) }))
-    if (prefs.jobs) body.push(jsx(Jobs, { key: 'jobs', data: shown, act, exp, ctx }))
+    if (prefs.jobs) body.push(jsx(Jobs, { key: 'jobs', data: shown, act, exp, ctx, compatibility: compatibilityState.data }))
     if (prefs.jobs) body.push(jsx(Finished, { key: 'finished', items: finishedShown, exp }))
     if (prefs.jobs && hiddenCount) body.push(jsx('div', { key: 'hidden', children: pill(`Show ${hiddenCount} removed job${hiddenCount === 1 ? '' : 's'}`, showHidden, C.muted) }))
   }
@@ -1555,104 +1719,78 @@ function Panel({ ctx }) {
 const CHAT_PATH = '/crystallize-chat'
 
 function ModelPicker({ ctx, picked, onPicked }) {
-  const [providers, setProviders] = useState(null)
+  const [inventory, setInventory] = useState(null)
   const [active, setActive] = useState(null)
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(null)
   const [error, setError] = useState(null)
   const [open, setOpen] = useState(!picked || !picked.model)
   const [retry, setRetry] = useState(0)
-
+  const scope = useRequestScope('helper-picker')
+  const running = useRef(false)
   useEffect(() => {
-    let active = true
-    setError(null)
+    const version = ++scope.current.version
     ctx.rest('/chat-models').then(res => {
-      if (!active) return
-      if (!res || res.error) { setError(res && res.error || "Couldn't read connected providers."); return }
-      setProviders(res.providers || [])
-    }).catch(() => { if (active) setError("Couldn't read connected providers.") })
-    return () => { active = false }
+      if (scope.current.scope !== 'helper-picker' || scope.current.version !== version) return
+      if (!res || res.ok === false || res.error) { setError(errorText(res, 'Could not read configured or declared routes.')); return }
+      setInventory(res); setError(null)
+    }).catch(() => { if (scope.current.scope === 'helper-picker' && scope.current.version === version) setError('Could not read configured or declared routes.') })
+    return () => { scope.current.version += 1 }
   }, [ctx, retry])
-
-  if (error) return bubble([label('Helper model'), small(error, C.yellow), actionButton('Retry model discovery', () => setRetry(v => v + 1))], 'picker')
-  if (!open) return bubble([row('Helper model', actionButton('Change', () => setOpen(true))), small(picked && picked.model || 'None picked', C.soft)], 'picker')
-
-  if (!providers) return bubble([label('Helper model'), small('Loading your connected providers…')], 'picker')
-  if (!providers.length) {
-    return bubble([label('Helper model'), small('No connected models found. Connect a provider in Hermes first, then refresh the model picker.')], 'picker')
-  }
-  const slug = active || (picked && picked.provider) || providers[0].slug
-  const provider = providers.find(p => p.slug === slug) || providers[0]
+  const providers = inventory && inventory.providers || []
+  const provider = providers.find(value => value.slug === (active || picked && picked.provider)) || providers[0]
   const term = search.trim().toLowerCase()
-  const models = provider.models.filter(m => !term || m.id.toLowerCase().includes(term))
+  const models = (provider && provider.models || []).filter(model => !term || model.id.toLowerCase().includes(term))
+  const refresh = () => setRetry(value => value + 1)
   const choose = model => {
-    setSaving(model.id)
-    ctx.rest('/chat-model', { method: 'POST', body: { provider: provider.slug, model: model.id } })
-      .then(res => {
-        host.notify({ kind: res && res.ok ? 'success' : 'warning', message: (res && res.message) || 'Saved.' })
-        if (res && res.ok) onPicked()
-      })
-      .catch(err => host.notify({ kind: 'error', message: `Crystallize: ${String(err)}` }))
-      .finally(() => setSaving(null))
+    if (running.current || !provider) return
+    running.current = true; setSaving(model.id); setError(null)
+    ctx.rest('/chat-model', { method: 'POST', body: { provider: provider.slug, model: model.id } }).then(res => {
+      if (scope.current.scope !== 'helper-picker') return
+      if (!res || !res.ok) setError(errorText(res, 'Could not select this helper route.'))
+      else { onPicked(); setOpen(false) }
+    }).catch(() => { if (scope.current.scope === 'helper-picker') setError('Could not select this helper route.') })
+      .finally(() => { running.current = false; if (scope.current.scope === 'helper-picker') setSaving(null) })
   }
-  return bubble([
-    row('Helper model', actionButton('Close model picker', () => setOpen(false))),
-    picked && picked.model ? small(`Selected: ${picked.model}`, C.soft) : small('None picked'),
-    small('Used for explicit routed tasks and permitted summaries. Models come from the routes connected to Hermes; prices may be unknown for some routes.', C.soft),
-    jsx('div', {
-      key: 'subs',
-      role: 'tablist',
-      style: { display: 'flex', gap: 2, flexWrap: 'wrap' },
-      children: providers.map(p => jsx('button', {
-        key: p.slug,
-        type: 'button',
-        role: 'tab',
-        'aria-selected': p.slug === provider.slug,
-        onClick: () => setActive(p.slug),
-        style: {
-          padding: '1px 7px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: '0.6875rem', lineHeight: 1.6,
-          background: p.slug === provider.slug ? C.stroke : 'none', color: p.slug === provider.slug ? C.text : C.muted
-        },
-        children: p.name
-      }))
-    }),
-    jsx('input', {
-      key: 'search',
-      type: 'search',
-      value: search,
-      placeholder: `Search ${provider.name} models`,
-      'aria-label': `Search ${provider.name} models`,
-      onChange: e => setSearch(e.target.value),
-      style: {
-        padding: '4px 8px', borderRadius: 6, border: `0.5px solid ${C.stroke}`, background: 'none',
-        color: C.text, fontSize: '0.75rem', width: '100%', boxSizing: 'border-box'
-      }
-    }),
-    jsx('div', {
-      key: 'models',
-      style: { display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 280, overflowY: 'auto' },
-      children: models.length ? models.slice(0, 60).map(m => {
-        const on = picked && picked.provider === provider.slug && picked.model === m.id
-        const price = m.output_per_million != null && m.input_per_million != null ? `$${m.input_per_million.toFixed(2)} in · $${m.output_per_million.toFixed(2)} out per million` : 'No listed price'
-        return jsxs('button', {
-          key: m.id,
-          type: 'button',
-          disabled: saving === m.id,
-          onClick: () => choose(m),
-          style: {
-            display: 'flex', flexDirection: 'column', gap: 1, textAlign: 'left', padding: '5px 8px', borderRadius: 6, cursor: 'pointer',
-            border: `0.5px solid ${on ? C.green : 'transparent'}`, background: on ? C.tile : 'none', color: C.text
-          },
-          children: [
-            jsx('span', { style: { fontSize: '0.75rem' }, children: `${m.id}${m.featured ? ' · featured' : ''}` }),
-            jsx('span', { style: { fontSize: '0.625rem', color: C.muted }, children: price })
-          ]
-        })
-      }) : [small('No models match that search.')]
-    })
+  if (!open) return bubble([
+    row('Helper model', actionButton('Change', () => setOpen(true))), small(routeLabel(picked), C.soft),
+    small('Configured helper choice. Hermes checks authentication and route availability when a permitted call runs.')
   ], 'picker')
+  return bubble([
+    row('Helper model', actionButton('Close model picker', () => setOpen(false), !!saving)),
+    small(picked && picked.model ? `Selected: ${routeLabel(picked)}` : 'No helper selected', C.soft),
+    small('Used for explicit text subtasks and permitted summaries. Your main model and reasoning stay as configured.', C.soft),
+    small(inventoryNotice, C.soft),
+    ...metadataWarnings(inventory).map((message, index) => jsx('div', { key: `inventory-warning-${index}`, children: small(message, C.soft) })),
+    !inventory && !error ? statusLine('Loading configured and declared route choices…') : null,
+    error ? jsxs('div', { style: panelStyle, children: [statusLine(error, C.yellow), actionButton('Refresh model choices', refresh, !!saving)] }) : null,
+    inventory && !providers.length ? small('No route choices were returned. Add the provider and model identifiers accepted by your Hermes setup below.') : null,
+    provider ? jsx('div', {
+      key: 'providers', role: 'tablist', 'aria-label': 'Declared provider routes', style: { display: 'flex', gap: 2, flexWrap: 'wrap' },
+      children: providers.map(value => jsx('button', {
+        key: value.slug, type: 'button', role: 'tab', 'aria-selected': value.slug === provider.slug, disabled: !!saving,
+        onClick: () => { setActive(value.slug); setSearch('') },
+        style: { padding: '2px 7px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: '0.6875rem', lineHeight: 1.6, background: value.slug === provider.slug ? C.stroke : 'none', color: value.slug === provider.slug ? C.text : C.muted },
+        children: value.name || value.slug
+      }))
+    }) : null,
+    provider ? field(`Search ${provider.name || provider.slug} route choices`, jsx('input', { type: 'search', value: search, disabled: !!saving, onChange: event => setSearch(event.target.value), style: fieldStyle })) : null,
+    provider ? jsx('div', { key: 'models', style: { display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 280, overflowY: 'auto' }, children: models.length ? models.slice(0, 60).map(model => {
+      const selected = picked && picked.provider === provider.slug && picked.model === model.id
+      const priced = typeof model.input_per_million === 'number' && typeof model.output_per_million === 'number'
+      const price = priced ? `${model.input_per_million.toLocaleString(undefined, { maximumSignificantDigits: 6 })} input · ${model.output_per_million.toLocaleString(undefined, { maximumSignificantDigits: 6 })} output USD per million · supplied estimate` : 'Price unknown · add a user-supplied rate card'
+      return jsxs('button', {
+        key: model.id, type: 'button', disabled: !!saving, onClick: () => choose(model),
+        style: { display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left', padding: '6px 8px', borderRadius: 6, cursor: saving ? 'wait' : 'pointer', border: `0.5px solid ${selected ? C.green : C.stroke}`, background: selected ? C.tile : 'none', color: C.text },
+        children: [jsx('span', { style: { fontSize: '0.75rem', overflowWrap: 'anywhere' }, children: saving === model.id ? `Saving ${model.id}…` : model.id }), small(price), small('Declared route · authentication unverified')]
+      })
+    }) : small('No route choices match this search.') }) : null,
+    models.length > 60 ? small(`${models.length} matches. Refine the search to see more.`) : null,
+    jsx(RouteEntry, { key: 'route-entry', ctx, onAdded: refresh }),
+    jsx(PricingCard, { key: `pricing:${picked && picked.provider || ''}:${picked && picked.model || ''}`, ctx, route: picked, onSaved: refresh }),
+    actionButton('Refresh model choices', refresh, !!saving)
+  ].filter(Boolean), 'picker')
 }
-
 function ThisChat({ state, onToggle, heading = 'This chat', pending = false }) {
   if (!state.session_id) return bubble([label(heading), small('Send a message in any chat, then come back here to turn it on.')], 'this')
   const saved = state.this_chat
@@ -1840,6 +1978,7 @@ function ChatSection({ ctx, sessionId: focused }) {
 }
 
 function ChatSession({ ctx, sessionId, focused }) {
+  const compatibilityState = useCompatibility(ctx)
   const [state, setState] = useState(null)
   const [observedTools, setObservedTools] = useState([])
   useEffect(() => setObservedTools([]), [sessionId])
@@ -1881,6 +2020,7 @@ function ChatSession({ ctx, sessionId, focused }) {
     children: [
       error ? jsx('div', { role: 'status', children: small(error, C.soft) }) : null,
       !current && !error ? small('Loading…') : null,
+      current ? jsx(CompatibilityCard, { key: 'capabilities', state: compatibilityState }) : null,
       current ? jsx(ThisChat, { key: 'this', state: current, onToggle: toggle, pending, heading: focused ? 'This chat' : `Your last chat${current.title ? `: ${current.title}` : ''}` }) : null,
       current && sessionId ? jsx(ChatControls, { key: `controls:${sessionId}`, ctx, sessionId, policy: current.policy || { default_mode: 'clean', focus: '', tools: {} }, observedTools: current.tool_names || observedTools, onSaved: policy => { requests.current.version += 1; setState(old => old && old.session_id === sessionId ? { ...old, policy } : old) } }) : null,
       current && sessionId ? jsx(RereadControls, { key: `reread:${sessionId}`, ctx, sessionId, chatEnabled: current.enabled }) : null,
@@ -1890,7 +2030,7 @@ function ChatSession({ ctx, sessionId, focused }) {
       current ? jsxs('details', { key: 'how', children: [
         jsx('summary', { style: { color: C.soft, cursor: 'pointer', fontSize: '0.6875rem' }, children: 'How Chat saves' }),
         small('Your main model can route explicit routine tasks to the selected helper. Tool-result controls determine which results may be cleaned or summarized. Files and failed results stay exact.', C.soft),
-        small('For a large artifact, route one whole-text subtask with input_files and save_to, then let the main model review the saved output. Main reasoning and decisions stay with your chosen model.', C.soft),
+        small('For a large artifact, let Hermes read the input through its normal tools, route one complete text subtask, and save the reviewed result through normal Hermes tools. Main reasoning and decisions stay with your chosen model.', C.soft),
         small('Re-read controls are an additional opt-in for repeated text and batching guidance. Context Rent shows later read estimates and cache payback. Global tool settings require a separate choice in Hermes.', C.soft),
         small(current.why_not_first, C.soft)
       ] }) : null
@@ -1928,16 +2068,16 @@ const NOTES = [
   ]],
   ['How Cron saves', [
     ['Make cheaper', 'Starts a measured trial of fewer AI calls, narrower tools and safe cleanup. Your main reasoning setting is preserved. Each stage needs fresh checks and lower cost before it stays.'],
-    ['Routine', 'Steps a job repeats, saved so they run before the AI starts. It needs matching test runs first, and you choose when to promote it.'],
-    ['Live routine', 'The routine is in use. If it fails, the AI does the whole task, and two failures in a row switch it off.'],
+    ['Read plan', 'Repeated read steps learned from normal Hermes runs. Use host-tool plan explicitly to guide the main agent through the regular tool pipeline. Automatic pre-run replay requires verified guarded nested dispatch.'],
+    ['Host-tool plan', 'The learned plan is in use, while Hermes executes each tool through its normal permissions, hooks and approvals. Automatic execution modes remain unavailable when their public capability is missing.'],
     ['Optimization coverage', 'How much of your active scheduled work uses lower-cost settings. Qualified savings require matching model, provider and full reasoning identity; review each receipt.'],
     ['Runaway Brake', 'Off until you turn it on. Each job gets a token limit from its own recent runs: at least 3 times a normal run and 1.5 times its largest. A run past that limit is told to stop using tools and answer with what it has, and to say it stopped early. Jobs that send or change things are never stopped, and jobs with fewer than 5 finished runs have no limit yet.']
   ]],
   ['When nothing has changed', [
-    ['If unchanged: stay quiet', 'The job\'s data is the same as last run, so no AI runs and no message goes out. That run costs nothing.'],
-    ['If unchanged: repeat last answer', 'One short AI call repeats the last answer, so anyone expecting a message still gets one.'],
-    ['If unchanged: run the AI', 'The job runs as normal every time, even when nothing changed.'],
-    ['Run with no AI', 'For jobs that only report their data, like a status check. The routine\'s output is the result, at no cost.']
+    ['If unchanged: stay quiet', 'In a supported pre-run mode, unchanged complete data can skip the model and its message. This mode remains unavailable without the required host capability.'],
+    ['If unchanged: repeat last answer', 'In a supported pre-run mode, one short AI call can repeat the last answer. This option remains unavailable without the required host capability.'],
+    ['If unchanged: run the AI', 'Runs the model every time in a supported pre-run mode. With no guarded execution capability, normal Hermes execution remains the fallback.'],
+    ['Run with no AI', 'Available only when the host reports verified guarded execution and this job meets the mode requirements. Current public SDK gaps leave this control unavailable; normal Hermes execution continues.']
   ]],
   ['How Chat saves', [
     ['Cleaned results', 'Uses safe cleanup without an AI call when Clean is selected. Exact leaves a result unchanged; Summary permits a helper call. File contents and failed results stay exact.'],
@@ -1950,11 +2090,11 @@ const NOTES = [
   ['Review and control', [
     ['Taste test', 'Compare anonymous A/B answers from the same captured input. Choose before revealing models, costs and recorded checks. The preference is your judgment; answer-only evidence does not test tool execution.'],
     ['Rhythm', 'Review real observations by weekday and hour, then preview a different frequency. Savings are projections. Applying requires explicit consent to a noncritical job and an acceptable delay; unsupported hosts offer a command to review.'],
-    ['Model auction', 'Choose 2–6 connected routes and an explicit cost cap, preview the estimate, then confirm paid calls. Failed calls and unknown spend remain in the receipt. No winner or future model change is automatic.'],
+    ['Model auction', 'Choose 2–6 declared routes and an explicit cost cap, preview the estimate, then confirm paid calls. Failed calls and unknown spend remain in the receipt. No winner or future model change is automatic.'],
     ['Reasoning', 'Your main model, its reasoning setting and reasoning text are preserved. Cheaper execution comes from explicit subtasks, fewer repeated reads and measured trials.'],
-    ['Whole-text subtasks', 'For large artifacts, ask the helper for one complete subtask using input_files and save_to. The main model reviews the saved result and keeps decisions and the final answer.'],
+    ['Whole-text subtasks', 'For large artifacts, ask for one complete text subtask. On hosts without guarded nested dispatch, input_files and save_to return explicit read/write plans for normal Hermes tools. The main model reviews the result and keeps decisions and the final answer.'],
     ['Global settings', 'Chat controls apply to one chat; Cron controls apply to the selected job. Any global tool configuration is a separate, explicit choice in Hermes.'],
-    ['Compatibility', 'Model lists come from your connected providers. Availability and returned identity are checked for each request; support has not been verified on every model or host version.']
+    ['Compatibility', 'Model choices come from configured and user-declared routes. The public SDK does not provide authenticated inventory. Hermes checks authentication on an actual request; prices are user-supplied estimates, and unsupported automatic replay uses normal host-tool plans.']
   ]],
   ['Reading the numbers', [
     ['Spent', 'What Hermes recorded as the real cost.'],
@@ -2083,21 +2223,22 @@ export default {
             if (notified.has(it.routine_id)) continue
             notified.add(it.routine_id)
             changed = true
-            diag('promotion popup', { routine: it.routine_id })
+            const target = promotionTarget(it, res.compatibility)
+            diag('promotion popup', { routine: it.routine_id, mode: target && target.mode })
             host.notify({
               kind: 'info',
               icon: 'ruby',
-              title: 'Promotion available',
-              message: `${it.name} matched ${it.matches} test runs in a row.`,
+              title: target ? 'Read plan ready' : 'Read plan needs capability review',
+              message: `${it.name} matched ${it.matches} normal-run observations. Review its host capabilities before choosing an execution mode.`,
               meta: it.saving_per_week ? `Estimated saving ${money(it.saving_per_week)}/wk` : undefined,
               persistent: true,
-              action: {
-                label: 'Promote',
+              action: target ? {
+                label: target.label,
                 onClick: () =>
-                  ctx.rest('/promote', { method: 'POST', body: { routine_id: it.routine_id } })
+                  ctx.rest('/promote', { method: 'POST', body: { routine_id: it.routine_id, mode: target.mode } })
                     .then(r => host.notify({ kind: r && r.ok ? 'success' : 'warning', message: (r && r.message) || 'Done.' }))
                     .catch(err => host.notify({ kind: 'error', message: `Crystallize: ${String(err)}` }))
-              },
+              } : undefined,
               secondaryAction: { label: 'Open Crystallize', onClick: () => { if (!isVisible()) show() } }
             })
           }

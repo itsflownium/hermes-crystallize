@@ -19,3 +19,16 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m pytest -c tests/pytest.ini --rootdir tests tests
       - run: node --check desktop/plugin.js
+  hermes-admission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Validate with the reviewed Hermes toolchain and catalog checks
+        uses: NousResearch/hermes-agent/.github/actions/plugin-validate@90d6b98fd86d20981ee06ddd5b7d93e4320f26a4
+        with:
+          path: .
+          hermes-ref: 90d6b98fd86d20981ee06ddd5b7d93e4320f26a4

@@ -1,0 +1,169 @@
+{
+  "source_kind": "hermes_plugins_validate",
+  "pinned_commit": "7fb9a21ee669d8d67e6f22a56ebee551dbc91961",
+  "host_source_commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
+  "host_source_dirty": false,
+  "public_api_policy_commit": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
+  "ok": true,
+  "checks_passed": 16,
+  "errors": [],
+  "warnings": [],
+  "warnings_reviewed": true,
+  "private_import_findings": [],
+  "private_attribute_findings": [],
+  "security_status": "safe",
+  "raw_host_report": "docs/evidence/public-sdk-host-report.json",
+  "raw_host_report_sha256": "53edd6055efe68b7c5b57072b045d043c06f20c742d2b5d08f9cd3ffca31e9d0",
+  "public_api_audit": {
+    "ok": true,
+    "findings": [],
+    "public_core_imports": [
+      {
+        "file": "chat_savings.py",
+        "line": 310,
+        "module": "plugins.plugin_storage",
+        "name": "plugin_data_dir",
+        "public": true
+      },
+      {
+        "file": "configured_models.py",
+        "line": 118,
+        "module": "providers",
+        "name": "get_provider_profile",
+        "public": true
+      },
+      {
+        "file": "configured_models.py",
+        "line": 118,
+        "module": "providers",
+        "name": "list_providers",
+        "public": true
+      },
+      {
+        "file": "dashboard/plugin_api.py",
+        "line": 130,
+        "module": "plugins.plugin_storage",
+        "name": "plugin_data_dir",
+        "public": true
+      },
+      {
+        "file": "delegation.py",
+        "line": 47,
+        "module": "agent.delegation_provider",
+        "name": "DelegationProvider",
+        "public": true
+      },
+      {
+        "file": "delegation.py",
+        "line": 47,
+        "module": "agent.delegation_provider",
+        "name": "DelegationRouteError",
+        "public": true
+      },
+      {
+        "file": "history.py",
+        "line": 91,
+        "module": "hermes_constants",
+        "name": "get_hermes_home",
+        "public": true
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 25,
+        "module": "hermes_cli.config",
+        "name": "load_config",
+        "public": true
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 56,
+        "module": "providers",
+        "name": "get_provider_profile",
+        "public": true
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 107,
+        "module": "hermes_constants",
+        "name": "parse_reasoning_effort",
+        "public": true
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 107,
+        "module": "hermes_constants",
+        "name": "resolve_reasoning_config",
+        "public": true
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 176,
+        "module": "tools.registry",
+        "name": "discover_builtin_tools",
+        "public": true
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 176,
+        "module": "tools.registry",
+        "name": "registry",
+        "public": true
+      },
+      {
+        "file": "modelinfo.py",
+        "line": 212,
+        "module": "providers",
+        "name": "list_providers",
+        "public": true
+      },
+      {
+        "file": "public_pricing.py",
+        "line": 121,
+        "module": "hermes_cli.config",
+        "name": "load_config_readonly",
+        "public": true
+      },
+      {
+        "file": "public_pricing.py",
+        "line": 305,
+        "module": "providers",
+        "name": "get_provider_profile",
+        "public": true
+      },
+      {
+        "file": "store.py",
+        "line": 144,
+        "module": "plugins.plugin_storage",
+        "name": "plugin_db",
+        "public": true
+      },
+      {
+        "file": "tool_discovery.py",
+        "line": 18,
+        "module": "tools.registry",
+        "name": "discover_builtin_tools",
+        "public": true
+      },
+      {
+        "file": "tool_discovery.py",
+        "line": 18,
+        "module": "tools.registry",
+        "name": "registry",
+        "public": true
+      }
+    ],
+    "policy_commit": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
+    "policy_sha256": "aeafa3b0333bfbe01746774e3ffa74d46eee32478b398c38144956bd5be9b98b",
+    "scope": "production Python and dashboard; standalone operator scripts/tests excluded",
+    "limitations": [
+      "Static tripwires are not a sandbox or full data-flow proof.",
+      "Run the authoritative host validator and review all warnings at the exact pin."
+    ]
+  },
+  "provider_calls": 0,
+  "production_jobs_changed": false,
+  "limitations": [
+    "Operator-supplied record of exact-pin local validation, not independently authenticated by the generator.",
+    "No live provider, effective wire reasoning, billing, semantic quality or marketplace admission is established."
+  ]
+}

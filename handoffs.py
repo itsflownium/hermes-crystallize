@@ -9,7 +9,7 @@ import threading
 import time
 from typing import Any
 
-from . import runner, store
+from . import dispatch_support, runner, store
 
 MAX_SECONDS = 180.0
 MAX_FILES = 8
@@ -131,13 +131,21 @@ def _page_text(content: str, offset: int) -> tuple[str, int, bool]:
     return content, len(lines) if content else 0, False
 
 
-def read_inputs(paths: Any, session_id: str, turn_id: str, budget: int) -> str:
-    from . import tools
+def _input_paths(paths: Any) -> list[str]:
     if paths is None:
-        return ""
+        return []
     if not isinstance(paths, list) or len(paths) > MAX_FILES or any(
             not isinstance(p, str) or not p.strip() or len(p) > 4096 or "\x00" in p for p in paths):
         raise ValueError("input_files must contain at most eight nonempty file paths.")
+    return paths
+
+
+def read_inputs(paths: Any, session_id: str, turn_id: str, budget: int) -> str:
+    from . import tools
+    paths = _input_paths(paths)
+    if not paths:
+        return ""
+    dispatch_support.require()
     blocks = []
     used = 0
     for path in paths:
@@ -259,7 +267,35 @@ def execute(ctx: Any, text: str, session_id: str, turn_id: str = "", *, input_fi
             raise ValueError(f"expected_output_tokens must be between 1 and {chat.MAX_ROUTED_TOKENS}.")
         if len(text) > chat.MAX_INPUT_CHARS:
             raise ValueError("The instruction exceeds the complete-input safety cap; nothing was sent.")
-        text += read_inputs(input_files, session_id, turn_id, chat.MAX_INPUT_CHARS - len(text))
+        paths = _input_paths(input_files)
+    except (ValueError, RuntimeError) as exc:
+        return respond({"error": str(exc), "written": False})
+    capability = dispatch_support.support(ctx)
+    if paths and not capability["guarded_dispatch_available"]:
+        resume = {"input": text, "subtask": subtask}
+        if save_to is not None:
+            resume["save_to"] = save_to
+        if expected_output_tokens is not None:
+            resume["expected_output_tokens"] = expected_output_tokens
+        return respond({
+            "status": "pending_host_tools", "completed": False, "written": False,
+            "helper_called": False, "reason": capability["reason"],
+            "host_tool_plan": dispatch_support.tool_plan(
+                [{"tool": "read_file", "arguments": {"path": path, "offset": 1, "limit": 1000}} for path in paths],
+                purpose="Read the complete source inputs through ordinary host tools before the text handoff.",
+                instructions=(
+                    "Make these calls through your own normal host tools. Inspect each result and continue every "
+                    "truncated page using its next_offset or displayed line continuation. Stop if a read is denied, "
+                    "incomplete or exceeds the complete-input budget. Then append the complete source text to the "
+                    "original input instruction and call crystal_cheap once without input_files. No helper call "
+                    "has been made yet. Do not invoke a nested dispatcher or claim these reads already happened."
+                ),
+                continuation={"tool": "crystal_cheap", "arguments": resume,
+                              "requires_complete_source_text_in_input": True},
+            ),
+        })
+    try:
+        text += read_inputs(paths, session_id, turn_id, chat.MAX_INPUT_CHARS - len(text))
     except (ValueError, RuntimeError) as exc:
         return respond({"error": str(exc), "written": False})
     picked = chat.chosen_model()
@@ -303,6 +339,24 @@ def execute(ctx: Any, text: str, session_id: str, turn_id: str = "", *, input_fi
                 "placeholder": "{{crystal:" + result_id + "}}", "completion": completion, "estimate": plan,
                 "note": "Check the deliverable. Reuse the placeholder in your answer or a supported text tool field instead of retyping."}
     if save_to is not None:
+        if not capability["guarded_dispatch_available"]:
+            return respond({
+                **response, "status": "pending_host_tools", "completed": False, "written": False,
+                "write_attempted": False, "path": save_to, "preview": output[:500],
+                "preview_truncated": len(output) > 500, "reason": capability["reason"],
+                "host_tool_plan": dispatch_support.tool_plan(
+                    [{"tool": "write_file", "arguments": {"path": save_to, "content": response["placeholder"]}}],
+                    purpose="Save the retained helper output through the main agent's ordinary write_file tool.",
+                    instructions=(
+                        "Make this call through your normal host write_file tool using the owned placeholder as "
+                        "content. The normal pre-tool hook expands it before host guards inspect the full text. "
+                        "Inspect the actual write result for affirmative success and verify the destination before "
+                        "retrying a denied or ambiguous write. This file has not been written. The complete output "
+                        "is retained in this chat; do not retype it or repeat the paid helper call."
+                    ),
+                ),
+                "note": "The complete output is retained. Finish the pending normal host-tool write with its placeholder; do not repeat the paid handoff.",
+            })
         try:
             evidence = _write_evidence(tools.dispatch("write_file", {"path": save_to, "content": output},
                                            session_id=session_id, turn_id=turn_id), output)
