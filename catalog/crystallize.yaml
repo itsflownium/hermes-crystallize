@@ -1,13 +1,13 @@
 # Submission bundle only. Copy into hermes-agent/plugin-catalog/ in a maintainer-reviewed PR.
 name: "crystallize"
 repo: "https://github.com/itsflownium/hermes-crystallize"
-sha: "7fb9a21ee669d8d67e6f22a56ebee551dbc91961"
+sha: "8f8bad5096b3c0c2041163457a7ea8aeea9db4b4"
 description: "Reduces repeated Hermes chat and cron work with explicit controls and local receipts."
 maintainer: "itsflownium"
 tier: "community"
 category: "automation"
 requires_hermes: ">=0.22.7"
-version: "0.4.0"
+version: "0.4.1"
 title: "Crystallize"
 readme: true
 known_issues:
@@ -21,5 +21,6 @@ capabilities:
   provides_middleware: ["llm_request", "tool_execution"]
   requires_env: []
 screenshots:
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/7fb9a21ee669d8d67e6f22a56ebee551dbc91961/assets/review/public-capabilities-and-host-plan-desktop.png"
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/7fb9a21ee669d8d67e6f22a56ebee551dbc91961/assets/review/public-routes-and-manual-pricing-desktop.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/8f8bad5096b3c0c2041163457a7ea8aeea9db4b4/assets/review/public-capabilities-and-host-plan-desktop.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/8f8bad5096b3c0c2041163457a7ea8aeea9db4b4/assets/review/public-routes-and-manual-pricing-desktop.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/8f8bad5096b3c0c2041163457a7ea8aeea9db4b4/assets/review/chat-quality-and-onboarding-desktop.png"

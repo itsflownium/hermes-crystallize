@@ -1,10 +1,36 @@
-# Validation results — 6 November 2026
+# Validation results
 
-These results distinguish the current public-SDK migration from the earlier
+These results distinguish the current follow-up and public-SDK migration from the earlier
 implementation in this follow-up to PR #7. They do not establish universal model
 compatibility, semantic equivalence or marketplace admission.
 
-## Current public-SDK migration
+## Review fixes — 7 November 2026, version 0.4.1
+
+- **1,216 standalone tests passed, 1 optional source-audit case skipped** on
+  Python 3.13. Thirty new cases reproduce and prevent the reviewed defects,
+  including real default-config capture and independent-process SQLite writers.
+- The new tests cover canonical main-request cache buckets, legacy/unknown usage,
+  recoverable high-cache estimates, long/corrupt/oversized/evicted Cron evidence,
+  failed and pending source results, rejected-summary costs and retained literals.
+- Public output-buffering registration and legacy signatures are covered by
+  local contract tests. These are not a native Desktop streaming transport test.
+- **30 Node UI checks passed.** The refreshed React/Chromium fixture flow captured
+  ten views at desktop/narrow widths, checked overflow, and had zero console
+  errors. Service responses and calls were simulated; no provider was contacted.
+- The local Hermes validator passed **16/16 checks with zero warnings**, using
+  clean host source `2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19`. The independent
+  public-API audit, JavaScript syntax and Git whitespace checks passed.
+- CI additionally validates admission against reviewed host revisions
+  `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4` and
+  `6b21d0564de0492e2ebd0d8f63fca86c03b5c892`; their actual results are recorded by
+  the PR checks. This is not a complete SDK/platform/provider matrix.
+
+No paid provider calls, production job changes or gateway restart were used.
+Literal preservation does not establish semantic equivalence or factual quality.
+Complete Cron captures are bounded and retained locally; missing evidence cannot
+be promoted to success. Main model/reasoning remain unchanged.
+
+## Previous public-SDK migration — 6 November 2026, version 0.4.0
 
 - Standalone Python suite: **1,186 passed, 1 skipped** on Python 3.13. The skipped
   case is an optional source-backed audit; a separate invocation with the local

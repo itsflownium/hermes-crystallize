@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from . import dispatch_support
+from . import dispatch_support, output_delivery
 from .catalog.public_api_audit import audit
 
 _ctx: Any = None
@@ -43,6 +43,9 @@ def report(ctx: Any = None) -> dict[str, Any]:
         "raw_registry_fallback_enabled": False,
         "reasoning_reductions_enabled": False,
         "dispatch": dispatch,
+        "output_delivery": {"public_buffering_supported": output_delivery.supports_hold(context),
+                            "mode": "buffered_before_placeholder_delivery" if output_delivery.supports_hold(context) else "legacy_host_output_hook",
+                            "scope": "Hosts may buffer profile replies while the output-transform plugin is loaded."},
         "private_core_imports": private,
         "public_api_audit": checks,
         "optional_sdk_limits": [

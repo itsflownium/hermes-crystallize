@@ -169,17 +169,24 @@ def save_rate_card(raw: dict[str, Any]) -> dict[str, Any]:
     # replace must be atomic so concurrent saves cannot erase another route.
     with store._lock:
         conn = store._db()
-        row = conn.execute("SELECT value FROM settings WHERE key = ?", (SETTING,)).fetchone()
-        rows = json.loads(row[0]) if row else []
-        if not isinstance(rows, list):
-            raise PricingError("Saved rate cards are malformed; repair them before saving another card.")
-        kept = []
-        for item in rows:
-            existing = validate_rate_card(item)
-            if _route(existing["provider"], existing["model"], existing["base_url"]) != key:
-                kept.append(existing)
-        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (SETTING, json.dumps([*kept, card])))
-        conn.commit()
+        try:
+            # The host and local CLI can be separate processes; the Python lock
+            # alone cannot protect their shared read/modify/write transaction.
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", (SETTING,)).fetchone()
+            rows = json.loads(row[0]) if row else []
+            if not isinstance(rows, list):
+                raise PricingError("Saved rate cards are malformed; repair them before saving another card.")
+            kept = []
+            for item in rows:
+                existing = validate_rate_card(item)
+                if _route(existing["provider"], existing["model"], existing["base_url"]) != key:
+                    kept.append(existing)
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (SETTING, json.dumps([*kept, card])))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
     return dict(card)
 
 
@@ -187,17 +194,22 @@ def delete_rate_card(provider: str, model: str, base_url: Optional[str] = None) 
     key = _route(provider, model, base_url)
     with store._lock:
         conn = store._db()
-        row = conn.execute("SELECT value FROM settings WHERE key = ?", (SETTING,)).fetchone()
-        rows = json.loads(row[0]) if row else []
-        if not isinstance(rows, list):
-            raise PricingError("Saved rate cards are malformed; repair them before deleting one.")
-        kept = []
-        for raw in rows:
-            card = validate_rate_card(raw)
-            if _route(card["provider"], card["model"], card["base_url"]) != key:
-                kept.append(card)
-        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (SETTING, json.dumps(kept)))
-        conn.commit()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", (SETTING,)).fetchone()
+            rows = json.loads(row[0]) if row else []
+            if not isinstance(rows, list):
+                raise PricingError("Saved rate cards are malformed; repair them before deleting one.")
+            kept = []
+            for raw in rows:
+                card = validate_rate_card(raw)
+                if _route(card["provider"], card["model"], card["base_url"]) != key:
+                    kept.append(card)
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (SETTING, json.dumps(kept)))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
     return {"removed": len(kept) != len(rows), "provider": key[0], "model": key[1], "base_url": key[2],
             "configured_cards_require_config_edit": True}
 

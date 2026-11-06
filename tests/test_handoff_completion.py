@@ -377,7 +377,7 @@ def test_main_usage_is_real_normalized_and_never_invents_cache_metadata(world):
 
 
 def test_routing_and_net_account_for_actual_main_prefix_and_each_cache_rate(world, monkeypatch):
-    handoffs.note_usage("s1", {"input_tokens": 10000, "output_tokens": 100,
+    handoffs.note_usage("s1", {"input_tokens": 2000, "prompt_tokens": 10000, "output_tokens": 100,
                                 "cache_read_tokens": 7000, "cache_write_tokens": 1000})
     expected = 2000 * PRICES["main"]["input"] + 7000 * PRICES["main"]["cache_read"] + 1000 * PRICES["main"]["cache_write"]
     plan = cs._routing_plan(PICKED, "s1", input_tokens=30, expected_output_tokens=2000)

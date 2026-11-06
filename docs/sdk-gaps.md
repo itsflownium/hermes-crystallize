@@ -19,6 +19,7 @@ our own static tripwires. A policy update requires deliberate source review.
 | Area | Public surface used | Limit/fallback |
 | --- | --- | --- |
 | Model calls | `ctx.llm.complete`, host auxiliary slots and trust policy | Hermes owns authentication and served-route selection; unknown usage stays unknown |
+| Output delivery | Public `register_hook(..., hold_stream=True)` only when exposed by its signature | Placeholder expansion precedes visible delivery. The host may buffer profile replies while this plugin is loaded; legacy signatures receive no guessed keyword |
 | Provider metadata | Public provider declarations/capabilities | No private model catalog or guessed reasoning vocabulary |
 | Route selection | Sanitized explicit main/auxiliary/cron routes, public declarations and user-added routes | Configured/declared does not prove sign-in, entitlement or current availability; no credential probing |
 | Pricing | Public `ProviderProfile.get_usage_cost` totals plus explicit exact-route user rate cards | Quotes/cards are estimates; a total cannot establish separate token rates; missing rates/fees/tiers stay unknown |

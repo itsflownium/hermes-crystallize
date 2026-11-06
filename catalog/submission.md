@@ -4,7 +4,7 @@ Technical state: **exact-pin technical checks passed**.
 This file and the entry in this plugin repository are a preparation bundle. No upstream
 catalog PR, catalog listing, maintainer approval, or marketplace compliance is claimed.
 
-Pin: `7fb9a21ee669d8d67e6f22a56ebee551dbc91961` in https://github.com/itsflownium/hermes-crystallize; version `0.4.0`;
+Pin: `8f8bad5096b3c0c2041163457a7ea8aeea9db4b4` in https://github.com/itsflownium/hermes-crystallize; version `0.4.1`;
 Hermes floor `>=0.22.7`. The pin is an existing plugin feature commit;
 the later catalog-only bundle commit must not replace it with a self-reference.
 

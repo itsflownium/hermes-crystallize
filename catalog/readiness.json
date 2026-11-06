@@ -3,8 +3,8 @@
   "status": "submission_bundle_only",
   "catalog_ready": false,
   "catalog_ready_meaning": "Human admission/listing is not established by local technical checks.",
-  "pinned_commit": "7fb9a21ee669d8d67e6f22a56ebee551dbc91961",
-  "pinned_manifest_version": "0.4.0",
+  "pinned_commit": "8f8bad5096b3c0c2041163457a7ea8aeea9db4b4",
+  "pinned_manifest_version": "0.4.1",
   "literal_capabilities_match_manifest": true,
   "source_analysis": {
     "registered": {
@@ -35,7 +35,7 @@
       "public_core_imports": [
         {
           "file": "chat_savings.py",
-          "line": 310,
+          "line": 317,
           "module": "plugins.plugin_storage",
           "name": "plugin_data_dir",
           "public": true
@@ -140,14 +140,14 @@
         },
         {
           "file": "public_pricing.py",
-          "line": 305,
+          "line": 317,
           "module": "providers",
           "name": "get_provider_profile",
           "public": true
         },
         {
           "file": "store.py",
-          "line": 144,
+          "line": 151,
           "module": "plugins.plugin_storage",
           "name": "plugin_db",
           "public": true
@@ -179,7 +179,7 @@
     "documented_core_imports": [
       {
         "file": "chat_savings.py",
-        "line": 310,
+        "line": 317,
         "module": "plugins.plugin_storage",
         "name": "plugin_data_dir",
         "public": true
@@ -284,14 +284,14 @@
       },
       {
         "file": "public_pricing.py",
-        "line": 305,
+        "line": 317,
         "module": "providers",
         "name": "get_provider_profile",
         "public": true
       },
       {
         "file": "store.py",
-        "line": 144,
+        "line": 151,
         "module": "plugins.plugin_storage",
         "name": "plugin_db",
         "public": true
@@ -325,7 +325,7 @@
     "host_validation": {
       "status": "operator_supplied_exact_pin_host_validation",
       "ok": true,
-      "sha256": "c33a0d27f164c61cf487e5cfd4abea8d429a41e570cf17f21f9caac7fe059aec",
+      "sha256": "467a3bd27c46e9acdaa3f58a22ce0c7a6b2f483060b834979fc1ffe1678325cc",
       "checks_passed": 16,
       "host_source_commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
       "warnings": [],
@@ -336,8 +336,9 @@
   "ui_evidence": {
     "status": "offline_fixture_captures",
     "screenshots": [
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/7fb9a21ee669d8d67e6f22a56ebee551dbc91961/assets/review/public-capabilities-and-host-plan-desktop.png",
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/7fb9a21ee669d8d67e6f22a56ebee551dbc91961/assets/review/public-routes-and-manual-pricing-desktop.png"
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/8f8bad5096b3c0c2041163457a7ea8aeea9db4b4/assets/review/public-capabilities-and-host-plan-desktop.png",
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/8f8bad5096b3c0c2041163457a7ea8aeea9db4b4/assets/review/public-routes-and-manual-pricing-desktop.png",
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/8f8bad5096b3c0c2041163457a7ea8aeea9db4b4/assets/review/chat-quality-and-onboarding-desktop.png"
     ],
     "live_proof": false
   },

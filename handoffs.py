@@ -32,7 +32,14 @@ def usage_key(session_id: str) -> str:
 
 def main_usage(session_id: str) -> dict:
     row = store.get_setting(usage_key(session_id)) if session_id else None
-    return row if isinstance(row, dict) else {}
+    if not isinstance(row, dict):
+        return {}
+    if row.get("usage_schema") != 2:
+        # Older observations stored an ambiguous input bucket. A fresh public
+        # main-request hook is required before it may price a prefix or rewrite.
+        return {**row, "input_tokens": None, "prompt_tokens": None,
+                "uncached_input_tokens": None, "usage_basis": "legacy_unknown"}
+    return row
 
 
 def note_usage(session_id: str, usage: Any) -> None:
@@ -42,8 +49,28 @@ def note_usage(session_id: str, usage: Any) -> None:
         return
     row = {k: chat._usage_value(usage, k) for k in
            ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens")}
-    if row["input_tokens"] is None:
+    # Hermes's post_api_request hook supplies DISJOINT canonical buckets:
+    # input_tokens is uncached, whereas prompt_tokens is their inclusive sum.
+    # Raw OpenAI prompt_tokens-only fixtures also have an unambiguous total.
+    uncached = row["input_tokens"] if value(usage, "input_tokens") is not None else None
+    prompt = chat._usage_value(usage, "prompt_tokens")
+    buckets = (uncached, row["cache_read_tokens"], row["cache_write_tokens"])
+    if all(part is not None for part in buckets):
+        total = sum(buckets)
+        if prompt is not None and prompt != total:
+            prompt = None
+            basis = "inconsistent_buckets"
+        else:
+            prompt = total
+            basis = "canonical_disjoint"
+    else:
+        basis = "explicit_prompt_total" if prompt is not None else "unknown_cache_buckets"
+    if uncached is None and prompt is None:
         return
+    # Keep the local DTO's established input_tokens = total prompt semantics.
+    # Distinguish the uncached bucket so consumers cannot subtract cache twice.
+    row.update(input_tokens=prompt, prompt_tokens=prompt, uncached_input_tokens=uncached,
+               usage_schema=2, usage_basis=basis)
     with _accounting_lock:
         previous = main_usage(session_id)
         row.update(calls=int(previous.get("calls") or 0) + 1, observed_at=time.time())

@@ -1,5 +1,5 @@
 name: crystallize
-version: 0.4.0
+version: 0.4.1
 manifest_version: 2
 api_version: 1
 description: >-
@@ -41,4 +41,4 @@ config_schema:
     type: int
     default: 2000
     label: Result preview length
-    description: How many characters of each tool result to keep for comparing runs.
+    description: Display preview length. Complete Cron evidence is captured separately within bounded storage limits.

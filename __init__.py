@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from . import capture, chat_savings, cli, experiments, fetch_cache, schemas, store, tools
+from . import capture, chat_savings, cli, experiments, fetch_cache, output_delivery, schemas, store, tools
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,8 @@ def register(ctx: Any) -> None:
     ctx.register_hook("pre_llm_call", capture.make_pre_llm_call(ctx))
     ctx.register_hook("post_api_request", capture.make_post_api_request(ctx))
     ctx.register_hook("pre_tool_call", capture.make_pre_tool_call(ctx))
-    ctx.register_hook("transform_llm_output", capture.make_transform_llm_output(ctx))
+    ctx.register_hook("transform_llm_output", capture.make_transform_llm_output(ctx),
+                      **output_delivery.registration_options(ctx))
 
     ctx.register_tool(
         name="crystal_full_result", toolset="crystallize",
