@@ -37,10 +37,11 @@ logger = logging.getLogger(__name__)
 
 TRIAL_RUNS = 2
 MAX_TRIAL_RUNS = 6  # a job that had always answered gets this long to say something again
+STALE_FAILURES = 3  # kept settings that fail this many runs in a row go back by themselves
 CLOSE_CALL = 0.15   # a result within this of "no saving" gets more runs before it's judged
 EFFICIENCY_HINT = ("\n\nWork efficiently: use only the tools this task needs, once each. Don't load skills, "
                    "re-check results or research beyond what the task asks. Still do every action it asks "
-                   "for, on every run. Then answer.")
+                   "for, on every run, and keep every detail it asks for, such as links. Then answer.")
 MIN_BEFORE_RUNS = 2
 BEFORE_WINDOW = 8
 MIN_LENGTH_RATIO = 0.5
@@ -278,7 +279,7 @@ def start(job: str, level: Optional[str] = None) -> dict[str, Any]:
 
 def start_all() -> dict[str, Any]:
     """Start a trial on every job that can have one. One job's problem doesn't stop the rest."""
-    started, skipped = [], {}
+    started, skipped, routines = [], {}, []
     for job in _all_jobs():
         name = job.get("name") or job.get("id")
         try:
@@ -286,7 +287,21 @@ def start_all() -> dict[str, Any]:
             started.append(name)
         except lifecycle.LifecycleError as exc:
             skipped[name] = str(exc)
-    return {"started": started, "skipped": skipped}
+        if not job.get("no_agent") and _start_routine_test(job):
+            routines.append(name)
+    return {"started": started, "skipped": skipped, "routines": routines}
+
+
+def _start_routine_test(job: dict[str, Any]) -> bool:
+    """Begin testing a routine if the job has one to offer. Tests only read data, and
+    promoting one stays your choice."""
+    if store.routine_for_job(job["id"]):
+        return False
+    try:
+        lifecycle.try_job(job.get("name") or job["id"])
+        return True
+    except lifecycle.LifecycleError:
+        return False
 
 
 def cleans_results(name: str) -> bool:
@@ -326,8 +341,27 @@ def refresh() -> None:
         for t in store.list_tuning():
             if t["status"] == "trial":
                 _decide(t)
+            elif t["status"] == "kept":
+                _guard_kept(t)
     except Exception:  # noqa: BLE001
         logger.warning("crystallize: checking reasoning trials failed", exc_info=True)
+
+
+def _guard_kept(t: dict[str, Any]) -> None:
+    """Models and jobs change after a trial. Settings that keep failing stop being kept."""
+    recent = _finished_scheduled(t["job_name"])[-STALE_FAILURES:]
+    since = t.get("finished_at") or 0
+    if len(recent) < STALE_FAILURES or any((r.session_started or 0) < since or r.outcome != "failed" for r in recent):
+        return
+    try:
+        _restore(t)
+    except lifecycle.LifecycleError:
+        logger.warning("crystallize: couldn't restore %s", t["job_name"], exc_info=True)
+        return
+    t.update({"status": "reverted", "finished_at": time.time(),
+              "result": {**(t.get("result") or {}), "ok": False,
+                         "why": f"it failed {STALE_FAILURES} runs in a row after being kept"}})
+    store.save_tuning(t["job_name"], t)
 
 
 def _is_close(result: dict[str, Any]) -> bool:

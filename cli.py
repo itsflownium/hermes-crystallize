@@ -234,6 +234,8 @@ def _tune(args: Any) -> None:
     if getattr(args, "all", False):
         result = tuning.start_all()
         print(f"Started on: {', '.join(result['started']) or 'nothing'}")
+        if result["routines"]:
+            print(f"Testing routines for: {', '.join(result['routines'])}. Promoting one stays your choice.")
         for name, why in result["skipped"].items():
             print(f"  {name}: {why}")
         return

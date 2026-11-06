@@ -173,8 +173,11 @@ async def tune_all() -> dict[str, Any]:
     """Start a trial on every job that can have one."""
     result = _tuning().start_all()
     count = len(result["started"])
-    return {"ok": bool(count), "message": f"Making {count} job{'' if count == 1 else 's'} cheaper." if count
-            else "No jobs are ready yet. Each needs 2 finished runs first."}
+    tests = len(result["routines"])
+    extra = f" Testing routines for {tests}." if tests else ""
+    return {"ok": bool(count or tests),
+            "message": (f"Making {count} job{'' if count == 1 else 's'} cheaper." if count
+                        else "No jobs are ready for cheaper settings yet. Each needs 2 finished runs first.") + extra}
 
 
 @router.get("/chat-state")

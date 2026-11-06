@@ -1,6 +1,7 @@
 """The pre-run step: cleaning data, spotting unchanged runs, and the no-AI check."""
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -294,3 +295,28 @@ def test_own_script_failure_is_passed_on(monkeypatch, tmp_path):
     (tmp_path / "own.py").write_text("import sys; print('broken'); sys.exit(3)")
     prerun.write_script("cr_1", "job", "own.py")
     assert _run_script(d / "cr_1.py", tmp_path).returncode == 3
+
+
+def _crashing_hermes(tmp_path):
+    """Run scripts against a stand-in Hermes whose command fails with no output."""
+    pkg = tmp_path / "fake" / "hermes_cli"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (pkg / "main.py").write_text("import sys; sys.exit(7)")
+    return {**os.environ, "PYTHONPATH": str(tmp_path / "fake")}
+
+
+def test_a_routine_crash_hands_the_task_to_the_ai(monkeypatch, tmp_path):
+    d = tmp_path / "crystallize"
+    monkeypatch.setattr(prerun, "scripts_dir", lambda: d)
+    prerun.write_script("cr_1", "job")
+    out = subprocess.run([sys.executable, str(d / "cr_1.py")], capture_output=True, text=True, env=_crashing_hermes(tmp_path))
+    assert out.returncode == 0 and "Do the whole task yourself" in out.stdout
+
+
+def test_a_no_ai_routine_crash_is_reported_as_a_failure(monkeypatch, tmp_path):
+    d = tmp_path / "crystallize"
+    monkeypatch.setattr(prerun, "scripts_dir", lambda: d)
+    prerun.write_script("cr_1", "job", no_ai=True)
+    out = subprocess.run([sys.executable, str(d / "cr_1.py")], capture_output=True, text=True, env=_crashing_hermes(tmp_path))
+    assert out.returncode == 7 and "Do the whole task" not in out.stdout

@@ -439,7 +439,7 @@ def script_rel(routine_id: str) -> str:
     return f"crystallize/{routine_id}.py"
 
 
-def write_script(routine_id: str, name: str, own_script: Optional[str] = None) -> str:
+def write_script(routine_id: str, name: str, own_script: Optional[str] = None, no_ai: bool = False) -> str:
     """Write the tiny pre-run script for a routine and return its `script` value.
 
     Hermes starts cron scripts on the Python that matches its current packages, so the
@@ -450,6 +450,7 @@ def write_script(routine_id: str, name: str, own_script: Optional[str] = None) -
     A job that already had a pre-run script keeps it: it runs first, can still stop the
     run with its own wakeAgent gate, and its output stays in the AI's prompt.
     """
+    no_ai_literal = "True" if no_ai else "False"
     body = f'''"""Crystallize pre-run for {name!r}. Created by the Crystallize plugin.
 
 Runs the routine's tested steps and prints their data for the AI.
@@ -483,10 +484,15 @@ if OWN_SCRIPT:
 
 CMD = [sys.executable, "-m", "hermes_cli.main", "crystal", "prerun", {json.dumps(routine_id)}]
 proc = subprocess.run(CMD, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
-sys.stdout.write(proc.stdout)
 if proc.returncode != 0:
     sys.stderr.write(proc.stderr[-2000:])
-sys.exit(proc.returncode)
+    if not proc.stdout.strip() and {no_ai_literal}:
+        sys.exit(proc.returncode)  # a no-AI job has no one to hand over to: report the failure
+    if not proc.stdout.strip():
+        print("Crystallize: the routine couldn't run. Do the whole task yourself.")
+        sys.exit(0)
+sys.stdout.write(proc.stdout)
+sys.exit(proc.returncode if {no_ai_literal} else 0)
 '''
     d = scripts_dir()
     d.mkdir(parents=True, exist_ok=True)

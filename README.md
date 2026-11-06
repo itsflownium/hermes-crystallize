@@ -41,6 +41,7 @@ Trials on more models also kept their savings, with the same job. These were jud
 | Mercury 3 | Nous Portal | $0.0015 → $0.0014 | **12%** |
 
 Qwen 3.8 Flash also passed, on tokens written (about 25% fewer), because it was judged before API-price estimates existed.
+At API-price estimates, its runs went from about $0.0046 to $0.0019.
 Llama 4 Scout and Nova Lite didn't complete their normal runs on this job (an empty answer and an HTTP 400 error), and
 Step 3.5 Flash was rejected by its provider, so none of the three could start a trial.
 
@@ -71,6 +72,7 @@ Each job uses every step it can, from the biggest saving down. The panel shows e
 2. **Trial.** Click **Make cheaper** (or **Make all jobs cheaper**), or run `hermes crystal tune <job>`. Earlier runs from Hermes's own records count, so a slow job doesn't wait weeks to start.
 3. **Check.** After 2 answers: did any run fail, did it stop an action it normally takes, are answers much shorter or missing items or links, and did the cost really fall? Close results get more runs.
 4. **Keep or adjust.** If answers suffer, tools and then reasoning come back a step at a time. If nothing works, or it wasn't cheaper, the old settings return. Your global settings never change.
+5. **Keep watching.** Settings that later fail 3 runs in a row go back by themselves.
 
 **What the checks can't catch:** subtle mistakes in an answer, or an action or tool a job only uses now and
 then. `hermes crystal tune <job> --status` shows an answer from before and after to read yourself.
