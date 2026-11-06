@@ -164,7 +164,8 @@ def test_included_runs_compare_at_api_prices():
     answers = {"b1": ANSWER, "b2": ANSWER, "t1": ANSWER, "t2": ANSWER}
     before = [included("b1", 0.01), included("b2", 0.01)]
     r = tuning.evaluate(before, [included("t1", 0.004), included("t2", 0.004)], answers)
-    assert r["ok"] and r["metric"] == "api cost" and "API prices" in tuning._amount(r["metric"], r["after"])
+    assert r["ok"] and r["metric"] == "api cost"
+    assert "API prices" in tuning.status_text({"status": "kept", "level": "low", "result": r})
     assert not tuning.evaluate(before, [included("t1", 0.0098), included("t2", 0.0098)], answers)["ok"]
 
 

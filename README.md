@@ -25,8 +25,22 @@ is shown at API prices.
 | GPT-6 Luna | Codex OAuth | 5 → 1 | 141k → 11k | 107s → 12s | $0.0073 → $0.0012 | **84%** |
 | Kimi K3 | Nous Portal | 3 → 1 | 54k → 9k | 47s → 10s | $0.0408 → $0.0118 | **71%** |
 
-Savings vary by job and model, and these are the only models that have run the full trial. If a job doesn't
-get cheaper on yours, it goes back to its old settings by itself.
+Trials on more models also kept their savings, with the same job. These were judged on 2 runs without routines:
+
+| Model | Route | Cost per run | Saved |
+|---|---|---|---|
+| Gemini 3.8 Flash | Nous Portal | $0.0942 → $0.0150 | **84%** |
+| MiniMax M3 | Nous Portal | $0.0207 → $0.0052 | **75%** |
+| Mistral Small 3.2 | Nous Portal | $0.0034 → $0.0012 | **65%** |
+| Granite 4.2 8B | Nous Portal | $0.0026 → $0.0010 | **62%** |
+| DeepSeek V4 Flash | Nous Portal | $0.0015 → $0.0006 | **58%** |
+| Gemma 4 26B | Nous Portal | $0.0035 → $0.0015 | **57%** |
+
+Qwen 3.8 Flash also passed, but Hermes had no price for its runs, so it was compared on tokens written (about 25% fewer).
+Llama 4 Scout and Nova Lite didn't complete their normal runs on this job (an empty answer and an HTTP 400 error), so they couldn't start a trial.
+
+Savings vary by job and model. Every other cloud provider uses the same lookups but hasn't had a real run. If a
+job doesn't get cheaper on yours, it goes back to its old settings by itself.
 
 ## The savings ladder
 

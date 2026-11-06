@@ -39,7 +39,8 @@ TRIAL_RUNS = 2
 MAX_TRIAL_RUNS = 6  # a job that had always answered gets this long to say something again
 CLOSE_CALL = 0.15   # a result within this of "no saving" gets more runs before it's judged
 EFFICIENCY_HINT = ("\n\nWork efficiently: use only the tools this task needs, once each. Don't load skills, "
-                   "re-check results or research beyond what the task asks. Then answer.")
+                   "re-check results or research beyond what the task asks. Still do every action it asks "
+                   "for, on every run. Then answer.")
 MIN_BEFORE_RUNS = 2
 BEFORE_WINDOW = 8
 MIN_LENGTH_RATIO = 0.5
@@ -84,7 +85,7 @@ def _measure(before: list[history.Run], trial: list[history.Run]) -> tuple[str, 
 def _amount(metric: Optional[str], value: Optional[float]) -> str:
     if value is None:
         return "?"
-    return {"cost": f"${value:.4f}", "api cost": f"${value:.4f} at API prices", "tokens": f"{value:,.0f} tokens", "seconds": f"{value:.0f}s"}.get(metric or "", str(value))
+    return {"cost": f"${value:.4f}", "api cost": f"${value:.4f}", "tokens": f"{value:,.0f} tokens", "seconds": f"{value:.0f}s"}.get(metric or "", str(value))
 
 
 def evaluate(before: list[history.Run], trial: list[history.Run],
@@ -412,7 +413,8 @@ def status_text(t: Optional[dict[str, Any]]) -> str:
         return f"Trying {_settings(t)}: {min(done, TRIAL_RUNS)} of {TRIAL_RUNS} answers so far"
     if t["status"] == "kept":
         metric = res.get("metric", "cost")
-        return f"Kept {_settings(t)}: {_amount(metric, res.get('before', res.get('cost_before')))} → {_amount(metric, res.get('after', res.get('cost_after')))} a run"
+        where = " at API prices" if metric == "api cost" else ""
+        return f"Kept {_settings(t)}: {_amount(metric, res.get('before', res.get('cost_before')))} → {_amount(metric, res.get('after', res.get('cost_after')))} a run{where}"
     if t["status"] == "reverted":
         return f"Went back to the old setting: {res.get('why', 'the check failed')}"
     return "You put the old setting back"

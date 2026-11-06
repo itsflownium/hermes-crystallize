@@ -258,10 +258,13 @@ function Compare({ before, after }) {
       ]
     })
   const has = after && after.runs
+  const plan = !before.cost_usd && before.api_cost_usd != null
   return jsxs('div', {
-    style: { display: 'flex', gap: 8 },
+    style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 },
     children: [
-      cell('Cost a run', money(before.cost_usd), has ? money(after.cost_usd) : null),
+      plan
+        ? cell('At API prices', money(before.api_cost_usd), has ? money(after.api_cost_usd) : null)
+        : cell('Cost a run', money(before.cost_usd), has ? money(after.cost_usd) : null),
       cell('Time', secs(before.seconds), has ? secs(after.seconds) : null),
       cell('Tool calls', before.tool_calls == null ? '—' : before.tool_calls.toFixed(1), has ? after.tool_calls.toFixed(1) : null)
     ]
@@ -293,7 +296,7 @@ function cronLine(cron) {
   const last = cron.last_run_at ? `last run ${agoText(cron.last_run_at)}` : null
   if (cron.status === 'running') return ['Running now', cron.schedule, count, last].filter(Boolean).join(' · ')
   if (cron.status === 'paused') return ['Paused', count, last].filter(Boolean).join(' · ')
-  if (cron.status === 'finished') return cron.gone ? 'No longer scheduled' : ['Finished', count, last].filter(Boolean).join(' · ')
+  if (cron.status === 'finished') return cron.gone ? 'No longer scheduled' : [count, last].filter(Boolean).join(' · ') || 'Finished'
   const next = cron.next_run_at ? untilText(cron.next_run_at) : null
   return [next && `Next run ${next}`, cron.schedule, count, last].filter(Boolean).join(' · ')
 }
@@ -359,11 +362,18 @@ function JobBubble({ item, status, trialRuns, act, exp }) {
   let headline, sub, action
   if (status === 'live') {
     const measured = item.after && item.after.runs
-    headline = measured ? big(perWeek(item.saving_per_week), C.green) : big('Measuring…', C.soft)
+    const plan = item.plan
+    const limited = item.cron && item.cron.runs_total
+    const week = plan ? plan.per_week : item.saving_per_week
+    const total = plan ? plan.saved : item.saved_usd
+    headline = !measured ? big('Measuring…', C.soft)
+      : limited ? big(`${money(total)} saved`, C.green)
+        : big(perWeek(week), C.green)
     const skipped = (item.after && item.after.skipped) || 0
     sub = measured
-      ? `${perMonth(item.saving_per_week)} · saved ${money(item.saved_usd)} so far over ${item.after.runs} runs` +
-        (skipped ? ` · ${skipped} skipped, nothing changed` : '')
+      ? [limited ? null : perMonth(week), limited ? null : `saved ${money(total)} so far`,
+        `over ${item.after.runs} runs`, plan ? 'at API prices, included in your plan' : null,
+        skipped ? `${skipped} skipped, nothing changed` : null].filter(Boolean).join(' · ')
       : 'Savings show after its first live run.'
     action = pill('Undo', () => act('/undo', { routine_id: item.routine_id }), C.muted)
   } else if (status === 'testing') {
@@ -380,7 +390,7 @@ function JobBubble({ item, status, trialRuns, act, exp }) {
   const open = isOpen(exp, item.job_id, item.cron)
   const running = item.cron && item.cron.status === 'running'
   const header = jsx(JobHeader, {
-    item, open, toggle: exp.toggle, action,
+    item, open, toggle: exp.toggle, action, hide: exp.hide,
     tag: chip(running ? 'Running' : status === 'live' ? 'Live routine' : status === 'testing' ? (item.ready ? 'Ready' : 'Testing') : 'Spotted', tone)
   })
   const line = small(cronLine(item.cron), running ? C.green : C.soft)
@@ -591,7 +601,7 @@ function isOpen(exp, id, cron) {
 }
 
 // The line that opens and closes a job. Buttons sit beside it, not inside it.
-function JobHeader({ item, open, toggle, tag, action, muted }) {
+function JobHeader({ item, open, toggle, tag, action, muted, hide }) {
   const flip = () => toggle(item.job_id || item.name, !open)
   const when = timing(item.cron)
   return jsxs('div', {
@@ -606,12 +616,20 @@ function JobHeader({ item, open, toggle, tag, action, muted }) {
         onKeyDown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip() } },
         style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1, cursor: 'pointer' },
         children: [
-          jsx('span', { style: { fontSize: '0.625rem', color: C.muted, width: 10, flexShrink: 0 }, children: open ? '▾' : '▸' }),
+          jsx('span', { style: { fontSize: '0.8125rem', color: C.soft, width: 12, flexShrink: 0 }, children: open ? '▾' : '▸' }),
           jsx('span', { style: { fontSize: muted ? '0.75rem' : '0.8125rem', color: muted ? C.soft : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }, children: item.name }),
           tag
         ]
       }),
-      action || (when ? jsx('span', { style: { fontSize: '0.6875rem', color: when === 'running' ? C.green : C.muted, flexShrink: 0 }, children: when }) : null)
+      action || (when ? jsx('span', { style: { fontSize: '0.6875rem', color: when === 'running' ? C.green : C.muted, flexShrink: 0 }, children: when }) : null),
+      hide ? jsx('button', {
+        type: 'button',
+        title: 'Remove from this panel. The job itself keeps running.',
+        'aria-label': `Remove ${item.name} from this panel`,
+        onClick: () => hide(item.job_id || item.name),
+        style: { flexShrink: 0, border: 'none', background: 'none', color: C.muted, cursor: 'pointer', fontSize: '0.875rem', lineHeight: 1, padding: '0 2px' },
+        children: '×'
+      }) : null
     ]
   })
 }
@@ -621,7 +639,7 @@ function TuneRow({ tune, trialRuns, act }) {
   if (!tune) return null
   const notes = [
     tune.status_text !== 'Not tried yet' ? tune.status_text : null,
-    tune.api_cost_now != null ? `in your plan, about ${money(tune.api_cost_now)} a run at API prices` : null,
+    tune.api_cost_now != null && tune.status !== 'kept' ? `in your plan, about ${money(tune.api_cost_now)} a run at API prices` : null,
     tune.tokens_now != null ? `${Math.round(tune.tokens_now).toLocaleString()} tokens a run` : null,
     tune.cleaned_chars != null ? `${Math.round(tune.cleaned_chars).toLocaleString()} characters cleaned from tool results` : null,
     tune.reasoning_share != null && tune.status !== 'kept' ? `reasoning is about ${Math.round(tune.reasoning_share * 100)}% of its cost` : null
@@ -677,7 +695,8 @@ function tunedHeadline(item) {
     key: 'tuned',
     style: { display: 'flex', flexDirection: 'column', gap: 2 },
     children: [
-      tuned.per_week ? big(perWeek(tuned.per_week), C.green) : null,
+      tuned.per_week && !(item.cron && item.cron.runs_total) ? big(perWeek(tuned.per_week), C.green)
+        : tuned.saved ? big(`${money(tuned.saved)} saved`, C.green) : null,
       small(`${show(tuned.before)} → ${show(tuned.after)} a run${plan ? ' at API prices' : ''} over ${tuned.runs} run${tuned.runs === 1 ? '' : 's'}`, C.green)
     ]
   })
@@ -689,7 +708,7 @@ function WaitingBubble({ item, trialRuns, act, exp }) {
   const id = item.job_id || item.name
   const open = isOpen(exp, id, cron)
   const running = cron.status === 'running'
-  const header = jsx(JobHeader, { item, open, toggle: exp.toggle, tag: chip(running ? 'Running' : cron.status === 'paused' ? 'Paused' : 'Live cron', cron.status === 'paused' ? C.muted : C.green) })
+  const header = jsx(JobHeader, { item, open, toggle: exp.toggle, hide: exp.hide, tag: chip(running ? 'Running' : cron.status === 'paused' ? 'Paused' : 'Live cron', cron.status === 'paused' ? C.muted : C.green) })
   if (!open) return bubble([header, small(cronLine(cron), running ? C.green : C.soft), tunedHeadline(item)], id)
   return bubble([
     header,
@@ -708,8 +727,9 @@ function WaitingBubble({ item, trialRuns, act, exp }) {
 function FinishedRow({ item, exp }) {
   const cron = item.cron || {}
   const open = isOpen(exp, item.job_id, { status: 'finished' })
-  const header = jsx(JobHeader, { item, open, toggle: exp.toggle, muted: true })
-  const summary = [item.was_live && item.saved_usd ? `saved ${money(item.saved_usd)}` : null, cronLine(cron)].filter(Boolean).join(' · ')
+  const header = jsx(JobHeader, { item, open, toggle: exp.toggle, hide: exp.hide, muted: true })
+  const summary = [item.was_live && item.saved_usd ? `saved ${money(item.saved_usd)}` : null,
+    item.plan_saved_usd ? `${money(item.plan_saved_usd)} less at API prices` : null, cronLine(cron)].filter(Boolean).join(' · ')
   if (!open) return bubble([header, small(summary)], item.job_id)
   return bubble([
     header,
@@ -845,6 +865,16 @@ function Panel({ ctx }) {
       ctx.storage.set('expanded_choices', next)
     }
   }
+  const [hidden, setHidden] = useState(() => ctx.storage.get('hidden_jobs', {}))
+  exp.hide = id => {
+    const next = { ...hidden, [id]: true }
+    setHidden(next)
+    ctx.storage.set('hidden_jobs', next)
+  }
+  const showHidden = () => {
+    setHidden({})
+    ctx.storage.set('hidden_jobs', {})
+  }
   const [prefs, setPrefs] = useState(() => ctx.storage.get('prefs', { explain: true, chat: true, jobs: true, watching: true, popups: true }))
   const [showSettings, setShowSettings] = useState(false)
   const setPref = (key, value) => {
@@ -878,11 +908,17 @@ function Panel({ ctx }) {
   if (error) body = [small(error, C.soft)]
   else if (!data) body = [small('Loading…')]
   else {
+    const seen = item => !hidden[item.job_id || item.name]
+    const shown = { ...data, testing: data.testing.filter(seen), live: data.live.filter(seen), spotted: data.spotted.filter(seen),
+      watching: (data.watching || []).filter(seen) }
+    const finishedShown = (data.finished || []).filter(seen)
+    const hiddenCount = [...data.testing, ...data.live, ...data.spotted, ...(data.watching || []), ...(data.finished || [])].filter(x => !seen(x)).length
     body = [jsx(Hero, { key: 'hero', data, act })]
     if (prefs.explain !== false) body.push(jsx(HowItWorks, { key: 'how', onHide: () => setPref('explain', false) }))
     if (prefs.chat) body.push(jsx(ChatCard, { key: 'chat', chat: data.chat, enabled: data.chat_enabled, hasSession: Boolean(sessionId) }))
-    if (prefs.jobs) body.push(jsx(Jobs, { key: 'jobs', data, act, exp }))
-    if (prefs.jobs) body.push(jsx(Finished, { key: 'finished', items: data.finished, exp }))
+    if (prefs.jobs) body.push(jsx(Jobs, { key: 'jobs', data: shown, act, exp }))
+    if (prefs.jobs) body.push(jsx(Finished, { key: 'finished', items: finishedShown, exp }))
+    if (prefs.jobs && hiddenCount) body.push(jsx('div', { key: 'hidden', children: pill(`Show ${hiddenCount} removed job${hiddenCount === 1 ? '' : 's'}`, showHidden, C.muted) }))
   }
 
   return jsx('div', {

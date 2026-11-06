@@ -236,6 +236,13 @@ def _saved_since(after: list[history.Run], baseline: Optional[float]) -> float:
     return sum(max(0.0, baseline - r.cost_usd) for r in after if r.cost_usd is not None)
 
 
+def _plan_saved(after: list[history.Run], baseline: Optional[float]) -> float:
+    """The same as _saved_since for runs included in a plan, at API prices."""
+    if baseline is None:
+        return 0.0
+    return sum(max(0.0, baseline - r.api_cost_usd) for r in after if r.api_cost_usd is not None)
+
+
 def _chat_spent(session_id: Optional[str]) -> Optional[float]:
     if not session_id:
         return None
@@ -260,6 +267,8 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
     running = history.running_job_ids()
     spotted, testing, live, watching, finished = [], [], [], [], []
     all_rows: list[list[dict[str, Any]]] = []
+    waiting_jobs = 0
+    active_weights: list[float] = []
     saved_api = 0.0
     api_week = 0.0
     seen: set[str] = set()
@@ -343,6 +352,8 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
             fit, why = analyze.no_ai_fit(before)
             card["no_ai_fit"], card["no_ai_why"] = fit, why
         weight = a.avg_cost_usd or max([r.api_cost_usd or 0.0 for r in runs[-8:]] or [0.0]) or 1e-6
+        if active:
+            active_weights.append(weight)
         if active and tuned and not is_live:
             score_weight += weight
             score_done += weight * (1.0 if tune["status"] == "kept" else 0.5)
@@ -353,17 +364,29 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         card["runs_per_week"] = per_week
         if not active:  # nothing it can do now, so no promises and no buttons: only what it saved
             job_saved = 0.0
+            plan_saved = 0.0
             if is_live:
                 job_saved = _saved_since(after or [], card["before"].get("cost_usd") or meta.get("baseline_cost"))
                 saved += job_saved
+                plan_saved = _plan_saved(after or [], card["before"].get("api_cost_usd"))
+                saved_api += plan_saved
+            if tuned and tuned["metric"] == "api cost":
+                plan_saved += tuned_saving
             card["saving_per_week"] = 0.0
-            finished.append({**card, "saved_usd": job_saved + tuned_saving, "was_live": is_live or bool(tuned)})
+            real = job_saved + (tuned_saving if tuned and tuned["metric"] != "api cost" else 0.0)
+            finished.append({**card, "saved_usd": real, "plan_saved_usd": plan_saved or None, "was_live": is_live or bool(tuned)})
         elif routine and routine["status"] == "live":
             score_weight += weight
             score_done += weight
             job_saved = _saved_since(after or [], card["before"].get("cost_usd") or meta.get("baseline_cost"))
             saved += job_saved
             b, af = card["before"], card["after"]
+            if b and af and b.get("api_cost_usd") is not None and af.get("api_cost_usd") is not None:
+                plan_saved = _plan_saved(after or [], b["api_cost_usd"])
+                saved_api += plan_saved
+                rate = max(0.0, b["api_cost_usd"] - af["api_cost_usd"]) * (per_week or 0.0)
+                api_week += rate
+                card["plan"] = {"before": b["api_cost_usd"], "after": af["api_cost_usd"], "saved": plan_saved, "per_week": rate}
             if b and af and b.get("cost_usd") is not None and af.get("cost_usd") is not None and per_week:
                 card["saving_per_week"] = max(0.0, b["cost_usd"] - af["cost_usd"]) * per_week
             free_share = (af or {}).get("skipped", 0) / af["runs"] if af and af.get("runs") else 0.0
@@ -391,9 +414,14 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         if name in seen or job.get("state") == "completed":
             continue
         cron = cron_state(job, running)
+        if not cron["no_ai"]:
+            waiting_jobs += 1
         watching.append({"job_id": job.get("id"), "name": name, "cron": cron, "reason": (
             "Runs with no AI, so there's nothing to save." if cron["no_ai"] else "Waiting for its first runs.")})
 
+    # A job with no runs yet still counts: it has simply saved nothing so far.
+    if waiting_jobs and active_weights:
+        score_weight += waiting_jobs * statistics.median(active_weights)
     score = round(100 * score_done / score_weight) if score_weight > 0 else None
 
     quick = tuning.cards()

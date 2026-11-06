@@ -228,7 +228,8 @@ def action_prompt(routine_id: str, original: str) -> str:
     return (
         f"{MARKER} {routine_id}] The Script Output block above holds the data this job fetches, "
         "collected just now by a tested Crystallize routine. Don't fetch it again. Use it to do "
-        "the rest of the task, including anything it says to send or change. Only if the Script "
+        "the rest of the task, including anything it says to send or change, on every run, even "
+        "if it looks done already. Only if the Script "
         "Output says the routine failed, do the whole task yourself.\n\n"
         f"Task:\n{original}"
     )
