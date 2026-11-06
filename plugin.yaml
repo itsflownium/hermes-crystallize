@@ -15,6 +15,7 @@ requires_hermes: ">=0.22.7"
 provides_tools:
   - crystal_list
   - crystal_run
+  - crystal_full_result
 
 provides_hooks:
   - post_tool_call

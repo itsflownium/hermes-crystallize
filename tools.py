@@ -92,3 +92,13 @@ def crystal_run(args: dict[str, Any] | None = None, **_: Any) -> str:
         result["error"] = f"Step {result.get('failed_step')} failed: {result.get('reason')}. Do the task yourself."
     result["routine"] = routine["name"]
     return json.dumps(result, default=str)
+
+
+def crystal_full_result(args: dict[str, Any] | None = None, **_: Any) -> str:
+    from . import chat_savings
+
+    try:
+        return chat_savings.read_full(str((args or {}).get("result_id") or ""), (args or {}).get("offset") or 0)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("crystallize: crystal_full_result failed: %s", exc)
+        return json.dumps({"error": "Couldn't read that result."})

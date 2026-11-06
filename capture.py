@@ -87,11 +87,15 @@ def make_post_tool_call(ctx: Any) -> Callable[..., None]:
 def make_transform_tool_result(ctx: Any) -> Callable[..., Any]:
     """Clean a tool's result before the AI reads it, for cron jobs in a Crystallize trial
     or keeping its settings. Every later AI call re-reads it, so this saves on all of them."""
-    from . import prerun, tuning
+    from . import chat_savings, prerun, tuning
 
-    def transform(tool_name: str = "", result: Any = None, **_: Any) -> Any:
+    def transform(tool_name: str = "", result: Any = None, session_id: str = "", **_: Any) -> Any:
         try:
             run = ctx.current_cron_execution()
+            if run is None:
+                if not session_id or not store.chat_enabled(session_id):
+                    return None
+                return chat_savings.shrink(ctx, session_id, tool_name, result)
             name = getattr(run, "job_name", None) if run else None
             if not name or tool_name not in prerun.CLEANED_TOOLS or not tuning.cleans_results(name):
                 return None

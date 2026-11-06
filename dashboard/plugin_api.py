@@ -180,13 +180,56 @@ async def tune_all() -> dict[str, Any]:
                         else "No jobs are ready for cheaper settings yet. Each needs 2 finished runs first.") + extra}
 
 
+def _chat():
+    _overview()
+    return importlib.import_module(f"{_PKG}.chat_savings")
+
+
+@router.get("/chat-summary")
+async def chat_summary(session_id: Optional[str] = None) -> dict[str, Any]:
+    import asyncio
+
+    try:
+        return await asyncio.to_thread(lambda: _chat().summary(session_id))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("crystallize: chat summary failed: %s", exc, exc_info=True)
+        return {"error": "Couldn't load Crystallize Chat data."}
+
+
+@router.get("/chat-models")
+async def chat_models() -> dict[str, Any]:
+    """Your connected subscriptions and their models, from Hermes's own model picker."""
+    import asyncio
+
+    try:
+        return {"providers": await asyncio.to_thread(lambda: _chat().connected_models())}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("crystallize: listing chat models failed: %s", exc, exc_info=True)
+        return {"providers": [], "error": "Couldn't read your connected subscriptions."}
+
+
+@router.post("/chat-model")
+async def chat_model(body: dict) -> dict[str, Any]:
+    """Pick the cheap model. Only what's on your connected list can be chosen."""
+    import asyncio
+
+    provider, model = str((body or {}).get("provider") or ""), str((body or {}).get("model") or "")
+    lc, ch = _lifecycle(), _chat()
+    try:
+        listed = await asyncio.to_thread(ch.connected_models)
+        if not any(p["slug"] == provider and any(m["id"] == model for m in p["models"]) for p in listed):
+            return {"ok": False, "message": "That model isn't on your connected subscriptions."}
+        await asyncio.to_thread(ch.set_model, provider, model)
+        return {"ok": True, "message": f"Crystallize Chat will use {model.split('/')[-1]}."}
+    except lc.LifecycleError as exc:
+        return {"ok": False, "message": str(exc)}
+
+
 @router.get("/chat-state")
 async def chat_state(session_id: Optional[str] = None) -> dict[str, Any]:
-    """Whether Crystallize is on for a chat (drives the message-box toggle)."""
+    """Whether Crystallize Chat is on, or can be, for a chat (drives the message-box button)."""
     try:
-        _overview()
-        store = importlib.import_module(f"{_PKG}.store")
-        return {"session_id": session_id, "enabled": store.chat_enabled(session_id)}
+        return _chat().status_for(session_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning("crystallize: chat-state failed: %s", exc)
-        return {"session_id": session_id, "enabled": False, "error": "Couldn't read Crystallize state."}
+        return {"session_id": session_id, "enabled": False, "can_start": False, "error": "Couldn't read Crystallize state."}

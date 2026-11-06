@@ -28,3 +28,18 @@ CRYSTAL_RUN = {
         "required": ["routine_id"],
     },
 }
+
+
+CRYSTAL_FULL_RESULT = {
+    "name": "crystal_full_result",
+    "description": ("Read the exact original of a tool result that Crystallize Chat condensed. Use it when the "
+                    "summary leaves out something you need."),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "result_id": {"type": "string", "description": "The full_result_id from the condensed result."},
+            "offset": {"type": "integer", "description": "Where to continue reading, from next_offset."},
+        },
+        "required": ["result_id"],
+    },
+}
