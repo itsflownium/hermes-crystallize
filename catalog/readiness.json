@@ -2,7 +2,8 @@
   "schema_version": 1,
   "status": "submission_bundle_only",
   "catalog_ready": false,
-  "pinned_commit": "c2c15d8dfa62b3e075da78547669b165e2b4c523",
+  "catalog_ready_meaning": "Human admission/listing is not established by local technical checks.",
+  "pinned_commit": "7fb9a21ee669d8d67e6f22a56ebee551dbc91961",
   "pinned_manifest_version": "0.4.0",
   "literal_capabilities_match_manifest": true,
   "source_analysis": {
@@ -27,107 +28,327 @@
         "tool_execution"
       ]
     },
-    "core_imports_requiring_public_api_review": [
+    "public_dispatch_plan_fallback": true,
+    "public_api_audit": {
+      "ok": true,
+      "findings": [],
+      "public_core_imports": [
+        {
+          "file": "chat_savings.py",
+          "line": 310,
+          "module": "plugins.plugin_storage",
+          "name": "plugin_data_dir",
+          "public": true
+        },
+        {
+          "file": "configured_models.py",
+          "line": 118,
+          "module": "providers",
+          "name": "get_provider_profile",
+          "public": true
+        },
+        {
+          "file": "configured_models.py",
+          "line": 118,
+          "module": "providers",
+          "name": "list_providers",
+          "public": true
+        },
+        {
+          "file": "dashboard/plugin_api.py",
+          "line": 130,
+          "module": "plugins.plugin_storage",
+          "name": "plugin_data_dir",
+          "public": true
+        },
+        {
+          "file": "delegation.py",
+          "line": 47,
+          "module": "agent.delegation_provider",
+          "name": "DelegationProvider",
+          "public": true
+        },
+        {
+          "file": "delegation.py",
+          "line": 47,
+          "module": "agent.delegation_provider",
+          "name": "DelegationRouteError",
+          "public": true
+        },
+        {
+          "file": "history.py",
+          "line": 91,
+          "module": "hermes_constants",
+          "name": "get_hermes_home",
+          "public": true
+        },
+        {
+          "file": "modelinfo.py",
+          "line": 25,
+          "module": "hermes_cli.config",
+          "name": "load_config",
+          "public": true
+        },
+        {
+          "file": "modelinfo.py",
+          "line": 56,
+          "module": "providers",
+          "name": "get_provider_profile",
+          "public": true
+        },
+        {
+          "file": "modelinfo.py",
+          "line": 107,
+          "module": "hermes_constants",
+          "name": "parse_reasoning_effort",
+          "public": true
+        },
+        {
+          "file": "modelinfo.py",
+          "line": 107,
+          "module": "hermes_constants",
+          "name": "resolve_reasoning_config",
+          "public": true
+        },
+        {
+          "file": "modelinfo.py",
+          "line": 176,
+          "module": "tools.registry",
+          "name": "discover_builtin_tools",
+          "public": true
+        },
+        {
+          "file": "modelinfo.py",
+          "line": 176,
+          "module": "tools.registry",
+          "name": "registry",
+          "public": true
+        },
+        {
+          "file": "modelinfo.py",
+          "line": 212,
+          "module": "providers",
+          "name": "list_providers",
+          "public": true
+        },
+        {
+          "file": "public_pricing.py",
+          "line": 121,
+          "module": "hermes_cli.config",
+          "name": "load_config_readonly",
+          "public": true
+        },
+        {
+          "file": "public_pricing.py",
+          "line": 305,
+          "module": "providers",
+          "name": "get_provider_profile",
+          "public": true
+        },
+        {
+          "file": "store.py",
+          "line": 144,
+          "module": "plugins.plugin_storage",
+          "name": "plugin_db",
+          "public": true
+        },
+        {
+          "file": "tool_discovery.py",
+          "line": 18,
+          "module": "tools.registry",
+          "name": "discover_builtin_tools",
+          "public": true
+        },
+        {
+          "file": "tool_discovery.py",
+          "line": 18,
+          "module": "tools.registry",
+          "name": "registry",
+          "public": true
+        }
+      ],
+      "policy_commit": "90d6b98fd86d20981ee06ddd5b7d93e4320f26a4",
+      "policy_sha256": "aeafa3b0333bfbe01746774e3ffa74d46eee32478b398c38144956bd5be9b98b",
+      "scope": "production Python and dashboard; standalone operator scripts/tests excluded",
+      "limitations": [
+        "Static tripwires are not a sandbox or full data-flow proof.",
+        "Run the authoritative host validator and review all warnings at the exact pin."
+      ]
+    },
+    "core_imports_requiring_public_api_review": [],
+    "documented_core_imports": [
       {
         "file": "chat_savings.py",
-        "line": 300,
-        "module": "hermes_cli.inventory"
+        "line": 310,
+        "module": "plugins.plugin_storage",
+        "name": "plugin_data_dir",
+        "public": true
       },
       {
-        "file": "chat_savings.py",
-        "line": 324,
-        "module": "plugins.plugin_storage"
+        "file": "configured_models.py",
+        "line": 118,
+        "module": "providers",
+        "name": "get_provider_profile",
+        "public": true
+      },
+      {
+        "file": "configured_models.py",
+        "line": 118,
+        "module": "providers",
+        "name": "list_providers",
+        "public": true
       },
       {
         "file": "dashboard/plugin_api.py",
         "line": 130,
-        "module": "plugins.plugin_storage"
+        "module": "plugins.plugin_storage",
+        "name": "plugin_data_dir",
+        "public": true
       },
       {
         "file": "delegation.py",
-        "line": 37,
-        "module": "agent.delegation_provider"
+        "line": 47,
+        "module": "agent.delegation_provider",
+        "name": "DelegationProvider",
+        "public": true
+      },
+      {
+        "file": "delegation.py",
+        "line": 47,
+        "module": "agent.delegation_provider",
+        "name": "DelegationRouteError",
+        "public": true
       },
       {
         "file": "history.py",
         "line": 91,
-        "module": "hermes_constants"
-      },
-      {
-        "file": "lifecycle.py",
-        "line": 111,
-        "module": "cron.jobs"
+        "module": "hermes_constants",
+        "name": "get_hermes_home",
+        "public": true
       },
       {
         "file": "modelinfo.py",
-        "line": 155,
-        "module": "agent.usage_pricing"
+        "line": 25,
+        "module": "hermes_cli.config",
+        "name": "load_config",
+        "public": true
       },
       {
         "file": "modelinfo.py",
-        "line": 238,
-        "module": "agent.usage_pricing"
+        "line": 56,
+        "module": "providers",
+        "name": "get_provider_profile",
+        "public": true
       },
       {
         "file": "modelinfo.py",
-        "line": 292,
-        "module": "agent.usage_pricing"
+        "line": 107,
+        "module": "hermes_constants",
+        "name": "parse_reasoning_effort",
+        "public": true
       },
       {
         "file": "modelinfo.py",
-        "line": 24,
-        "module": "hermes_cli.config"
+        "line": 107,
+        "module": "hermes_constants",
+        "name": "resolve_reasoning_config",
+        "public": true
       },
       {
         "file": "modelinfo.py",
-        "line": 55,
-        "module": "providers"
+        "line": 176,
+        "module": "tools.registry",
+        "name": "discover_builtin_tools",
+        "public": true
       },
       {
         "file": "modelinfo.py",
-        "line": 106,
-        "module": "hermes_constants"
+        "line": 176,
+        "module": "tools.registry",
+        "name": "registry",
+        "public": true
       },
       {
         "file": "modelinfo.py",
-        "line": 224,
-        "module": "tools.registry"
+        "line": 212,
+        "module": "providers",
+        "name": "list_providers",
+        "public": true
       },
       {
-        "file": "modelinfo.py",
-        "line": 269,
-        "module": "providers"
+        "file": "public_pricing.py",
+        "line": 121,
+        "module": "hermes_cli.config",
+        "name": "load_config_readonly",
+        "public": true
       },
       {
-        "file": "modelinfo.py",
-        "line": 280,
-        "module": "hermes_cli.models"
+        "file": "public_pricing.py",
+        "line": 305,
+        "module": "providers",
+        "name": "get_provider_profile",
+        "public": true
       },
       {
         "file": "store.py",
         "line": 144,
-        "module": "plugins.plugin_storage"
+        "module": "plugins.plugin_storage",
+        "name": "plugin_db",
+        "public": true
       },
       {
         "file": "tool_discovery.py",
         "line": 18,
-        "module": "tools.registry"
+        "module": "tools.registry",
+        "name": "discover_builtin_tools",
+        "public": true
       },
       {
-        "file": "tools.py",
-        "line": 57,
-        "module": "tools.registry"
-      },
-      {
-        "file": "tools.py",
-        "line": 73,
-        "module": "model_tools"
+        "file": "tool_discovery.py",
+        "line": 18,
+        "module": "tools.registry",
+        "name": "registry",
+        "public": true
       }
     ],
     "requires_env_validation": "Manifest-declared mandatory names only; host load/secret-scope validation remains required."
   },
+  "technical_static_ready": true,
+  "technical_ready_for_submission": true,
+  "technical_readiness": "exact-pin technical checks passed",
+  "technical_checks": {
+    "literal_capabilities": true,
+    "public_api_only": true,
+    "reviewable_payloads": true,
+    "payload_findings": [],
+    "manifest_semver_floor": ">=0.22.7",
+    "host_validation": {
+      "status": "operator_supplied_exact_pin_host_validation",
+      "ok": true,
+      "sha256": "c33a0d27f164c61cf487e5cfd4abea8d429a41e570cf17f21f9caac7fe059aec",
+      "checks_passed": 16,
+      "host_source_commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
+      "warnings": [],
+      "security_status": "safe",
+      "independently_authenticated_by_generator": false
+    }
+  },
+  "ui_evidence": {
+    "status": "offline_fixture_captures",
+    "screenshots": [
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/7fb9a21ee669d8d67e6f22a56ebee551dbc91961/assets/review/public-capabilities-and-host-plan-desktop.png",
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/7fb9a21ee669d8d67e6f22a56ebee551dbc91961/assets/review/public-routes-and-manual-pricing-desktop.png"
+    ],
+    "live_proof": false
+  },
+  "admission": {
+    "listed": false,
+    "maintainer_merge": "pending",
+    "public_pin_availability": "not_checked_by_generator"
+  },
   "pinned_features": {
     "delegated_file_handoffs": true,
+    "public_dispatch_plan_fallback": true,
     "sdk_gap_document": true
   },
   "publication_verified": false,
@@ -138,9 +359,8 @@
     "warnings_suppressed": false,
     "command": "hermes plugins validate /path/to/pinned-checkout --install-deps"
   },
+  "technical_blockers": [],
   "blockers": [
-    "Public SDK migration/review of remaining core imports.",
-    "Hermes install/scanner validation at the exact pin, with warnings reviewed.",
     "Public clone/pin availability and owner-or-major-contributor submission.",
     "Upstream hermes-agent catalog PR and maintainer review/merge."
   ],

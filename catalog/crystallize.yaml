@@ -1,7 +1,7 @@
 # Submission bundle only. Copy into hermes-agent/plugin-catalog/ in a maintainer-reviewed PR.
 name: "crystallize"
 repo: "https://github.com/itsflownium/hermes-crystallize"
-sha: "c2c15d8dfa62b3e075da78547669b165e2b4c523"
+sha: "7fb9a21ee669d8d67e6f22a56ebee551dbc91961"
 description: "Reduces repeated Hermes chat and cron work with explicit controls and local receipts."
 maintainer: "itsflownium"
 tier: "community"
@@ -13,9 +13,13 @@ readme: true
 known_issues:
   - "Submission bundle only; no catalog listing or admission is claimed."
   - "Frozen fixture checks do not prove semantic equivalence or universal provider coverage."
-  - "Private Hermes imports remain; public SDK migration and compatibility review are required before admission."
+  - "Automatic nested tool execution and pre-run/no-AI routines are unavailable on the audited SDK; explicit tool mode returns pending normal-host-tool plans."
+  - "Configured/declared routes have unverified authentication and availability. User rate cards and public provider quotes are estimates, not billing evidence."
 capabilities:
   provides_tools: ["crystal_cheap", "crystal_full_result", "crystal_list", "crystal_run"]
   provides_hooks: ["on_session_end", "post_api_request", "post_tool_call", "pre_llm_call", "pre_tool_call", "transform_llm_output", "transform_tool_result"]
   provides_middleware: ["llm_request", "tool_execution"]
   requires_env: []
+screenshots:
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/7fb9a21ee669d8d67e6f22a56ebee551dbc91961/assets/review/public-capabilities-and-host-plan-desktop.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/7fb9a21ee669d8d67e6f22a56ebee551dbc91961/assets/review/public-routes-and-manual-pricing-desktop.png"
