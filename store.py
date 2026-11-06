@@ -71,6 +71,14 @@ CREATE TABLE IF NOT EXISTS brake_stops (
     at          REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS evictions (
+    session_id  TEXT NOT NULL,
+    call_id     TEXT NOT NULL,
+    full_id     TEXT NOT NULL,
+    at          REAL NOT NULL,
+    PRIMARY KEY (session_id, call_id)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key     TEXT PRIMARY KEY,
     value   TEXT NOT NULL
@@ -365,6 +373,28 @@ def list_brake_stops(limit: int = 10) -> list[dict[str, Any]]:
                              "ORDER BY at DESC LIMIT ?", (limit,)).fetchall()
     keys = ("session_id", "job_name", "used", "limit_tokens", "normal", "at")
     return [dict(zip(keys, tuple(r))) for r in rows]
+
+
+def add_eviction(session_id: str, call_id: str, full_id: str) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute("INSERT OR REPLACE INTO evictions (session_id, call_id, full_id, at) VALUES (?, ?, ?, ?)",
+                     (session_id, call_id, full_id, time.time()))
+        conn.commit()
+
+
+def remove_eviction(session_id: str, call_id: str) -> None:
+    with _lock:
+        conn = _db()
+        conn.execute("DELETE FROM evictions WHERE session_id = ? AND call_id = ?", (session_id, call_id))
+        conn.commit()
+
+
+def evictions(session_id: str) -> dict[str, str]:
+    """Tool results removed from this chat: call id to where the original is kept."""
+    with _lock:
+        rows = _db().execute("SELECT call_id, full_id FROM evictions WHERE session_id = ?", (session_id,)).fetchall()
+    return {r[0]: r[1] for r in rows}
 
 
 def get_setting(key: str, default: Any = None) -> Any:

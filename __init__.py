@@ -43,6 +43,7 @@ def register(ctx: Any) -> None:
     )
 
     tools.set_context(ctx)
+    ctx.register_middleware("llm_request", capture.make_llm_request(ctx))
     ctx.register_hook("post_tool_call", capture.make_post_tool_call(ctx))
     ctx.register_hook("on_session_end", capture.make_on_session_end(ctx))
     ctx.register_hook("transform_tool_result", capture.make_transform_tool_result(ctx))
