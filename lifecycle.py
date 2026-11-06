@@ -39,6 +39,9 @@ class LifecycleError(RuntimeError):
 
 # ---------------------------------------------------------------- cron job access
 
+STALE_PROMOTE = 300         # a Promote still unfinished after this many seconds was cut short
+
+
 def _jobs_file() -> Path:
     return history._hermes_home() / "cron" / "jobs.json"
 
@@ -271,10 +274,14 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     flags = ["--prompt", prompt, "--script", script]
     if mode == "no_ai":
         flags.append("--no-agent")
+    # Saved first, so a failure or a crash during the change can always be undone.
+    recovery = {"job_id": job["id"], "original_prompt": original, "own_script": own_script, "at": time.time()}
+    store.update_routine(routine_id, meta={**meta, "promoting": recovery})
     try:
         _edit_job(job["id"], *flags)
     except LifecycleError:
         prerun.remove_script(routine_id)
+        store.update_routine(routine_id, meta=meta)
         raise
     if job["id"] != routine["source_ref"]:
         store.set_routine_job(routine_id, job["id"])
@@ -283,6 +290,7 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
     # "Before" numbers are the job's original full runs: keep the first Promote time
     # if the routine was promoted before (re-promoted, or moved to a new mode).
     meta.setdefault("first_promoted_at", meta.get("promoted_at") or now)
+    meta.pop("promoting", None)
     meta.update({"original_prompt": original, "promoted_at": now, "failures": 0, "live_runs": 0,
                  "baseline_cost": baseline, "mode": mode, "own_script": own_script, "skips": [], "no_ai_runs": [], "last_fingerprint": None})
     # A job with cheaper settings already on gets new-items-only too, unless it acts on its data.
@@ -293,6 +301,27 @@ def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
         store.save_tuning(routine["name"], tune)
     store.update_routine(routine_id, status="live", meta=meta)
     return store.get_routine(routine_id)
+
+
+def recover_promotions() -> None:
+    """A Promote cut short by a crash may have changed the job. Put the job back so it can be promoted again."""
+    from . import prerun
+
+    for routine in store.list_routines():
+        meta = dict(routine.get("meta") or {})
+        recovery = meta.get("promoting")
+        if not recovery or routine["status"] == "live" or time.time() - recovery.get("at", 0) < STALE_PROMOTE:
+            continue
+        job = cron_job(recovery["job_id"])
+        try:
+            if job and MARKER in (job.get("prompt") or ""):
+                _edit_job(recovery["job_id"], "--prompt", recovery["original_prompt"], "--script", recovery.get("own_script") or "", "--agent")
+            prerun.remove_script(routine["id"])
+        except LifecycleError:
+            logger.warning("crystallize: couldn't put %s back yet", routine["name"], exc_info=True)
+            continue
+        meta.pop("promoting", None)
+        store.update_routine(routine["id"], meta=meta)
 
 
 def undo(routine_id: str, reason: str = "you chose Undo") -> dict[str, Any]:
@@ -333,7 +362,11 @@ def set_mode(routine_id: str, mode: str) -> dict[str, Any]:
         undo(routine_id, reason=f"switching to {mode}")
         return promote(routine_id, mode=mode)
     prerun.write_script(routine_id, routine["name"], meta.get("own_script"), mode == "no_ai")
-    _edit_job(routine["source_ref"], "--no-agent" if mode == "no_ai" else "--agent")
+    try:
+        _edit_job(routine["source_ref"], "--no-agent" if mode == "no_ai" else "--agent")
+    except LifecycleError:
+        prerun.write_script(routine_id, routine["name"], meta.get("own_script"), current == "no_ai")
+        raise
     meta.update({"mode": mode, "last_fingerprint": None})
     store.update_routine(routine_id, meta=meta)
     return store.get_routine(routine_id)

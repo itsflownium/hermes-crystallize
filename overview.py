@@ -92,10 +92,10 @@ def _skipped_runs(meta: dict[str, Any], job_name: str) -> list[history.Run]:
 
 
 def _live_runs(name: str, meta: dict[str, Any]) -> list[history.Run]:
-    """Every run since Promote, including ones that made no tool calls or were skipped."""
+    """Every run since Promote, including failed ones and ones that made no tool calls or were skipped."""
     promoted_at = meta.get("promoted_at") or 0
     ran = [r for r in history.load_runs(name)
-           if r.scheduled and r.outcome in (None, "completed") and r.started_ts >= promoted_at]
+           if r.scheduled and r.outcome not in ("running", "claimed") and r.started_ts >= promoted_at]
     return sorted(ran + _skipped_runs(meta, name), key=lambda r: r.started_ts)
 
 
@@ -234,14 +234,14 @@ def _saved_since(after: list[history.Run], baseline: Optional[float]) -> float:
     """Money saved since Promote: what each run would have cost minus what it did."""
     if baseline is None:
         return 0.0
-    return sum(baseline - r.cost_usd for r in after if r.cost_usd is not None)
+    return sum(history.net_saving(r, baseline, r.cost_usd) for r in after if r.cost_usd is not None)
 
 
 def _plan_saved(after: list[history.Run], baseline: Optional[float]) -> float:
     """The same as _saved_since for runs included in a plan, at API prices."""
     if baseline is None:
         return 0.0
-    return sum(baseline - r.api_cost_usd for r in after if r.api_cost_usd is not None)
+    return sum(history.net_saving(r, baseline, r.api_cost_usd) for r in after if r.api_cost_usd is not None)
 
 
 def _chat_spent(session_id: Optional[str]) -> Optional[float]:
@@ -328,7 +328,7 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         if tuned:
             tuned_runs = tuned.pop("run_list")
             tuned_saving = tuned["saved"] or 0.0
-            rate = max(0.0, tuned["before"] - tuned["after"])
+            rate = tuned["before"] - tuned["after"]
             tuned["per_week"] = rate * per_week if per_week is not None and tuned["metric"] in ("cost", "api cost") else None
             card["tuned"] = tuned
             if tuned["metric"] == "api cost":
@@ -385,12 +385,12 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
             if b and af and b.get("api_cost_usd") is not None and af.get("api_cost_usd") is not None:
                 plan_saved = _plan_saved(after or [], b["api_cost_usd"])
                 saved_api += plan_saved
-                rate = max(0.0, b["api_cost_usd"] - af["api_cost_usd"]) * (per_week or 0.0)
+                rate = (b["api_cost_usd"] - af["api_cost_usd"]) * (per_week or 0.0)
                 api_week += rate
                 card["plan"] = {"before": b["api_cost_usd"], "after": af["api_cost_usd"], "saved": plan_saved, "per_week": rate,
                                 "included": any(r.included for r in after or [])}
             if b and af and b.get("cost_usd") is not None and af.get("cost_usd") is not None and per_week:
-                card["saving_per_week"] = max(0.0, b["cost_usd"] - af["cost_usd"]) * per_week
+                card["saving_per_week"] = (b["cost_usd"] - af["cost_usd"]) * per_week
             free_share = (af or {}).get("skipped", 0) / af["runs"] if af and af.get("runs") else 0.0
             if af and af.get("runs", 0) >= 4 and free_share >= 0.5:
                 card["schedule_hint"] = (f"Nothing changed on {af['skipped']} of its last {af['runs']} runs, "

@@ -31,7 +31,8 @@ def test_classifies_each_kind():
     kinds = [p.kind for p in a.steps]
     assert kinds == ["setup", "fill-in", "fixed", "varies"]
     assert "temp_path" in a.steps[1].fill_ins
-    assert a.ready and a.same_shape_share == 1.0
+    # Its temporary path changes every run, so it stays with Hermes for now.
+    assert not a.ready and "temporary paths" in a.reason and a.same_shape_share == 1.0
     assert a.est_api_calls_after == 1.0
     assert a.est_cost_after_usd < a.avg_cost_usd
 
