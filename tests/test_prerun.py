@@ -242,14 +242,35 @@ def test_clean_result_leaves_alone_what_it_should():
     assert prerun.clean_result("terminal", None) is None
 
 
-def test_new_only_sends_changes_and_the_last_answer():
-    old = "\n".join(f"item {i}" for i in range(10))
-    seen = set(prerun._line_hashes(old))
-    text = prerun._new_only_text(old + "\nbrand new thing", seen, "My answer")
-    assert "brand new thing" in text and "My answer" in text and "item 3" not in text
-    assert prerun._new_only_text(old, set(), "My answer") is None            # nothing to compare with
-    assert prerun._new_only_text("all\ndifferent", seen, "My answer") is None  # mostly new: send it all
-    assert prerun._new_only_text(old + "\nnew", seen, "") is None            # nothing to update
+def _feed(*ids):
+    return "\n".join(f"Title {i}\nArticle URL: https://e.com/{i}" for i in ids)
+
+
+def test_new_only_sends_new_items_and_the_last_answer():
+    seen = prerun._links(_feed(1, 2, 3, 4, 5, 6))
+    text = prerun._new_only_text(_feed(1, 2, 3, 4, 5, 7), seen, "My answer")
+    assert "Title 7" in text and "https://e.com/7" in text and "My answer" in text and "Title 3" not in text
+
+
+def test_new_only_matches_items_across_formats():
+    seen = prerun._links(_feed(1, 2, 3, 4, 5, 6))
+    other = "\n".join(f"Title {i} | https://e.com/{i}/ | Fri" for i in (1, 2, 3, 4, 5, 8))
+    text = prerun._new_only_text(other, seen, "My answer")
+    assert "Title 8" in text and "Title 2" not in text
+
+
+def test_new_only_repeats_when_there_are_no_new_items():
+    seen = prerun._links(_feed(1, 2, 3, 4, 5, 6))
+    text = prerun._new_only_text(_feed(1, 2, 3, 4, 5, 6), seen, "My answer")
+    assert "still stands" in text and "My answer" in text
+
+
+def test_new_only_stands_aside_when_it_cannot_help():
+    seen = prerun._links(_feed(1, 2, 3, 4, 5, 6))
+    assert prerun._new_only_text(_feed(1, 2, 3, 4, 5, 7), set(), "My answer") is None      # nothing to compare
+    assert prerun._new_only_text(_feed(11, 12, 13, 14, 15, 16), seen, "My answer") is None # mostly new
+    assert prerun._new_only_text(_feed(1, 2, 3, 4, 5, 7), seen, "") is None                # nothing to update
+    assert prerun._new_only_text("just text, no links", seen, "My answer") is None         # not a list of items
 
 
 def test_a_job_that_acts_always_runs(monkeypatch):
