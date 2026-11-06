@@ -24,6 +24,8 @@ provides_hooks:
   - transform_tool_result
   - pre_llm_call
   - transform_llm_output
+  - post_api_request
+  - pre_tool_call
 
 config_schema:
   capture_enabled:

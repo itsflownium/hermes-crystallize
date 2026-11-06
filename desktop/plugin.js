@@ -463,6 +463,37 @@ function Hero({ data, act }) {
   ], 'hero')
 }
 
+// Runaway Brake: a limit for each job, worked out from its own recent runs.
+function RunawayBrake({ ctx, act, refresh }) {
+  const [data, setData] = useState(null)
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    ctx.rest('/brake').then(res => setData(res && !res.error ? res : null)).catch(() => setData(null))
+  }, [ctx, refresh])
+  if (!data) return null
+  const limited = data.jobs.filter(j => j.limit)
+  const toggle = () => {
+    act('/brake', { on: !data.on })
+    setData({ ...data, on: !data.on })
+  }
+  return bubble([
+    row('Runaway Brake', pill(data.on ? 'Turn off' : 'Turn on', toggle, data.on ? C.muted : C.accent)),
+    small(data.on
+      ? `On. If a run goes far past what its job normally uses, it's told to stop using tools and answer with what it has. ${limited.length} of ${data.jobs.length} jobs have a limit.`
+      : 'Off. When on, a run that goes far past what its job normally uses is told to stop using tools and answer with what it has.', C.soft),
+    ...data.stops.slice(0, 3).map(s => small(`Stopped ${s.job_name} at ${tokensText(s.used)} tokens. It normally uses about ${tokensText(s.normal)}.`, C.yellow)),
+    data.jobs.length ? jsx('div', { key: 'more', children: pill(open ? 'Hide limits' : 'Show limits', () => setOpen(!open), C.muted) }) : null,
+    ...(open ? data.jobs.map(j => jsxs('div', {
+      key: j.name,
+      style: { display: 'flex', flexDirection: 'column', gap: 1 },
+      children: [
+        jsx('div', { style: { fontSize: '0.75rem', color: C.text }, children: j.name }),
+        small(j.limit ? `Normally about ${tokensText(j.normal)} tokens. Limit ${tokensText(j.limit)}.` : j.why)
+      ]
+    })) : [])
+  ].filter(Boolean), 'brake')
+}
+
 function HowItWorks({ onHide }) {
   return bubble([
     row('How Crystallize Cron saves', pill('Got it', onHide, C.muted)),
@@ -827,7 +858,7 @@ function Panel({ ctx }) {
       watching: (data.watching || []).filter(seen) }
     const finishedShown = (data.finished || []).filter(seen)
     const hiddenCount = [...data.testing, ...data.live, ...data.spotted, ...(data.watching || []), ...(data.finished || [])].filter(x => !seen(x)).length
-    body = [jsx(Hero, { key: 'hero', data, act })]
+    body = [jsx(Hero, { key: 'hero', data, act }), jsx(RunawayBrake, { key: 'brake', ctx, act, refresh: data })]
     if (prefs.explain !== false) body.push(jsx(HowItWorks, { key: 'how', onHide: () => setPref('explain', false) }))
     if (prefs.jobs) body.push(jsx(Jobs, { key: 'jobs', data: shown, act, exp }))
     if (prefs.jobs) body.push(jsx(Finished, { key: 'finished', items: finishedShown, exp }))
@@ -1054,7 +1085,8 @@ const NOTES = [
     ['Make cheaper', 'Starts a trial: fewer AI calls, only the tools the job uses, cleaned tool results and lower reasoning. After a few answers it stays only if the job got cheaper.'],
     ['Routine', 'Steps a job repeats, saved so they run before the AI starts. It needs matching test runs first, and you choose when to promote it.'],
     ['Live routine', 'The routine is in use. If it fails, the AI does the whole task, and two failures in a row switch it off.'],
-    ['Savings score', 'How much of your active scheduled work already runs on cheaper, proven settings.']
+    ['Savings score', 'How much of your active scheduled work already runs on cheaper, proven settings.'],
+    ['Runaway Brake', 'Off until you turn it on. Each job gets a token limit from its own recent runs: at least 3 times a normal run and 1.5 times its largest. A run past that limit is told to stop using tools and answer with what it has, and to say it stopped early. Jobs that send or change things are never stopped, and jobs with fewer than 5 finished runs have no limit yet.']
   ]],
   ['When nothing has changed', [
     ['If unchanged: stay quiet', 'The job\'s data is the same as last run, so no AI runs and no message goes out. That run costs nothing.'],

@@ -111,6 +111,35 @@ def make_transform_tool_result(ctx: Any) -> Callable[..., Any]:
     return transform
 
 
+def make_post_api_request(ctx: Any) -> Callable[..., None]:
+    """Keep a running token total for cron runs, for Runaway Brake."""
+    from . import brake
+
+    def after_call(session_id: str = "", usage: Any = None, **_: Any) -> None:
+        try:
+            if ctx.current_cron_execution() is not None and brake.enabled():
+                brake.note_usage(session_id, usage)
+        except Exception:  # noqa: BLE001 — a hook must never break the run
+            logger.debug("crystallize: counting tokens failed", exc_info=True)
+
+    return after_call
+
+
+def make_pre_tool_call(ctx: Any) -> Callable[..., Any]:
+    """Stop a cron run's tool use once it has gone far past what its job normally uses."""
+    from . import brake
+
+    def before_tool(session_id: str = "", **_: Any) -> Any:
+        try:
+            run = ctx.current_cron_execution()
+            return brake.check(getattr(run, "job_name", None), session_id) if run is not None else None
+        except Exception:  # noqa: BLE001 — a hook must never break the run
+            logger.debug("crystallize: Runaway Brake check failed", exc_info=True)
+            return None
+
+    return before_tool
+
+
 def make_pre_llm_call(ctx: Any) -> Callable[..., Any]:
     """Tell the main model it can route routine work, in chats where Crystallize Chat is on."""
     from . import chat_savings

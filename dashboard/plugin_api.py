@@ -229,6 +229,27 @@ async def chat_toggle(body: dict) -> dict[str, Any]:
     ch = _chat()
     session_id = str((body or {}).get("session_id") or "")
     return ch.set_enabled(session_id, bool((body or {}).get("on")))
+@router.get("/brake")
+async def brake_summary() -> dict[str, Any]:
+    """Runaway Brake: whether it's on, each job's limit, and the runs it stopped."""
+    import asyncio
+
+    _overview()
+    brake = importlib.import_module(f"{_PKG}.brake")
+    tuning = importlib.import_module(f"{_PKG}.tuning")
+    try:
+        return await asyncio.to_thread(lambda: brake.summary(tuning._all_jobs()))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("crystallize: brake summary failed: %s", exc, exc_info=True)
+        return {"error": "Couldn't load Runaway Brake data."}
+
+
+@router.post("/brake")
+async def brake_setting(body: dict) -> dict[str, Any]:
+    _overview()
+    return importlib.import_module(f"{_PKG}.brake").set_enabled(bool((body or {}).get("on")))
+
+
 @router.post("/reasoning-setting")
 async def reasoning_setting(body: dict) -> dict[str, Any]:
     """Whether Make cheaper may also try lower reasoning. Off keeps each job's own setting."""
