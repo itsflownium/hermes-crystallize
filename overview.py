@@ -86,7 +86,8 @@ def _skipped_runs(meta: dict[str, Any], job_name: str) -> list[history.Run]:
     changed, or the job runs with no AI."""
     return [history.Run(execution_id=f"free-{ts}", job_id=None, job_name=job_name, session_id=None,
                         scheduled=True, started_ts=ts, outcome="completed", cost_usd=0.0,
-                        api_calls=0, duration_s=None, model=label)
+                        api_calls=0, api_cost_usd=0.0, input_tokens=0, output_tokens=0,
+                        cache_read_tokens=0, cache_write_tokens=0, cost_provenance="no_llm", duration_s=None, model=label)
             for key, label in (("skips", SKIPPED), ("no_ai_runs", NO_AI))
             for ts in meta.get(key) or []]
 
@@ -250,7 +251,8 @@ def _chat_spent(session_id: Optional[str]) -> Optional[float]:
     info = history._session_costs([session_id]).get(session_id)
     if not info:
         return None
-    return info.get("actual_cost_usd") or info.get("estimated_cost_usd")
+    actual = info.get("actual_cost_usd")
+    return actual if actual is not None else info.get("estimated_cost_usd")
 
 
 def routine_full(row: dict[str, Any]) -> dict[str, Any]:

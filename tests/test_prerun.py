@@ -10,22 +10,20 @@ from crystallize import analyze, history, lifecycle, prerun, store
 from crystallize.history import Run, Step
 
 
-def test_json_loses_link_fields_and_empty_values():
+def test_json_keeps_every_field_and_long_value():
     issue = {"url": "https://api.github.com/repos/x/y/issues/1", "html_url": "https://github.com/x/y/issues/1",
              "labels_url": "https://api.github.com/x", "node_id": "abc", "title": "Bug", "number": 1,
              "user": {"login": "pat", "id": 9, "avatar_url": "a", "type": "User", "site_admin": False},
              "assignee": None, "labels": [], "reactions": {"url": "u", "total_count": 0, "+1": 0},
              "body": "x" * 5000}
     out = json.loads(prerun.clean_text(json.dumps(issue)))
-    assert out["html_url"] and out["title"] == "Bug" and out["user"] == "pat"
-    for gone in ("url", "labels_url", "node_id", "assignee", "labels", "reactions"):
-        assert gone not in out
-    assert len(out["body"]) < 1000
+    assert out == issue
 
 
 def test_json_lists_are_one_item_per_line():
     text = prerun.clean_text(json.dumps([{"title": "a"}, {"title": "b"}]))
-    assert text.splitlines() == ['{"title":"a"}', '{"title":"b"}']
+    assert text.splitlines() == ['[', '{"title":"a"},', '{"title":"b"}', ']']
+    assert json.loads(text) == [{"title": "a"}, {"title": "b"}]
 
 
 def test_rss_becomes_short_items():
@@ -62,11 +60,11 @@ def test_files_written_by_a_step_are_included(tmp_path):
     assert "### File issues.json" in block and "From the file" in block
 
 
-def test_fingerprint_ignores_timings_and_timestamps():
+def test_fingerprint_preserves_timings_and_timestamps_without_a_volatile_contract():
     a = "https://a.com HTTP 200 127 ms\nchecked 2026-11-06T09:57:01Z at 09:57 in 0.31s"
     b = "https://a.com HTTP 200 98 ms\nchecked 2026-11-06T10:12:44Z at 10:12 in 1.02s"
     c = "https://a.com HTTP 503 98 ms\nchecked 2026-11-06T10:12:44Z at 10:12 in 1.02s"
-    assert prerun.fingerprint(a) == prerun.fingerprint(b)
+    assert prerun.fingerprint(a) != prerun.fingerprint(b)
     assert prerun.fingerprint(a) != prerun.fingerprint(c)
 
 
@@ -78,12 +76,13 @@ def _fake_store(monkeypatch, routine):
         saved["r"] = {**saved["r"], **kw}
     monkeypatch.setattr(store, "update_routine", update)
     monkeypatch.setattr(lifecycle, "live_result", lambda *a, **k: None)
+    monkeypatch.setattr(lifecycle, "check_drift", lambda *a, **k: True)
     return saved
 
 
 def _routine(meta=None):
     return {"id": "cr_1", "name": "site-check", "status": "live", "meta": meta or {},
-            "steps": {"steps": [{"tool": "terminal", "args": {"command": "check"}, "fill_ins": [],
+            "steps": {"steps": [{"tool": "terminal", "args": {"command": "printf check"}, "fill_ins": [],
                                  "check": {"min_len": 1}}]}}
 
 
@@ -190,11 +189,17 @@ def test_promote_attaches_the_script_and_undo_removes_it(monkeypatch, tmp_path):
     routine = _routine({"ready": True, "matches": 3})
     routine.update(source_ref="job1", status="testing")
     saved = _fake_store(monkeypatch, routine)
-    monkeypatch.setattr(lifecycle, "cron_job", lambda ref: {"id": "job1", "prompt": "Check the sites."})
+    job = {"id": "job1", "name": "site-check", "prompt": "Check the sites."}
+    monkeypatch.setattr(lifecycle, "cron_job", lambda ref: job)
     monkeypatch.setattr(prerun, "scripts_dir", lambda: tmp_path)
     monkeypatch.setattr(lifecycle, "_hermes_cmd", lambda: ["hermes"])
     edits = []
-    monkeypatch.setattr(lifecycle, "_edit_job", lambda job_id, *flags: edits.append((job_id, flags)))
+    def edit(job_id, *flags):
+        edits.append((job_id, flags))
+        for flag, key in (("--prompt", "prompt"), ("--script", "script")):
+            if flag in flags:
+                job[key] = flags[flags.index(flag) + 1]
+    monkeypatch.setattr(lifecycle, "_edit_job", edit)
     lifecycle.promote("cr_1")
     job_id, flags = edits[-1]
     assert job_id == "job1" and "--script" in flags and flags[flags.index("--script") + 1] == "crystallize/cr_1.py"
@@ -227,9 +232,10 @@ def test_clean_result_keeps_long_text_whole():
     body = "word " * 300
     links = {f"{k}_url": "https://api.github.com/repos/a/b/issues/1/" + k for k in ("labels", "comments", "events", "timeline")}
     issue = [{"title": "Bug", "body": body, "html_url": "https://g/1", "node_id": "x", **links}] * 3
-    data = json.loads(prerun.clean_result("terminal", json.dumps({"output": json.dumps(issue), "exit_code": 0})))
-    line = json.loads(data["output"].splitlines()[0])
-    assert line["body"].strip() == body.strip() and line["html_url"] and "node_id" not in line
+    original = json.dumps({"output": json.dumps(issue), "exit_code": 0})
+    data = json.loads(prerun.clean_result("terminal", original) or original)
+    line = json.loads(data["output"])[0]
+    assert line["body"] == body and line == issue[0]
     assert data["exit_code"] == 0
 
 
@@ -252,11 +258,10 @@ def test_new_only_sends_new_items_and_the_last_answer():
     assert "Title 7" in text and "https://e.com/7" in text and "My answer" in text and "Title 3" not in text
 
 
-def test_new_only_matches_items_when_a_format_only_adds_fields():
+def test_new_only_sends_everything_when_fields_change_for_every_item():
     seen = prerun._items("\n".join(f"Title {i} | https://e.com/{i}" for i in range(1, 7)))
     other = "\n".join(f"Title {i} | https://e.com/{i}/ | Fri" for i in (1, 2, 3, 4, 5, 8))
-    text = prerun._new_only_text(other, seen, "My answer")
-    assert "Title 8" in text and "Title 2" not in text
+    assert prerun._new_only_text(other, seen, "My answer") is None
 
 
 def test_new_only_sends_everything_when_only_the_text_changed():
@@ -281,9 +286,9 @@ def test_failed_commands_and_code_keep_their_shape():
 
 def test_download_links_and_prices_stay():
     slim = prerun._slim_json({"download_url": "d", "pdf_url": "p", "html_url": "h", "labels_url": "x"})
-    assert set(slim) == {"download_url", "pdf_url", "html_url"}
+    assert set(slim) == {"download_url", "pdf_url", "html_url", "labels_url"}
     assert prerun.fingerprint("price 1.25") != prerun.fingerprint("price 1.75")
-    assert prerun.fingerprint("took 1.25s") == prerun.fingerprint("took 1.75s")
+    assert prerun.fingerprint("took 1.25s") != prerun.fingerprint("took 1.75s")
 
 
 def test_new_only_stands_aside_when_it_cannot_help():

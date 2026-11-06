@@ -193,6 +193,27 @@ def test_included_runs_compare_at_api_prices():
     assert not tuning.evaluate(before, [included("t1", 0.0098), included("t2", 0.0098)], answers)["ok"]
 
 
+def test_aggregate_price_tier_estimates_do_not_decide_a_trial():
+    before = [_run("b1", None, output=5000), _run("b2", None, output=5000)]
+    trial = [_run("t1", None, output=4900), _run("t2", None, output=4900)]
+    for run in before:
+        run.api_cost_usd = .10
+    for run in trial:
+        run.api_cost_usd = .01
+        run.pricing_uncertain = True
+    answers = {r.session_id: ANSWER for r in before + trial}
+    result = tuning.evaluate(before, trial, answers)
+    assert result["metric"] == "tokens" and not result["ok"]
+
+
+def test_a_partly_unpriced_trial_does_not_hide_an_unknown_run_cost():
+    before = [_run("b1", .02, output=5000), _run("b2", .02, output=5000)]
+    trial = [_run("t1", .001, output=4900), _run("t2", None, output=4900)]
+    answers = {r.session_id: ANSWER for r in before + trial}
+    result = tuning.evaluate(before, trial, answers)
+    assert result["metric"] == "tokens" and not result["ok"]
+
+
 def test_a_run_hermes_is_still_closing_is_not_judged(monkeypatch):
     closing = _run("a", 0.01, outcome="running")
     done = _run("b", 0.01)

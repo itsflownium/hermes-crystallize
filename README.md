@@ -4,6 +4,30 @@
 
 **Hermes cron jobs that cost a lot less, on any cloud model, with proof.**
 
+### Chat and Cron controls in 0.3
+
+Chat now has **Exact**, **Clean** and **Summary** modes, per-tool overrides and an
+optional task focus. Clean is the default. Summary uses your chosen helper only
+when the estimate pays back; routing also learns from observed helper cost and
+latency. Every paid helper entry point checks that this chat is enabled. The
+panel shows per-turn input reduction, helper spend and net estimates, including
+failed/rejected calls; missing prices stay **Unknown**.
+
+Cron jobs can have explicit outcome requirements, exportable cost/payback
+receipts, and a **Compare same input** action. Comparison makes two bounded
+answer-only model calls on identical recorded observations, without replaying
+tools or actions. It shows the actual served models, checks and answer diff.
+It measures answer generation, not the cost or correctness of a whole live job.
+
+Changing a task, route, tool configuration, contract or observed source schema
+triggers revalidation. The normal agent handles the task while fresh evidence
+is collected. Promotion remains your choice. Required checks establish
+observable conditions, not semantic equivalence.
+
+Advanced read recipes support explicit result/date/artifact bindings, and
+opt-in fetch caching can share fresh public reads across jobs within one profile.
+See [the controls and recipes guide](docs/controls-and-recipes.md).
+
 A cron job costs roughly **its prompt size × its AI calls, plus reasoning**. Crystallize shows where
 each job's money goes, works on all of it, and keeps a change only if the job's answers hold up and its
 cost really fell. If a change doesn't pay off, the old settings come back by themselves.
@@ -142,10 +166,11 @@ Turn it on per chat in the panel's **Chat** section, or with `/crystallize chat 
 **You can't start a chat with it.** Send your first prompt, then turn it on. Hermes only creates the chat when
 that prompt is sent, and savings come from tool results, which don't exist until the work starts.
 
-- Tool results are cleaned with no AI. Big ones (8,000+ characters) are condensed if you've picked a model.
+- Tool results use the chat's Exact/Clean/Summary policy. Clean uses no AI; Summary can condense big results (8,000+ characters) using your chosen model and task focus.
 - When a result is noticeably reduced, the exact original is kept for 7 days, and your main model can read it with `crystal_full_result`.
 - File contents, errors and small results always stay exact.
 - Your main model isn't switched mid-chat, because that would lose its prompt cache.
+- Original results are owned by their chat, written atomically and checked for expiry on every read. Exact retrieval still works when Chat savings is off; questions that call the helper require opt-in. Legacy originals without provable ownership are unavailable, except for a trusted existing Context Rent eviction mapping.
 - If your picked model isn't cheaper than your main one, results are only cleaned.
 - The panel has two sections, Cron and Chat. Chat shows savings for the chat you're in. The figures are estimates.
 - A summary can still leave out something that matters, so it's off by default.
@@ -154,14 +179,17 @@ that prompt is sent, and savings come from tool results, which don't exist until
 
 ## How a routine runs
 
-Routine steps run through Hermes's own tool registry (`ctx.dispatch_tool`), with the
-same approvals, redaction and budgets as if the model had called the tool. Each step has
+Routine steps run through Hermes's normal guarded tool-call path, preserving the
+available caller identity, policy hooks and execution middleware. The adapter uses
+a feature-detected Hermes tool-dispatch seam and fails closed if it is unavailable.
+Every resolved step is rechecked against a conservative read subset; that recognizer
+is not a sandbox or a proof about arbitrary programs. Each step has
 a check (no tool error, exit code 0, output not suspiciously short). The first failing
 step stops the routine and Hermes does the task itself. Two failed runs in a row undo the
 routine automatically.
 
 Before the data reaches the AI it is cleaned: HTML and RSS/Atom feeds become plain text,
-JSON loses API link fields and empty values, files a step wrote are included, and every
+JSON keeps meaningful fields and empty values, declared scratch files are included, and every
 source gets a fair share of the space, so no feed is dropped because another was long.
 
 ## Disclosures
@@ -170,11 +198,13 @@ source gets a fair share of the space, so no feed is dropped because another was
   `state.db`, run outcomes from `cron/executions.db`, and job definitions from
   `cron/jobs.json`. Nothing is modified there.
 - **Crystallize Chat sends tool results to the model you pick,** only in chats where you turned it on, and keeps originals in its data folder for 7 days.
+- **Comparisons make model calls only on explicit action.** Their full frozen input, answers, usage and checks are stored locally; exported receipts redact common credential forms. The default baseline uses Hermes's current main model and the candidate uses the selected Crystallize helper, which can differ from the cron job's configured model. Explicit route overrides remain subject to Hermes's own trust policy.
+- **Fetch caching is opt-in.** It stores successful web-result text locally for at most one hour, after the host's normal tool policy checks. Sharing requires an explicit namespace within a profile; use shared namespaces only for reads with the same authorization and freshness requirements. Credential-bearing arguments are not cached. Clear it with `hermes crystal cache --clear`.
 - **Stores its own data** in `<hermes home>/plugin-data/crystallize/`: recorded tool calls
   (inputs and the first 2,000 characters of each result, adjustable in settings),
   routines, and a Desktop diagnostics log.
 - **Runs tool calls during test runs:** after each scheduled run of a job that is being
-  tested, its routine's steps run once more through Hermes's tool registry. Routines
+  tested, its routine's steps run once more through Hermes's guarded tool-call path. Routines
   never contain steps that send or change things (messages, file writes, `git push`,
   POST requests), and any step that needed approval stays with Hermes.
 - **Edits cron jobs** only when you Make cheaper, Promote, change mode or Undo: prompt, `script`,
@@ -198,5 +228,11 @@ hermes plugins enable crystallize
 hermes plugins validate hermes-crystallize --install-deps
 python -m pytest -c tests/pytest.ini --rootdir tests tests
 ```
+
+Standalone tests use an isolated SQLite store and do not need a live Hermes
+profile. Install development-only test dependencies with
+`python -m pip install -r requirements-dev.txt`. Host-specific reasoning/pricing
+checks are skipped when those Hermes modules are absent. Tests join helper
+workers before closing their databases, including timeout accounting.
 
 MIT licensed.

@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from . import capture, chat_savings, cli, schemas, store, tools
+from . import capture, chat_savings, cli, experiments, fetch_cache, schemas, store, tools
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,9 @@ def register(ctx: Any) -> None:
     )
 
     tools.set_context(ctx)
+    experiments.set_context(ctx)
     ctx.register_middleware("llm_request", capture.make_llm_request(ctx))
+    ctx.register_middleware("tool_execution", fetch_cache.make_tool_execution(ctx))
     ctx.register_hook("post_tool_call", capture.make_post_tool_call(ctx))
     ctx.register_hook("on_session_end", capture.make_on_session_end(ctx))
     ctx.register_hook("transform_tool_result", capture.make_transform_tool_result(ctx))

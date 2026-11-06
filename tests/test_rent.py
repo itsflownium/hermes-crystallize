@@ -38,7 +38,8 @@ def chat(monkeypatch):
     monkeypatch.setattr(store, "evictions", lambda sid: removed)
     monkeypatch.setattr(store, "add_eviction", lambda sid, key, full: removed.__setitem__(key, full))
     monkeypatch.setattr(store, "remove_eviction", lambda sid, key: removed.pop(key, None))
-    monkeypatch.setattr(chat_savings, "_keep_full", lambda text: "abc123")
+    monkeypatch.setattr(chat_savings, "_keep_full", lambda text, session_id: "abc123")
+    monkeypatch.setattr(chat_savings, "_load_full", lambda result_id, session_id: BIG if result_id == "abc123" else None)
     return removed
 
 

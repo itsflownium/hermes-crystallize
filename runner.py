@@ -1,18 +1,19 @@
 """Run a routine's steps and judge whether their outputs look right.
 
-Steps run through ``ctx.dispatch_tool``: the same tool registry, approvals,
-redaction and budgets as if the model had called the tool. Crystallize never
-runs a command any other way.
+Steps use the supplied policy-aware dispatch adapter. Every resolved operation
+must also pass Crystallize's read-only gate before it can be replayed or cached.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import tempfile
 import time
+from pathlib import Path
 from typing import Any, Callable, Optional
 
-from . import steplist
+from . import analyze, fetch_cache, parameters, steplist
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +40,22 @@ def step_failure(result: Any, check: Optional[dict] = None) -> Optional[str]:
     if isinstance(data, dict):
         if data.get("error"):
             return f"the tool reported an error: {str(data['error'])[:200]}"
+        if data.get("success") is False or data.get("ok") is False:
+            return "the tool reported an unsuccessful result"
+        for field in ("http_status", "status_code", "status"):
+            status = data.get(field)
+            if isinstance(status, int) and not isinstance(status, bool) and status >= 400:
+                return f"the source returned HTTP {status}"
+            if field == "status" and isinstance(status, str) and status.lower() in ("error", "failed", "blocked", "cancelled", "denied"):
+                return f"the tool reported status {status}"
         code = data.get("exit_code")
         if isinstance(code, int) and code != 0:
             return f"the command exited with code {code}"
+        pages = data.get("results")
+        if isinstance(pages, list):
+            for page in pages:
+                if isinstance(page, dict) and step_failure(page) is not None:
+                    return "a source in the tool result failed"
         body = data.get("output", data.get("content", data.get("result")))
         if body is not None:
             text = body if isinstance(body, str) else json.dumps(body, default=str)
@@ -64,9 +78,42 @@ def run(routine: dict[str, Any], dispatch: Dispatch) -> dict[str, Any]:
     """Run every step in order. A step that fails is tried once more, because routine
     steps only read data and one bad fetch shouldn't cost a full AI run. Stops at the
     first step that fails twice."""
+    try:
+        parameters.validate(routine)
+        cache = fetch_cache.validate(routine.get("cache"))
+        why = analyze.replay_safety_error(routine)
+    except (ValueError, TypeError) as exc:
+        why = str(exc)
+    if why:
+        return {"ok": False, "failed_step": 0, "reason": why, "outputs": []}
+    # The artifact directory lasts for one run; snapshots survive long enough for
+    # the caller to render them, without leaving temporary files behind.
+    temp_root = "/tmp" if Path("/tmp").is_dir() else None
+    with tempfile.TemporaryDirectory(prefix="crystallize-run-", dir=temp_root) as directory:
+        with fetch_cache.activate(cache, str(routine.get("job_id") or ""), routine.get("cache_scope")) as cached:
+            result = _run(routine, dispatch, parameters.RunParameters(Path(directory)))
+            result["cache_hits"] = cached.hits
+            return result
+
+
+def _run(routine: dict[str, Any], dispatch: Dispatch, bound: parameters.RunParameters) -> dict[str, Any]:
     outputs = []
     for i, step in enumerate(routine.get("steps", []), 1):
-        args = steplist.fill(step["args"], step.get("fill_ins") or [])
+        try:
+            args = bound.resolve(step["args"]) if parameters.contains(step["args"]) else steplist.fill(step["args"], step.get("fill_ins") or [])
+        except (ValueError, TypeError) as exc:
+            return {"ok": False, "failed_step": i, "tool": step["tool"], "reason": str(exc), "outputs": outputs}
+        why = analyze.observation_safety_error(step["tool"], args)
+        if not why and step["tool"] in ("terminal", "shell"):
+            try:
+                destinations = analyze.scratch_destinations(args.get("command", ""))
+                declared = {str(path.resolve()) for path in bound.artifacts.values()}
+                if any(path != str(Path("/dev/null").resolve()) and path not in declared for path in destinations):
+                    why = "Scratch writes must target an explicitly bound run-local artifact."
+            except ValueError as exc:
+                why = str(exc)
+        if why:
+            return {"ok": False, "failed_step": i, "tool": step["tool"], "reason": why, "outputs": outputs}
         started = time.time()
         result, why = _run_step(step, args, dispatch)
         if why:
@@ -75,9 +122,17 @@ def run(routine: dict[str, Any], dispatch: Dispatch) -> dict[str, Any]:
         if result is None:
             return {"ok": False, "failed_step": i, "tool": step["tool"], "reason": why, "outputs": outputs}
         text = result if isinstance(result, str) else json.dumps(result, default=str)
-        outputs.append({"step": i, "tool": step["tool"], "output": text, "started": started, "args": args})
+        out = {"step": i, "tool": step["tool"], "output": text, "started": started, "args": args}
+        try:
+            artifacts = bound.snapshot_artifacts()
+        except parameters.ParameterError as exc:
+            return {"ok": False, "failed_step": i, "tool": step["tool"], "reason": str(exc), "outputs": outputs}
+        if artifacts:
+            out["artifacts"] = artifacts
+        outputs.append(out)
         if why:
             return {"ok": False, "failed_step": i, "tool": step["tool"], "reason": why, "outputs": outputs}
+        bound.record(i, step, result)
     return {"ok": True, "outputs": outputs}
 
 

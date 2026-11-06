@@ -119,7 +119,7 @@ def evict(session_id: str, call_id: str) -> dict[str, Any]:
     row = next((r for r in rows if r["role"] == "tool" and _key(r["tool_call_id"]) == key), None)
     if row is None:
         return {"ok": False, "message": "That result isn't in this chat any more."}
-    store.add_eviction(session_id, key, chat_savings._keep_full(row["content"] or ""))
+    store.add_eviction(session_id, key, chat_savings._keep_full(row["content"] or "", session_id))
     return {"ok": True, "message": "Removed. Your next message sends the chat without it."}
 
 
@@ -134,6 +134,14 @@ def apply(request: Any, session_id: str) -> Optional[dict[str, Any]]:
     if not session_id or not isinstance(request, dict):
         return None
     removed = store.evictions(session_id)
+    if not removed:
+        return None
+    # Expiry or a missing original must never turn a saved result into an
+    # unrecoverable placeholder. Keep sending its exact text until re-evicted.
+    unavailable = [key for key, result_id in removed.items() if chat_savings._load_full(result_id, session_id) is None]
+    for key in unavailable:
+        store.remove_eviction(session_id, key)
+    removed = {key: value for key, value in removed.items() if key not in unavailable}
     if not removed:
         return None
     note = lambda key: _NOTE.format(id=removed[key])  # noqa: E731
