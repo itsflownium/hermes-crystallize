@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS chat_savings (
     cheap_tokens INTEGER NOT NULL,
     cheap_cost  REAL NOT NULL,
     updated_at  REAL NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS settings (
     key     TEXT PRIMARY KEY,
