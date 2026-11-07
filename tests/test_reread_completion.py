@@ -460,6 +460,7 @@ def test_capture_real_usage_observation_remains_chat_only(monkeypatch):
     monkeypatch.setattr(handoffs, "note_usage", lambda *args: seen.append(("chat", args)))
     monkeypatch.setattr(brake, "enabled", lambda: True)
     monkeypatch.setattr(brake, "note_usage", lambda *args: seen.append(("cron", args)))
+    monkeypatch.setattr(capture.store, "chat_enabled", lambda sid: True)
     capture.make_post_api_request(SimpleNamespace(current_cron_execution=lambda: None))("s", USAGE)
     capture.make_post_api_request(SimpleNamespace(current_cron_execution=lambda: object()))("s", USAGE)
     assert seen == [("chat", ("s", USAGE)), ("cron", ("s", USAGE))]

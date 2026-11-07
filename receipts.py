@@ -406,6 +406,17 @@ def _value(cost: dict[str, Any], basis: str) -> Optional[float]:
     return _number(cost.get("api_equivalent_usd"))
 
 
+MIN_PROVEN_COMPARISONS = 5
+
+
+def _beyond_noise(savings: list[float]) -> bool:
+    """Enough matched runs, with a typical saving larger than their spread can explain."""
+    if len(savings) < MIN_PROVEN_COMPARISONS:
+        return False
+    typical = statistics.fmean(savings)
+    return typical > 2 * statistics.stdev(savings) / math.sqrt(len(savings))
+
+
 def _successful(row: dict[str, Any]) -> bool:
     return row.get("outcome") in {"completed", "no_change", "skipped", "silent"} and row.get("contract_ok") is not False
 
@@ -547,7 +558,8 @@ def _basis_receipt(runs: list[dict[str, Any]], campaigns: list[dict[str, Any]],
             "equivalent_settings_comparison_count": verified_comparisons,
             "unproven_settings_comparison_count": unproven_comparisons,
             "excluded_settings_comparison_count": confounded_comparisons,
-            "efficiency_savings_proven": qualified and verified_comparisons > 0,
+            "efficiency_savings_proven": qualified and _beyond_noise(matched_savings) and net_known > 0,
+            "minimum_comparisons_for_proof": MIN_PROVEN_COMPARISONS,
             "qualified_historical_savings_usd": historical_known if qualified else None,
             "qualified_efficiency_savings_usd": historical_known if qualified else None,
             "qualified_net_payback_usd": net_known if qualified else None,

@@ -22,7 +22,7 @@ from functools import lru_cache
 from typing import Any, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from . import analyze, contracts, history, lifecycle, runner, store
+from . import analyze, contracts, fetch_cache, history, lifecycle, runner, store
 
 _KEY = "rhythm:"
 _MUTATION_LOCK = threading.RLock()
@@ -48,7 +48,9 @@ _TEMPORAL_TEXT = re.compile(r"\b(?:since|until|unread|breaking|cursor|incrementa
                             r"\b(?:last|past)\s+\d+\s*(?:minutes?|hours?|days?|weeks?|m|h|d|w)\b", re.I)
 _RUNTIME_FIELDS = {"last_run_at", "last_run", "next_run_at", "next_run", "last_status", "last_error",
                    "last_dispatch", "last_execution_id", "last_delivery", "last_output", "run_count",
-                   "started_at", "finished_at", "updated_at", "schedule_display"}
+                   "started_at", "finished_at", "updated_at", "schedule_display", "monitor_state", "run_claim",
+                   "fire_claim", "pending_slot", "state", "enabled", "paused_at", "paused_reason", "completed_at",
+                   "failure_streak", "last_failure", "last_delivery_error", "canonical_completions"}
 CONCURRENCY_LIMIT = (
     "Crystallize checks the current configuration immediately before the host CLI edit. "
     "The CLI has no atomic compare-and-swap option, so an external schedule edit in the "
@@ -205,6 +207,8 @@ def _content_fingerprint(run: history.Run) -> Optional[str]:
         # Rhythm that an empty/error response is quiet source data.
         if step.result_preview and runner.step_failure(step.result_preview):
             return None
+        if fetch_cache.is_marked(step.result_preview):
+            return None  # a cached copy can't show whether the source changed
         parts.append({"tool": step.tool_name, "args": step.args,
                       "result_sha256": step.result_sha256.lower(), "result_len": step.result_len})
     return _hash(parts) if parts else None

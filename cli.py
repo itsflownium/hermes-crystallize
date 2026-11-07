@@ -295,7 +295,7 @@ def _handle(args: Any) -> None:
     if sub == "native-cron":
         _native_action(args)
         return
-    if sub in ("reread", "blind", "rhythm", "auction", "delegation", "tool-defer", "compatibility", "model-route", "rate-card"):
+    if sub in ("reread", "blind", "rhythm", "auction", "auction-reconcile", "delegation", "tool-defer", "compatibility", "model-route", "rate-card"):
         _completion_action(sub, args)
         return
     if sub in ("contract", "compare", "receipt", "recipe", "cache", "chat-policy"):
@@ -477,6 +477,8 @@ def _setup(subparser: Any) -> None:
     rh.add_argument("--undo", action="store_true")
     rh.add_argument("--fingerprint", default="")
     rh.add_argument("--confirm", action="store_true")
+    ar = subs.add_parser("auction-reconcile", help="Clear an interrupted auction after checking what it cost")
+    ar.add_argument("--confirm", action="store_true")
     au = subs.add_parser("auction", help="Explicitly compare models on frozen real evidence, with a request budget")
     au.add_argument("job")
     au.add_argument("--models", required=True, help="JSON array of explicit provider/model objects")

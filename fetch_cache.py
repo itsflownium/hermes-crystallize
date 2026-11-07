@@ -70,6 +70,34 @@ def _db() -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+CACHE_MARKER = "crystallize_cached_result"
+
+
+def mark(result: str, age_seconds: float) -> str:
+    """Tell the AI this came from the cache, keeping a JSON result valid JSON."""
+    age = max(0, int(age_seconds))
+    try:
+        data = json.loads(result)
+    except ValueError:
+        data = None
+    if isinstance(data, dict):
+        return json.dumps({CACHE_MARKER: {"age_seconds": age}, **data}, ensure_ascii=False)
+    return f"[{CACHE_MARKER} age_seconds={age}]\n{result}"
+
+
+def is_marked(text: object) -> bool:
+    """A cached copy says nothing about whether the source changed."""
+    return isinstance(text, str) and CACHE_MARKER in text[:120]
+
+
+def age_of(cache_key: str | None) -> float:
+    if not cache_key:
+        return 0.0
+    with _db() as conn:
+        row = conn.execute("SELECT created FROM entries WHERE key = ?", (cache_key,)).fetchone()
+    return time.time() - row[0] if row else 0.0
+
+
 def get(cache_key: str | None, ttl_seconds: int) -> str | None:
     if not cache_key or not ttl_seconds:
         return None
@@ -112,6 +140,12 @@ def configure(job_id: str, ttl_seconds: int, namespace: str = "") -> dict[str, A
     if not job_id or not isinstance(job_id, str):
         raise ValueError("A cron job id is required.")
     config = validate({"ttl_seconds": ttl_seconds, "namespace": namespace})
+    from . import lifecycle, rhythm
+    job = lifecycle.cron_job(job_id)
+    minutes = rhythm._interval(job) if job else None
+    if minutes and config["ttl_seconds"] >= minutes * 60:
+        raise ValueError(f"This job runs every {minutes} minutes, so a cache that long would give it old data as if it "
+                         "were new. Use a shorter time.")
     store.set_setting("fetch_cache:" + job_id, config)
     return config
 
@@ -162,7 +196,10 @@ def make_tool_execution(ctx: Any):
             cache_key, result = None, None
         if result is not None:
             active.hits += 1
-            return result
+            try:
+                return mark(result, age_of(cache_key))
+            except (OSError, sqlite3.Error):
+                return mark(result, 0)
         result = next_call(args)
         try:
             from . import runner

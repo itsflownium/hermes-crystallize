@@ -96,10 +96,13 @@ def sanitized_child_env() -> dict[str, str]:
 
 def _edit_job(job_id: str, *flags: str) -> None:
     """Change a cron job through Hermes's own CLI (`hermes cron edit`)."""
-    proc = subprocess.run(
-        [*_hermes_cmd(), "cron", "edit", job_id, *flags],
-        capture_output=True, text=True, timeout=60, env=hermes_env(),
-    )
+    try:
+        proc = subprocess.run(
+            [*_hermes_cmd(), "cron", "edit", job_id, *flags],
+            capture_output=True, text=True, timeout=60, env=hermes_env(),
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise LifecycleError(f"Hermes couldn't update the job: {exc}") from exc
     if proc.returncode != 0:
         raise LifecycleError(f"Hermes couldn't update the job: {(proc.stderr or proc.stdout).strip()[:300]}")
 
@@ -280,10 +283,12 @@ def normalize_prompt(prompt: str) -> str:
 
 
 def _tuning_for_job(job: dict[str, Any]) -> Optional[dict[str, Any]]:
-    t = store.get_tuning(job.get("name") or job["id"])
-    if t and (not t.get("job_id") or t["job_id"] == job["id"]):
+    t = store.get_tuning(job["id"])
+    if t and t.get("job_id") in (None, job["id"]):
         return t
-    return next((t for t in store.list_tuning() if t.get("job_id") == job["id"]), None)
+    # A record from before jobs had ids follows its name, if nothing else claims it.
+    legacy = store.get_tuning(job["name"]) if job.get("name") else None
+    return legacy if legacy and not legacy.get("job_id") else None
 
 
 def _same_tools(first: Any, second: Any) -> bool:
@@ -512,9 +517,13 @@ def check_drift(routine: Any) -> bool:
 
 def refresh_drift() -> None:
     for summary in store.list_routines():
-        routine = store.get_routine(summary["id"])
-        if routine and routine.get("source") == "cron":
-            check_drift(routine)
+        # One bad job must not stop every other job's checks.
+        try:
+            routine = store.get_routine(summary["id"])
+            if routine and routine.get("source") == "cron":
+                check_drift(routine)
+        except Exception:  # noqa: BLE001
+            logger.warning("crystallize: checking routine %s failed", summary.get("id"), exc_info=True)
 
 
 # ---------------------------------------------------------------- actions

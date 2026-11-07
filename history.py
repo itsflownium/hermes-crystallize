@@ -475,8 +475,9 @@ def final_answers(session_ids: list[str]) -> dict[str, str]:
 
 def net_saving(run: "Run", baseline: float, cost: float) -> float:
     """What one run saved compared with a normal one. A dearer run counts against the total,
-    and a failed run delivered nothing, so all it cost is lost."""
-    return baseline - cost if run.outcome in (None, "completed", "no_change", "skipped", "silent") else -cost
+    and a failed run delivered nothing, so all it cost is lost. So does a run with no recorded
+    outcome, because nothing shows it delivered."""
+    return baseline - cost if run.outcome in ("completed", "no_change", "skipped", "silent") else -cost
 
 
 _QUIET_WORDS = {"[SILENT]", "SILENT", "NO_REPLY", "NO REPLY"}
@@ -505,6 +506,13 @@ def _apply_session(run: Run, info: Optional[dict[str, Any]]) -> None:
     effort, fingerprint = _reasoning(info)
     run.reasoning_effort = info.get("reasoning_effort", effort)
     run.reasoning_config_fingerprint = info.get("reasoning_config_fingerprint", fingerprint)
+    # What the run actually sent beats what its session saved.
+    from . import request_settings
+    sent = request_settings.for_run(run.execution_id)
+    if sent:
+        mixed = sent["effort"] == request_settings.MIXED
+        run.reasoning_effort = None if mixed else sent["effort"]
+        run.reasoning_config_fingerprint = None if mixed else sent["fingerprint"]
     run.session_ids = list(info.get("session_ids") or ([run.session_id] if run.session_id else []))
     run.attribution_evidence = info.get("attribution_evidence") or {}
     run.usage_totals_complete = bool(info.get("usage_totals_complete", True))

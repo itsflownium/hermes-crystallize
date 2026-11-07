@@ -191,8 +191,8 @@ def job(monkeypatch):
 def test_recovery_data_is_saved_before_anything_changes(job):
     calls, saved, _ = job
     tuning.start("job")
-    assert calls[0] == ("saved", "starting") and saved["job"]["status"] == "trial"
-    assert saved["job"]["previous_toolsets"] == ["web", "terminal"]
+    assert calls[0] == ("saved", "starting") and saved["j1"]["status"] == "trial"
+    assert saved["j1"]["previous_toolsets"] == ["web", "terminal"]
 
 
 def test_a_partial_failure_puts_everything_back(job, monkeypatch):
@@ -211,7 +211,7 @@ def test_a_partial_failure_puts_everything_back(job, monkeypatch):
     assert calls[-2] == ("edit", ("--prompt", "Do it"))
     assert found["prompt"] == "Do it" and found["reasoning_effort"] == "high"
     assert found["enabled_toolsets"] == ["web", "terminal"] and not any(call[0] == "tools" for call in calls)
-    assert saved["job"]["status"] == "reverted"
+    assert saved["j1"]["status"] == "reverted"
 
 
 def test_a_restore_that_fails_is_tried_again_and_undo_still_works(job, monkeypatch):
@@ -227,17 +227,17 @@ def test_a_restore_that_fails_is_tried_again_and_undo_still_works(job, monkeypat
     monkeypatch.setattr(lifecycle, "_edit_job", broken)
     with pytest.raises(lifecycle.LifecycleError):
         tuning.start("job")
-    assert saved["job"].get("needs_restore") and saved["job"]["status"] == "starting"
+    assert saved["j1"].get("needs_restore") and saved["j1"]["status"] == "starting"
     assert tuning.EFFICIENCY_HINT in found["prompt"]
     monkeypatch.setattr(lifecycle, "_edit_job", healthy)
-    tuning._finish_restore(saved["job"])
-    assert saved["job"]["status"] == "reverted" and not saved["job"].get("needs_restore")
+    tuning._finish_restore(saved["j1"])
+    assert saved["j1"]["status"] == "reverted" and not saved["j1"].get("needs_restore")
     assert calls[-2] == ("edit", ("--prompt", "Do it"))
     assert found["prompt"] == "Do it" and found["reasoning_effort"] == "high"
     tuning.start("job")
-    assert saved["job"]["status"] == "trial" and tuning.EFFICIENCY_HINT in found["prompt"]
+    assert saved["j1"]["status"] == "trial" and tuning.EFFICIENCY_HINT in found["prompt"]
     tuning.undo("job")
-    assert saved["job"]["status"] == "undone" and found["prompt"] == "Do it"
+    assert saved["j1"]["status"] == "undone" and found["prompt"] == "Do it"
     assert found["reasoning_effort"] == "high" and found["enabled_toolsets"] == ["web", "terminal"]
 
 
