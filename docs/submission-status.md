@@ -3,12 +3,17 @@
 Reviewed on 7 November 2026. Source/CI validation, live effectiveness, catalog
 admission and activation of an installed copy are separate states.
 
+**Owner hold:** the work is unfinished. Continue development and review only in
+`itsflownium/hermes-crystallize`; do not open a PR on `NousResearch/hermes-agent`.
+The prepared catalog entry is an internal review artifact. No upstream PR was
+created, and PR #12 remains a draft until the remaining work is reviewed.
+
 | Question | Current evidence | What remains |
 | --- | --- | --- |
 | Savings at unchanged reasoning | Main/reasoning settings are preserved in code and offline tests | No live percentage is established for the public-SDK candidate. Measure paired, same-model/same-requested-reasoning tasks before quoting a scoped result |
 | Mainstream tasks and providers | Research, writing, data, analysis, coding and cron fixtures; configurable host routes | Publish the exact live task/provider matrix, failures and quality checks. Fixtures cannot prove universal compatibility |
 | Automatic cron without AI | Explicit normal-host-tool plans, input tuning and observable normal-run evidence | The reviewed public nested dispatcher cannot certify normal guards. Pre-run/no-AI execution stays unavailable; older savings from those modes do not transfer |
-| Marketplace | Exact-commit submission bundle, host/security/Desktop validation and public-source audit | An upstream catalog PR and maintainer merge are required. `catalog_ready: false` means listing is not established; inspect `technical_ready_for_submission` separately |
+| Marketplace | Internal exact-commit bundle, host/security/Desktop validation and public-source audit | Submission is deferred by the owner. `catalog_ready: false` means listing is not established; passing technical checks does not mean the product work is finished |
 | Local installation | A workspace test validates that checkout only | Resolve the installed plugin link, compare its Git revision and separately activate the reviewed candidate. CI does not hot-reload a running gateway |
 
 The historical Nous attempts belong to the earlier private-dependency build.

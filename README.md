@@ -14,6 +14,9 @@ across cloud routes. This is a compatibility design, not a claim that every
 provider, model, operating system or task has been tested. Missing prices,
 capabilities, usage and guarded execution stay unknown or fail closed.
 
+**Work in progress:** release validation is unfinished and upstream submission
+is on hold. All further work is being reviewed in this repository first.
+
 **Current evidence:** this public-SDK candidate has no verified live savings
 percentage at unchanged reasoning. Research, writing, data, analysis, coding and
 cron coverage comes from offline fixtures; it does not prove every mainstream
