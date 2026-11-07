@@ -1071,17 +1071,17 @@ function JobBubble({ item, status, trialRuns, act, exp, ctx, compatibility }) {
     action = pill('Undo', () => act('/undo', { routine_id: item.routine_id }), C.muted)
   } else if (status === 'testing') {
     headline = projectionAvailable ? big(perWeek(item.saving_per_week)) : big('Needs measurement', C.soft)
-    sub = projectionAvailable ? `Unmeasured automatic-replay projection · ${perMonth(item.saving_per_week)}` : 'Host-tool guidance; savings require normal-run evidence.'
+    sub = projectionAvailable ? `Unmeasured automatic-replay projection · ${perMonth(item.saving_per_week)}` : (item.skip_fit ? item.skip_fit.message : 'No saving measured yet.')
     const target = promotionTarget(item, compatibility)
     action = item.ready
       ? target ? pill(target.label, () => act('/promote', { routine_id: item.routine_id, mode: target.mode }), C.accent) : chip('Capability unavailable', C.muted)
       : jsx('span', { style: { fontSize: '0.6875rem', color: C.muted }, children: `${item.matches} of ${item.needed} observations` })
   } else {
     headline = projectionAvailable ? big(perWeek(item.saving_per_week)) : big('Needs measurement', C.soft)
-    sub = projectionAvailable ? `Unmeasured automatic-replay projection · ${perMonth(item.saving_per_week)}` : 'Host-tool guidance; savings require normal-run evidence.'
+    sub = projectionAvailable ? `Unmeasured automatic-replay projection · ${perMonth(item.saving_per_week)}` : (item.skip_fit ? item.skip_fit.message : 'No saving measured yet.')
     action = promotionPolicy(item).try_available === true
       ? pill('Observe next runs', () => act('/try', { job_id: item.job_id }))
-      : chip('Observation unavailable', C.muted)
+      : chip('Still watching', C.muted)
   }
   const open = isOpen(exp, item.job_id, item.cron)
   const running = item.cron && item.cron.status === 'running'
@@ -2123,7 +2123,6 @@ function ChatSession({ ctx, sessionId, focused }) {
     children: [
       error ? jsx('div', { role: 'status', children: small(error, C.soft) }) : null,
       !current && !error ? small('Loading…') : null,
-      current ? jsx(CompatibilityCard, { key: 'capabilities', state: compatibilityState }) : null,
       current ? jsx(ThisChat, { key: 'this', state: current, onToggle: toggle, pending, heading: focused ? 'This chat' : `Your last chat${current.title ? `: ${current.title}` : ''}` }) : null,
       current ? small(!current.enabled
         ? 'Start with lossless Clean after enabling this chat. A helper model is optional; your main model and reasoning stay unchanged.'
@@ -2142,7 +2141,8 @@ function ChatSession({ ctx, sessionId, focused }) {
         small('For a large artifact, let Hermes read the input through its normal tools, route one complete text subtask, and save the reviewed result through normal Hermes tools. Main reasoning and decisions stay with your chosen model.', C.soft),
         small('Re-read controls are an additional opt-in for repeated text and batching guidance. Context Rent shows later read estimates and cache payback. Global tool settings require a separate choice in Hermes.', C.soft),
         small(current.why_not_first, C.soft)
-      ] }) : null
+      ] }) : null,
+      current ? jsx(CompatibilityCard, { key: 'capabilities', state: compatibilityState }) : null
     ]
   })
 }

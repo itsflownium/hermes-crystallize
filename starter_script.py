@@ -123,11 +123,11 @@ BREAK_EVEN_SHARE = 0.8      # attached runs cost a little more, so a job needs s
 RECENT_RUNS = 20
 
 
-def fit(job_id: str) -> dict[str, Any]:
+def fit(job_id: str, runs: Any = None) -> dict[str, Any]:
     """Would skipping unchanged runs help this job? Judged from what its own recent runs read."""
     from . import rhythm
 
-    runs = history.runs_for_job(job_id, only_usable=True)[-RECENT_RUNS:]
+    runs = (history.runs_for_job(job_id, only_usable=True) if runs is None else runs)[-RECENT_RUNS:]
     seen = [found for found in (rhythm._content_fingerprint(run) for run in runs) if found]
     if len(seen) < MIN_RUNS:
         return {"verdict": "unknown", "message": f"After {MIN_RUNS} finished runs, this shows how often its data changes and whether skipping would help."}
