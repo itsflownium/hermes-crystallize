@@ -447,7 +447,7 @@ def test_unknown_failed_cost_is_not_a_free_call_and_host_zero_is_respected(world
 def test_output_savings_need_delivery_and_survive_accounting_cache_reset(world):
     response = json.loads(handoffs.execute(Helper(text="long complete output " * 100), "Write this.", "s1"))
     assert store.list_chat_savings("s1")[0]["output_chars"] == 0
-    assert cs.fill_placeholders(response["placeholder"], "s2", "t1") is None
+    assert "unavailable" in cs.fill_placeholders(response["placeholder"], "s2", "t1")
     cs.fill_placeholders(response["placeholder"], "s1", "t1")
     first = store.list_chat_savings("s1")[0]["output_chars"]
     cs.cleanup_session("s1")

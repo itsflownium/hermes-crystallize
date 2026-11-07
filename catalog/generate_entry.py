@@ -250,7 +250,7 @@ def build_entry(manifest: dict[str, Any], sha: str, repo_url: str, analysis: dic
              "maintainer": manifest["author"], "tier": "community", "category": "automation",
              "requires_hermes": manifest["requires_hermes"], "version": manifest["version"],
              "title": "Crystallize", "readme": True,
-             "known_issues": ["Submission bundle only; no catalog listing or admission is claimed.",
+             "known_issues": ["No live savings percentage at unchanged reasoning is established for this public-SDK candidate.",
                               "Frozen fixture checks do not prove semantic equivalence or universal provider coverage."],
              "capabilities": {key: manifest[key] for key in CAPABILITIES}}
     if analysis["core_imports_requiring_public_api_review"]:
@@ -295,16 +295,21 @@ def submission_text(entry: dict[str, Any], readiness: dict[str, Any]) -> str:
     return f"""# Crystallize catalog submission draft
 
 Technical state: **{readiness.get('technical_readiness', 'exact-pin verification required')}**.
-This file and the entry in this plugin repository are a preparation bundle. No upstream
-catalog PR, catalog listing, maintainer approval, or marketplace compliance is claimed.
+This file and the entry in this plugin repository are a preparation bundle. They do
+not themselves establish an upstream PR, catalog listing, maintainer approval, or
+marketplace compliance. Independently checked publication/review status is recorded
+separately; only a maintainer-merged upstream catalog entry establishes listing.
 
 Pin: `{entry['sha']}` in {entry['repo']}; version `{entry['version']}`;
 Hermes floor `{entry['requires_hermes']}`. The pin is an existing plugin feature commit;
 the later catalog-only bundle commit must not replace it with a self-reference.
 
-Crystallize reduces repeated chat and cron work through explicit per-chat/per-job
-controls, guarded routines and local receipts. Main reasoning is not reduced by this
-validation. Observable contracts and frozen fixtures do not establish semantic equivalence.
+Crystallize targets repeated context and read planning through explicit per-chat/per-job
+controls and local receipts. Main reasoning is not reduced. No live savings percentage
+at unchanged reasoning is established for this public-SDK candidate. The research,
+writing, data, analysis, coding and cron fixtures are offline scope, not proof of
+universal live task/provider coverage or semantic equivalence. Automatic pre-run/no-AI
+routines remain unavailable on the reviewed SDK; their older savings do not transfer.
 
 Disclosures for reviewer and installer:
 

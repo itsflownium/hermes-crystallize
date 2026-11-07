@@ -1,7 +1,7 @@
 # Submission bundle only. Copy into hermes-agent/plugin-catalog/ in a maintainer-reviewed PR.
 name: "crystallize"
 repo: "https://github.com/itsflownium/hermes-crystallize"
-sha: "8f8bad5096b3c0c2041163457a7ea8aeea9db4b4"
+sha: "586d2b4708606dc8255437beea374aae4ddc11fe"
 description: "Reduces repeated Hermes chat and cron work with explicit controls and local receipts."
 maintainer: "itsflownium"
 tier: "community"
@@ -11,7 +11,7 @@ version: "0.4.1"
 title: "Crystallize"
 readme: true
 known_issues:
-  - "Submission bundle only; no catalog listing or admission is claimed."
+  - "No live savings percentage at unchanged reasoning is established for this public-SDK candidate."
   - "Frozen fixture checks do not prove semantic equivalence or universal provider coverage."
   - "Automatic nested tool execution and pre-run/no-AI routines are unavailable on the audited SDK; explicit tool mode returns pending normal-host-tool plans."
   - "Configured/declared routes have unverified authentication and availability. User rate cards and public provider quotes are estimates, not billing evidence."
@@ -21,6 +21,6 @@ capabilities:
   provides_middleware: ["llm_request", "tool_execution"]
   requires_env: []
 screenshots:
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/8f8bad5096b3c0c2041163457a7ea8aeea9db4b4/assets/review/public-capabilities-and-host-plan-desktop.png"
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/8f8bad5096b3c0c2041163457a7ea8aeea9db4b4/assets/review/public-routes-and-manual-pricing-desktop.png"
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/8f8bad5096b3c0c2041163457a7ea8aeea9db4b4/assets/review/chat-quality-and-onboarding-desktop.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/586d2b4708606dc8255437beea374aae4ddc11fe/assets/review/public-capabilities-and-host-plan-desktop.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/586d2b4708606dc8255437beea374aae4ddc11fe/assets/review/public-routes-and-manual-pricing-desktop.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/586d2b4708606dc8255437beea374aae4ddc11fe/assets/review/chat-quality-and-onboarding-desktop.png"

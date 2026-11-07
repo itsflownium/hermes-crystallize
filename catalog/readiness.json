@@ -3,7 +3,7 @@
   "status": "submission_bundle_only",
   "catalog_ready": false,
   "catalog_ready_meaning": "Human admission/listing is not established by local technical checks.",
-  "pinned_commit": "8f8bad5096b3c0c2041163457a7ea8aeea9db4b4",
+  "pinned_commit": "586d2b4708606dc8255437beea374aae4ddc11fe",
   "pinned_manifest_version": "0.4.1",
   "literal_capabilities_match_manifest": true,
   "source_analysis": {
@@ -35,7 +35,7 @@
       "public_core_imports": [
         {
           "file": "chat_savings.py",
-          "line": 317,
+          "line": 323,
           "module": "plugins.plugin_storage",
           "name": "plugin_data_dir",
           "public": true
@@ -179,7 +179,7 @@
     "documented_core_imports": [
       {
         "file": "chat_savings.py",
-        "line": 317,
+        "line": 323,
         "module": "plugins.plugin_storage",
         "name": "plugin_data_dir",
         "public": true
@@ -325,7 +325,7 @@
     "host_validation": {
       "status": "operator_supplied_exact_pin_host_validation",
       "ok": true,
-      "sha256": "467a3bd27c46e9acdaa3f58a22ce0c7a6b2f483060b834979fc1ffe1678325cc",
+      "sha256": "46e50ec9c18cda75f3f39aab2addbee6b9a57f2dc5e053960da85c1d971be776",
       "checks_passed": 16,
       "host_source_commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
       "warnings": [],
@@ -336,23 +336,23 @@
   "ui_evidence": {
     "status": "offline_fixture_captures",
     "screenshots": [
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/8f8bad5096b3c0c2041163457a7ea8aeea9db4b4/assets/review/public-capabilities-and-host-plan-desktop.png",
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/8f8bad5096b3c0c2041163457a7ea8aeea9db4b4/assets/review/public-routes-and-manual-pricing-desktop.png",
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/8f8bad5096b3c0c2041163457a7ea8aeea9db4b4/assets/review/chat-quality-and-onboarding-desktop.png"
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/586d2b4708606dc8255437beea374aae4ddc11fe/assets/review/public-capabilities-and-host-plan-desktop.png",
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/586d2b4708606dc8255437beea374aae4ddc11fe/assets/review/public-routes-and-manual-pricing-desktop.png",
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/586d2b4708606dc8255437beea374aae4ddc11fe/assets/review/chat-quality-and-onboarding-desktop.png"
     ],
     "live_proof": false
   },
   "admission": {
     "listed": false,
     "maintainer_merge": "pending",
-    "public_pin_availability": "not_checked_by_generator"
+    "public_pin_availability": "operator_checked_public_git_and_http"
   },
   "pinned_features": {
     "delegated_file_handoffs": true,
     "public_dispatch_plan_fallback": true,
     "sdk_gap_document": true
   },
-  "publication_verified": false,
+  "publication_verified": true,
   "upstream_catalog_pr": null,
   "maintainer_approval": "not_obtained",
   "hermes_plugins_validate": {
@@ -362,12 +362,23 @@
   },
   "technical_blockers": [],
   "blockers": [
-    "Public clone/pin availability and owner-or-major-contributor submission.",
-    "Upstream hermes-agent catalog PR and maintainer review/merge."
+    "Upstream catalog review PR and maintainer review/merge remain pending."
   ],
   "limitations": [
     "Static literal registration comparison is not a runtime-load or security scan.",
     "The local host catalog policy was used; re-read it at actual submission.",
     "No live provider, semantic-equivalence or actual-billing proof is manufactured."
-  ]
+  ],
+  "publication_verification": {
+    "source": "operator_checked_public_git_and_http",
+    "pin": "586d2b4708606dc8255437beea374aae4ddc11fe",
+    "git_clone_head": "586d2b4708606dc8255437beea374aae4ddc11fe",
+    "git_credential_helpers_disabled": true,
+    "anonymous_manifest_http_status": 200,
+    "repository": "https://github.com/itsflownium/hermes-crystallize"
+  },
+  "canonical_catalog_policy_review": {
+    "commit": "8153953654574f8624dc3652b1df7162ead425a8",
+    "date": "2026-11-07"
+  }
 }

@@ -187,17 +187,23 @@ _filled: dict[str, set[str]] = {}
 
 
 def fill_placeholders(response: str, session_id: str = "", turn_id: str = "") -> Optional[str]:
-    """Put the cheap model's text into the final answer, so the main model never pays to retype it.
-    A placeholder that can't be found stays visible rather than silently losing text."""
-    if not session_id or not isinstance(response, str) or "{{crystal:" not in response:
+    """Deliver owned originals, with a local recovery notice for unavailable results."""
+    if not isinstance(response, str) or "{{crystal:" not in response:
         return None
 
     def fill(match: "re.Match[str]") -> str:
-        result = _load_full(match.group(1), session_id)
-        if result is not None:
-            from . import handoffs
-            handoffs.credit_output(match.group(1), session_id, turn_id, len(result) - len(match.group(0)))
-        return result if result is not None else match.group(0)
+        result_id = match.group(1)
+        try:
+            result = _load_full(result_id, session_id) if session_id else None
+        except Exception:  # noqa: BLE001 — preserve other recovered text in this reply
+            logger.debug("crystallize: one reply result could not be recovered", exc_info=True)
+            result = None
+        if result is None:
+            return (f"[Crystallize could not recover result {result_id}: it is unavailable in this chat "
+                    "or has expired. Try crystal_full_result in its original chat, or recreate it from the source.]")
+        from . import handoffs
+        handoffs.credit_output(result_id, session_id, turn_id, len(result) - len(match.group(0)))
+        return result
 
     filled = _PLACEHOLDER.sub(fill, response)
     return filled if filled != response else None
@@ -572,7 +578,7 @@ def _call(ctx: Any, messages: list[dict[str, str]], purpose: str, max_tokens: in
                 return
             answer = ctx.llm.complete(messages, task=TASK, timeout=seconds,
                                       max_tokens=max_tokens, purpose=purpose)
-            usage = value(answer, "usage")
+            usage = _helper_usage(value(answer, "usage"))
             actual = {"model": value(answer, "model") or picked["model"],
                       "provider": value(answer, "provider") or picked["provider"]}
             tokens, cost = _usage_cost(usage, actual)
@@ -590,7 +596,7 @@ def _call(ctx: Any, messages: list[dict[str, str]], purpose: str, max_tokens: in
         except Exception as exc:  # noqa: BLE001 — reported to the caller
             with state_lock:
                 done["error"] = exc
-                usage = value(exc, "usage")
+                usage = _helper_usage(value(exc, "usage"))
                 actual = {"model": value(exc, "model") or picked["model"],
                           "provider": value(exc, "provider") or picked["provider"]}
                 tokens, cost = _usage_cost(usage, actual)
@@ -776,6 +782,21 @@ def _usage_value(usage: Any, key: str) -> Optional[int]:
 def _reported_cost(usage: Any) -> Optional[float]:
     value = usage.get("cost_usd") if isinstance(usage, dict) else getattr(usage, "cost_usd", None)
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0 else None
+
+
+def _helper_usage(usage: Any) -> Optional[dict[str, Any]]:
+    """Preserve uncertainty at the public helper facade, without mutating its DTO.
+
+    Reviewed Hermes versions default absent token counters to zero and expose no
+    presence flags. A zero here cannot establish a measured empty bucket. Positive
+    counters remain evidence; a reported host cost, including zero, still wins.
+    Main-request canonical usage and explicitly supplied raw counts are separate.
+    """
+    if usage is None:
+        return None
+    return {**{key: _usage_value(usage, key) or None for key in
+               ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens")},
+            "cost_usd": _reported_cost(usage)}
 
 
 def _cost_source(usage: Any, cost: Optional[float]) -> str:
