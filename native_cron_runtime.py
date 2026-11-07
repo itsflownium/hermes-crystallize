@@ -54,13 +54,15 @@ def _retry_anchor(home, job_id):
     """A failed agent must get another chance even when its source is unchanged.
 
     Native monitor hashes are saved before inference. Include retained failed,
-    unknown, cancelled and missed executions in the source hash, so a failure causes
+    unknown and cancelled executions in the source hash, so a failure causes
     a fresh wake without resetting the monitor or touching the host ledger.
+    A missed schedule slot has no model answer. Complete latest-state snapshots
+    do not require a new answer solely because the schedule was paused or late.
     """
     path = Path(home) / "cron" / "executions.db"
     with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=2) as db:
         failures = db.execute("SELECT id, status FROM executions WHERE job_id=? AND status IN "
-                              "('failed','unknown','cancelled','missed') ORDER BY id LIMIT 10001",
+                              "('failed','unknown','cancelled') ORDER BY id LIMIT 10001",
                               (job_id,)).fetchall()
         active = db.execute("SELECT COUNT(*) FROM executions WHERE job_id=? AND status IN ('claimed','running')",
                             (job_id,)).fetchone()[0]
