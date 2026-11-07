@@ -369,7 +369,7 @@ await test('host-tool plans require an explicit mode choice', async () => {
 await test('unavailable replay never advertises stale projected savings', async () => {
   for (const status of ['testing','spotted']) {
     const view=mount('JobBubble',{item:{...modeItem,mode:null,saving_per_week:250,projection:{status:'unavailable'}},status,trialRuns:3,ctx:makeContext().ctx,compatibility:unsupported,act:()=>{},exp:{open:{'job-a':true},toggle:()=>{}}});await view.flush();
-    const content=text(view.tree);assert.ok(content.includes('Needs measurement'));assert.ok(content.includes('savings require normal-run evidence'));assert.ok(!content.includes('$250'));view.dispose();
+    const content=text(view.tree);assert.ok(content.includes('Needs measurement'));assert.ok(content.includes('No saving measured yet'));assert.ok(!content.includes('$250'));view.dispose();
   }
 });
 await test('native source preview requires review and resets approval on edits', async () => {
