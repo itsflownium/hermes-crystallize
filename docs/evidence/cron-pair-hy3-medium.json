@@ -1,0 +1,196 @@
+{
+ "schema": 1,
+ "model": "tencent/hy3",
+ "provider": "nous",
+ "requested_reasoning": "medium",
+ "events": [
+  {
+   "changed_data_at": 1794042198.061741,
+   "tick": 3
+  }
+ ],
+ "draft": {
+  "ok": true,
+  "why": null,
+  "commands": [
+   "cat /var/folders/n7/90_0w18s7zlgmk6lvdyzpt8m0000gn/T/crystal-cron-6_ky1qex/status.json"
+  ],
+  "urls": [],
+  "left_out": [],
+  "complete": true,
+  "source_script": "crystallize-drafts/13156fd036f6.py"
+ },
+ "blockers": [],
+ "attached_at": 1794041656.607132,
+ "normal": {
+  "before": [
+   {
+    "execution": "2e9220be7d3b433cbe46e9a7c27989cd",
+    "started": 1794041405.493265,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15309,
+    "output_tokens": 109,
+    "cache_read_tokens": 16192,
+    "reasoning_tokens": 17,
+    "cost_usd": 0.002612676,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": false
+   },
+   {
+    "execution": "a252a35560784f79b4d20c02c96505cc",
+    "started": 1794041528.460763,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 1451,
+    "output_tokens": 179,
+    "cache_read_tokens": 30080,
+    "reasoning_tokens": 101,
+    "cost_usd": 0.001278684,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": false
+   },
+   {
+    "execution": "86aaf355b69a4032b4d243563f1dab45",
+    "started": 1794041645.0941892,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 1504,
+    "output_tokens": 137,
+    "cache_read_tokens": 30016,
+    "reasoning_tokens": 45,
+    "cost_usd": 0.001261392,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": false
+   }
+  ],
+  "after": [
+   {
+    "execution": "c7c5e790e91a4105a0bc8269a0a4fd52",
+    "started": 1794041765.814476,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15311,
+    "output_tokens": 82,
+    "cache_read_tokens": 16192,
+    "reasoning_tokens": 9,
+    "cost_usd": 0.002598684,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": false
+   },
+   {
+    "execution": "f944bb464e184ee1b71e2fc778eb64c3",
+    "started": 1794041885.459344,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 1549,
+    "output_tokens": 177,
+    "cache_read_tokens": 29952,
+    "reasoning_tokens": 85,
+    "cost_usd": 0.00128634,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": false
+   },
+   {
+    "execution": "d30838ca80ff422f96ce879d6e6f0328",
+    "started": 1794042006.043691,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 1480,
+    "output_tokens": 176,
+    "cache_read_tokens": 30016,
+    "reasoning_tokens": 85,
+    "cost_usd": 0.001278816,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": false
+   },
+   {
+    "execution": "2322f36f80ad4a6d9d082b95c1a1fdd6",
+    "started": 1794042125.5621572,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15309,
+    "output_tokens": 225,
+    "cache_read_tokens": 16192,
+    "reasoning_tokens": 133,
+    "cost_usd": 0.0026739240000000003,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": false
+   }
+  ]
+ },
+ "attached": {
+  "before": [
+   {
+    "execution": "878a25f578e445e2aaf69dbbc30537c2",
+    "started": 1794041405.9605079,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 1352,
+    "output_tokens": 285,
+    "cache_read_tokens": 30144,
+    "reasoning_tokens": 196,
+    "cost_usd": 0.001323696,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": false
+   },
+   {
+    "execution": "9a893458df98421fbb5402c6e0d7ca5c",
+    "started": 1794041527.698625,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15560,
+    "output_tokens": 166,
+    "cache_read_tokens": 15936,
+    "reasoning_tokens": 75,
+    "cost_usd": 0.002667456,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": false
+   },
+   {
+    "execution": "66efd43a23b34052bd90276d5c982045",
+    "started": 1794041645.466131,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 1352,
+    "output_tokens": 80,
+    "cache_read_tokens": 30144,
+    "reasoning_tokens": 13,
+    "cost_usd": 0.001215456,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": false
+   }
+  ],
+  "after": [
+   {
+    "execution": "6e42934eec854708bad37a1c8a91d21f",
+    "started": 1794041766.476096,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 3267,
+    "output_tokens": 201,
+    "cache_read_tokens": 31808,
+    "reasoning_tokens": 109,
+    "cost_usd": 0.001587036,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": false
+   }
+  ]
+ },
+ "limits": [
+  "Costs are recorded host estimates, not bills.",
+  "One provider and model, on a small synthetic status file.",
+  "How often a real job's data stays unchanged decides the saving."
+ ]
+}

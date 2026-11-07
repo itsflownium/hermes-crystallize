@@ -513,6 +513,7 @@ def _setup(subparser: Any) -> None:
     rent_action = rn.add_mutually_exclusive_group()
     rent_action.add_argument("--remove", metavar="ID", help="Stop sending this tool result to the AI")
     rent_action.add_argument("--restore", metavar="ID", help="Send this tool result again")
+    rn.add_argument("--auto", choices=("on", "off"), help="Whether old results are removed automatically when it would pay")
     pc = subs.add_parser("prices", help="Check a route's price, or turn public price lookup on or off")
     pc.add_argument("--provider")
     pc.add_argument("--model")
@@ -571,7 +572,9 @@ def _completion_action(sub: str, args: Any) -> None:
             from . import brake
             result = brake.set_enabled(args.state == "on") if args.state else brake.summary(lifecycle.all_cron_jobs())
         elif sub == "rent":
-            from . import rent
+            from . import rent, store
+            if args.auto:
+                store.set_setting(rent.AUTO_SETTING, args.auto == "on")
             result = (rent.evict(args.session_id, args.remove) if args.remove else
                       rent.restore(args.session_id, args.restore) if args.restore else rent.report(args.session_id))
         elif sub == "prices":

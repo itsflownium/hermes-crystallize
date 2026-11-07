@@ -435,6 +435,12 @@ def read_full(result_id: str, offset: int = 0, session_id: str = "") -> str:
         offset = max(0, int(offset or 0))
     except (TypeError, ValueError, OverflowError):
         return json.dumps({"error": "Use a non-negative character offset."})
+    if offset == 0:
+        try:
+            from . import rent
+            rent.note_read_back(session_id, result_id)
+        except Exception:  # noqa: BLE001
+            logger.debug("crystallize: recording a read-back failed", exc_info=True)
     part = text[offset:offset + MAX_FULL_READ]
     payload = json.dumps({"result": part, "total_chars": len(text), "next_offset": offset + len(part) if offset + len(part) < len(text) else None})
     try:  # reading it back gives up some of what removing it saved
@@ -887,6 +893,11 @@ def _usage_cost(usage: Any, picked: dict[str, Optional[str]]) -> tuple[int, Opti
                          write_rate if write is None else prices["input"])
     return tokens, ((inp - known) * remainder_rate + out * prices["output"]
                     + (read or 0) * read_rate + (write or 0) * write_rate)
+
+
+def _session_key_text(session_id: str) -> str:
+    """One name for a chat across its compressions, for settings that follow the chat."""
+    return store._chat_ids(session_id)[0]
 
 
 def cleanup_session(session_id: str) -> None:

@@ -62,6 +62,46 @@ def _fixtures():
     }
 
 
+LONG_FILES = ("research", "analysis", "logs", "coding")
+LONG_LATER = ("Name one risk in what you've read so far, in one sentence.", "Suggest one next step, in one sentence.",
+              "What would you check first tomorrow? One sentence.", "Give a one-line title for this work.",
+              "Which of the files was the longest? One sentence.", "Name one thing that's still unknown. One sentence.")
+LONG_FINAL = ("Now give me the exact capacity_teu from the port authority update, and the event id that failed.", ["41250", "1017"])
+
+
+def run_long(args, on, folder, rates, tasks):
+    """A working chat: read several large files over several messages, keep talking, then need an old detail."""
+    from crystallize import rent, request_settings, store
+
+    nonce = os.urandom(4).hex()
+    session, _, code = ask(args, f"Reply with the single word READY. Reference {nonce}.")
+    if not session:
+        return {"on": on, "ok": False, "why": f"no session (exit {code})"}
+    if on:
+        store.set_chat_enabled(session, True)
+    start = usage(session)
+    codes = []
+    for name in LONG_FILES:
+        path = folder / f"{nonce}-{tasks[name]['file']}"
+        path.write_text(tasks[name]["text"], encoding="utf-8")
+        codes.append(ask(args, tasks[name]["ask"].format(path=path), session)[2])
+    for later in LONG_LATER * args.long_rounds:
+        codes.append(ask(args, later, session)[2])
+    _, final, final_code = ask(args, LONG_FINAL[0], session)
+    codes.append(final_code)
+    end = usage(session)
+    delta = {key: (end.get(key) or 0) - (start.get(key) or 0) for key in COUNTERS}
+    delta["prompt_tokens"] = delta["input_tokens"] + delta["cache_read_tokens"] + delta["cache_write_tokens"]
+    return {"on": on, "ok": not any(codes), "session": session, "delta": delta,
+            "checks_passed": all(text in final for text in LONG_FINAL[1]),
+            "list_cost_usd": list_cost(delta, rates) if rates else None,
+            "list_cost_without_reasoning_usd": list_cost({**delta, "output_tokens": max(0, delta["output_tokens"] - delta["reasoning_tokens"])}, rates) if rates else None,
+            "host_estimated_delta_usd": (end.get("estimated_cost_usd") or 0) - (start.get("estimated_cost_usd") or 0),
+            "recorded": {"model": end.get("model"), "provider": end.get("billing_provider"), "sent": (request_settings.for_run("chat:" + session) or {}).get("fingerprint")},
+            "requested_on_the_wire": request_settings.for_run("chat:" + session),
+            "auto_rent": rent.auto_state(session) if on else None, "answer_chars": len(final)}
+
+
 def ask(args, prompt, session=None):
     cmd = ["hermes", "chat", "-Q", "--oneshot", "-m", args.model, "--provider", args.provider, "--reasoning", args.reasoning,
            "-t", "terminal,crystallize", "-q", prompt] + (["--resume", session] if session else [])
@@ -102,7 +142,8 @@ def run_arm(args, task, on, folder, rates):
         return {"on": on, "ok": False, "why": f"no session (exit {code})"}
     if on and args.mode == "clean":
         store.set_chat_enabled(session, True)
-        reread.configure(session, enabled=True, results=True)
+        if args.reread:
+            reread.configure(session, enabled=True, results=True)
     start = usage(session)
     _, answer, code1 = ask(args, task["ask"].format(path=path), session)
     removed = None
@@ -165,20 +206,24 @@ def main():
     parser.add_argument("--model", required=True)
     parser.add_argument("--provider", required=True)
     parser.add_argument("--reasoning", default="medium")
-    parser.add_argument("--mode", choices=("clean", "rent"), default="clean",
-                        help="clean: Crystallize Chat on from the start. rent: remove the largest result, then measure later turns")
+    parser.add_argument("--mode", choices=("clean", "rent", "long"), default="clean",
+                        help="clean: Crystallize Chat on from the start. rent: remove the largest result, then measure later "
+                             "turns. long: a working chat over many messages, with everything automatic")
+    parser.add_argument("--long-rounds", type=int, default=1, help="How many times the later messages repeat in long mode")
+    parser.add_argument("--reread", action="store_true", help="Also switch on Re-read savings in the Crystallize arm")
     parser.add_argument("--pairs", type=int, default=1, help="Pairs per task type")
     parser.add_argument("--task", action="append")
     parser.add_argument("--minutes", type=float, default=15)
-    parser.add_argument("--turn-seconds", type=int, default=180)
+    parser.add_argument("--turn-seconds", type=int, default=240)
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--stop-recording", action="store_true", help="Turn off chat settings recording when done; leave it on while other tests run")
     parser.add_argument("--report", required=True)
     args = parser.parse_args()
     report_path = Path(args.report)
     if report_path.exists():
         raise SystemExit("Use a new report file; existing evidence is never overwritten.")
     tasks = _fixtures()
-    chosen = args.task or list(tasks)
+    chosen = ["working chat"] if args.mode == "long" else args.task or list(tasks)
     if not args.run:
         print(json.dumps({"planned_sessions": 2 * args.pairs * len(chosen), "tasks": chosen}))
         return
@@ -202,7 +247,8 @@ def main():
                 arms = {}
                 for on in order:
                     try:
-                        arms["on" if on else "off"] = run_arm(args, tasks[domain], on, Path(folder), rates)
+                        arms["on" if on else "off"] = (run_long(args, on, Path(folder), rates, tasks) if args.mode == "long"
+                                                       else run_arm(args, tasks[domain], on, Path(folder), rates))
                     except subprocess.TimeoutExpired:
                         arms["on" if on else "off"] = {"on": on, "ok": False, "why": "timeout"}
                 settings = [_settings(arms[k].get("recorded")) for k in ("off", "on")]
@@ -210,11 +256,12 @@ def main():
                 pairs.append({"domain": domain, "repeat": repeat, "order": ["on" if o else "off" for o in order], "valid": valid, **arms})
                 report_path.write_text(json.dumps({"partial": True, "pairs": pairs}, indent=1))
                 print(domain, repeat, "valid" if valid else "invalid", flush=True)
-    result = {"schema": 1, "mode": args.mode, "model": args.model, "provider": args.provider, "requested_reasoning": args.reasoning, "seed": seed,
+    result = {"schema": 1, "mode": args.mode, "reread": args.reread, "model": args.model, "provider": args.provider, "requested_reasoning": args.reasoning, "seed": seed,
               "frozen_list_rates_per_token": rates, "stopped": stopped, "by_task": summarise(pairs), "pairs": pairs,
               "limits": ["Costs are list prices applied to recorded usage, not bills.", "Fixtures are synthetic; JSON is pretty-printed like API output.",
                          "One provider and model. It does not extend to other routes.", "The checks cover named facts, not overall answer quality."]}
-    store.set_setting(request_settings.RECORD_CHATS, False)
+    if args.stop_recording:
+        store.set_setting(request_settings.RECORD_CHATS, False)
     report_path.write_text(json.dumps(result, indent=1))
     print(json.dumps(result["by_task"], indent=1))
 

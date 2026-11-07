@@ -1,0 +1,210 @@
+{
+ "schema": 1,
+ "model": "tencent/hy3",
+ "provider": "nous",
+ "requested_reasoning": "medium",
+ "events": [
+  {
+   "changed_data_at": 1794042837.628408,
+   "tick": 3
+  }
+ ],
+ "draft": {
+  "ok": true,
+  "why": null,
+  "commands": [
+   "cat /var/folders/n7/90_0w18s7zlgmk6lvdyzpt8m0000gn/T/crystal-cron-mo1fxlit/status.json"
+  ],
+  "urls": [],
+  "left_out": [],
+  "complete": true,
+  "source_script": "crystallize-drafts/1c077f4ea43b.py"
+ },
+ "blockers": [],
+ "attached_at": 1794042601.8437812,
+ "normal": {
+  "before": [
+   {
+    "execution": "17ed60d4d09f4e3cba39d6a6a14102cd",
+    "started": 1794042347.289509,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 16447,
+    "output_tokens": 199,
+    "cache_read_tokens": 14976,
+    "reasoning_tokens": 113,
+    "cost_usd": 0.002770284,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "c0ea6681979b4d599ecff679cec4898a",
+    "started": 1794042467.060894,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 1425,
+    "output_tokens": 125,
+    "cache_read_tokens": 30016,
+    "reasoning_tokens": 37,
+    "cost_usd": 0.001244628,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "d82b4b827f8543bba6e32a35db8cf817",
+    "started": 1794042588.5546398,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 221,
+    "output_tokens": 124,
+    "cache_read_tokens": 31232,
+    "reasoning_tokens": 52,
+    "cost_usd": 0.0011253,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": true
+   }
+  ],
+  "after": [
+   {
+    "execution": "946435a7b59d49a89b70cc48f10ab203",
+    "started": 1794042709.380112,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 16447,
+    "output_tokens": 228,
+    "cache_read_tokens": 14976,
+    "reasoning_tokens": 152,
+    "cost_usd": 0.002785596,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "b24285b79d2341758d5ce0f14b3ece6c",
+    "started": 1794042828.862891,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15866,
+    "output_tokens": 195,
+    "cache_read_tokens": 15552,
+    "reasoning_tokens": 105,
+    "cost_usd": 0.0027104879999999996,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "d92969d015c740b48a8e99d8e1b55951",
+    "started": 1794042947.006405,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15961,
+    "output_tokens": 119,
+    "cache_read_tokens": 15488,
+    "reasoning_tokens": 43,
+    "cost_usd": 0.002680788,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "da869a9810db45bd9acb6d0199a9e9dc",
+    "started": 1794043070.345765,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 16447,
+    "output_tokens": 96,
+    "cache_read_tokens": 14976,
+    "reasoning_tokens": 20,
+    "cost_usd": 0.0027159,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": true
+   }
+  ]
+ },
+ "attached": {
+  "before": [
+   {
+    "execution": "f24709d466284dcf924e80a7ca42227a",
+    "started": 1794042347.7694368,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 1471,
+    "output_tokens": 110,
+    "cache_read_tokens": 29952,
+    "reasoning_tokens": 20,
+    "cost_usd": 0.001240668,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "8ed067f773fd4e4cae3d0298e57871a3",
+    "started": 1794042466.922507,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 16392,
+    "output_tokens": 102,
+    "cache_read_tokens": 15040,
+    "reasoning_tokens": 14,
+    "cost_usd": 0.00271392,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "280fb8c820bf4806ac1d9f8863188941",
+    "started": 1794042588.036443,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 16413,
+    "output_tokens": 146,
+    "cache_read_tokens": 15040,
+    "reasoning_tokens": 58,
+    "cost_usd": 0.002739924,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": true
+   }
+  ],
+  "after": [
+   {
+    "execution": "66967412f2d540209e716cf06b49eac6",
+    "started": 1794042709.652771,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 17680,
+    "output_tokens": 112,
+    "cache_read_tokens": 17280,
+    "reasoning_tokens": 23,
+    "cost_usd": 0.002963136,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "987b26a103194f6aa4597255b406ee74",
+    "started": 1794042947.982342,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 19811,
+    "output_tokens": 85,
+    "cache_read_tokens": 18304,
+    "reasoning_tokens": 9,
+    "cost_usd": 0.003263964,
+    "api_cost_usd": null,
+    "requested_reasoning": "medium",
+    "comparable": true
+   }
+  ]
+ },
+ "limits": [
+  "Costs are recorded host estimates, not bills.",
+  "One provider and model, on a small synthetic status file.",
+  "How often a real job's data stays unchanged decides the saving."
+ ]
+}

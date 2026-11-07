@@ -2031,6 +2031,7 @@ function ContextRent({ ctx, sessionId, refresh, onTools }) {
   })
   return bubble([
     row('Context Rent', data.per_call_usd != null ? chip(`${money(data.per_call_usd)} a call`, C.yellow) : chip(`${tokensText(data.tokens)} tokens`, C.muted)),
+    data.auto && data.auto.removed ? small(`Removed ${data.auto.removed} old result${data.auto.removed === 1 ? '' : 's'} automatically because the numbers showed it would pay. ${data.auto.read_backs ? `The AI read ${data.auto.read_backs} back.` : 'None were needed again.'}${data.auto.off ? ' Stopped for this chat because they kept being needed.' : ''}`, C.soft) : null,
     small(`Every AI call re-reads this chat: about ${tokensText(data.tokens)} tokens right now. The biggest blocks cost the most. Pick a tool result to see what it costs.`, C.soft),
     jsx('div', {
       key: 'map',
@@ -2181,7 +2182,7 @@ const NOTES = [
     ['Routing', 'Your main model decides when to send routine work to your cheap model and takes the output straight back, such as summarizing or extracting data. It keeps decisions, anything that sends or changes something, and the final answer.'],
     ['Helper model', 'Handles explicit routed tasks and summaries permitted by this chat’s controls. Your main model stays the same. Unknown costs remain unknown in the breakdown.'],
     ['Full results', 'When a result is noticeably reduced, the exact original is kept for 7 days. Your main model can read it, or ask the cheap model about it.'],
-    ['Context Rent', 'Every AI call re-reads the whole chat, so each old tool result costs a little on every call after it. This shows what each one costs. Remove leaves a result out of what is sent to the AI, while your chat stays the same and the AI can still read the original. It works without turning on Crystallize Chat. Removing can reset the provider\'s cache once, so each result shows how many calls that takes to pay back.'],
+    ['Context Rent', 'Every AI call re-reads the whole chat, so each old tool result costs a little on every call after it. This shows what each one costs. In a chat with Crystallize on, old results are removed automatically when real prices show it would pay, counting the chance the AI needs one back. Remove leaves a result out of what is sent to the AI, while your chat stays the same and the AI can still read the original. It works without turning on Crystallize Chat. Removing can reset the provider\'s cache once, so each result shows how many calls that takes to pay back.'],
     ['Why not from the start', 'Hermes creates the chat when your first prompt is sent, and savings come from tool results, which don\'t exist until the work starts.']
   ]],
   ['Review and control', [
