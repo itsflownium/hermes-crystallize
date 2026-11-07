@@ -371,7 +371,8 @@ def test_catalog_bundle_pins_real_existing_commit_and_never_claims_admission(tmp
     assert audit["ok"] == (not audit["findings"])
     assert report["technical_static_ready"] == (audit["ok"] and report["technical_checks"]["reviewable_payloads"])
     assert report["technical_ready_for_submission"] is False  # no exact-pin verification/screenshots supplied
-    assert "No upstream" in (tmp_path / "submission.md").read_text()
+    submission = (tmp_path / "submission.md").read_text().replace("\n", " ")
+    assert "only a maintainer-merged upstream catalog entry establishes listing" in submission
 
 
 def test_catalog_disclosures_do_not_claim_unpinned_file_handoffs():

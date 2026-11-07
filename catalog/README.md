@@ -21,3 +21,9 @@ validation evidence, screenshot provenance and human gates separately. It create
 pass while admission/listing remains pending. It never fetches, reads credentials,
 mutates Git, hides warnings or fabricates validation. Commit generated files in a
 later catalog-only commit, keeping their pin on the reviewed feature commit.
+
+After independently checking public pin availability or creating an upstream
+review PR, record that operator evidence and its real URL in the generated
+readiness/submission files. The offline generator cannot establish those facts.
+Keep `catalog_ready` and `admission.listed` false until an upstream maintainer
+actually merges the entry; a draft/open PR is review, not listing.

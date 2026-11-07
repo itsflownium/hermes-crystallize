@@ -4,6 +4,22 @@ These results distinguish the current follow-up and public-SDK migration from th
 implementation in this follow-up to PR #7. They do not establish universal model
 compatibility, semantic equivalence or marketplace admission.
 
+## Current candidate after PRs #11 and #12 — 7 November 2026
+
+- The follow-up suite passed **1,253 tests, 1 optional dispatch-audit case
+  skipped**, with the reviewed helper SDK source supplied. It includes 14 new
+  usage-boundary/reply-recovery cases and 32 desktop behavior checks.
+- Six PR checks passed: Python 3.11/3.13, admission on both reviewed host
+  snapshots, and actual helper usage conversion from both SDK snapshots.
+- The local validator passed 16 checks with zero warnings in an isolated home;
+  the independent public API audit found no production private access.
+- These are offline/source/admission results, with **zero new paid provider
+  calls**. They establish no savings percentage, universal live task/provider
+  coverage, or automatic zero-AI cron behavior.
+- Workspace validation does not activate the separate installed checkout or
+  restart the gateway. [Submission status](submission-status.md) records the
+  separate evidence, budget, listing and activation boundaries.
+
 ## Review fixes — 7 November 2026, version 0.4.1
 
 - **1,216 standalone tests passed, 1 optional source-audit case skipped** on

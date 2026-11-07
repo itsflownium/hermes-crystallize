@@ -5,7 +5,10 @@ maintainer approval.** Technical readiness is derived from exact-pin evidence;
 human admission remains a separate gate.
 
 The published upstream catalog rules and plugin API were reviewed at commit
-`90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. Re-read the
+`90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. The canonical catalog rules were
+re-read for this submission at upstream `8153953654574f8624dc3652b1df7162ead425a8`;
+the separate published API facts remain pinned to their reviewed snapshot.
+Re-read the
 [canonical rules](https://github.com/NousResearch/hermes-agent/blob/main/plugin-catalog/README.md)
 before submission. They require a real full SHA, capabilities matching the pinned
 code, public surfaces, install/security/Desktop validation, truthful disclosures

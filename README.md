@@ -2,7 +2,7 @@
   <img src="assets/crystallize-logo.svg" alt="Crystallize" width="380">
 </p>
 
-**Spend less on repeated work in Hermes chats and cron jobs while preserving your main model and reasoning settings.**
+**Reduce repeated context in Hermes chats and cron jobs while preserving your main model and reasoning settings.**
 
 Crystallize targets repeated context, duplicated file text, unnecessary tool
 schemas and stable read steps. It keeps originals recoverable, records helper
@@ -13,6 +13,14 @@ The architecture uses Hermes's host-owned model facade and provider declarations
 across cloud routes. This is a compatibility design, not a claim that every
 provider, model, operating system or task has been tested. Missing prices,
 capabilities, usage and guarded execution stay unknown or fail closed.
+
+**Current evidence:** this public-SDK candidate has no verified live savings
+percentage at unchanged reasoning. Research, writing, data, analysis, coding and
+cron coverage comes from offline fixtures; it does not prove every mainstream
+task or provider works live. Automatic zero-AI/pre-run routines are unavailable
+on the reviewed SDK. Its older cron measurements cannot be carried over to this
+implementation. See [submission status](docs/submission-status.md) for the
+measurement, marketplace and local activation boundaries.
 
 ## Chat and Cron
 
