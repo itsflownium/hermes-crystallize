@@ -38,28 +38,24 @@ def test_a_draft_covers_stable_reads_and_can_run(job, monkeypatch, tmp_path):
     assert out["complete"] and out["commands"] == ["echo hello"] and not out["left_out"]
     path = tmp_path / "hermes" / "scripts" / out["source_script"]
     ran = subprocess.run([sys.executable, str(path)], capture_output=True, text=True)
-    note, data = ran.stdout.split("\n", 1)
-    assert ran.returncode == 0 and note == starter_script.COMPLETE_NOTE and json.loads(data) == {"echo hello": "hello\n"}
+    assert ran.returncode == 0 and "Do the task as normal" in ran.stdout and "hello" not in ran.stdout
 
 
-def test_a_draft_prints_json_data_compactly(job, monkeypatch, tmp_path):
-    _steps(monkeypatch, _step("terminal", {"command": """printf '{\\n  "a": 1.50\\n}'"""}))
+def _run_draft(out, tmp_path):
+    return subprocess.run([sys.executable, str(tmp_path / "hermes" / "scripts" / out["source_script"])], capture_output=True, text=True).stdout
+
+
+def test_a_draft_ignores_formatting_but_notices_real_changes(job, monkeypatch, tmp_path):
     monkeypatch.setattr(analyze, "observation_safety_error", lambda tool, args: None)
-    out = starter_script.draft("j1")
-    ran = subprocess.run([sys.executable, str(tmp_path / "hermes" / "scripts" / out["source_script"])], capture_output=True, text=True)
-    assert '{"a":1.5}' in ran.stdout and "\n  " not in ran.stdout
-
-
-def test_an_incomplete_draft_doesnt_tell_the_ai_to_skip_its_reads(job, monkeypatch):
-    _steps(monkeypatch, _step("terminal", {"command": "ls"}), _step("web_search", {"query": "x"}, kind="varies"))
-    assert starter_script.COMPLETE_NOTE not in starter_script.draft("j1")["source"]
-
-
-def test_a_failed_read_makes_the_script_fail_so_a_normal_run_happens(job, monkeypatch, tmp_path):
-    _steps(monkeypatch, _step("terminal", {"command": "ls /definitely/not/here"}))
-    out = starter_script.draft("j1")
-    ran = subprocess.run([sys.executable, str(tmp_path / "hermes" / "scripts" / out["source_script"])], capture_output=True, text=True)
-    assert ran.returncode != 0
+    outputs = []
+    for data in ("""printf '{\\n "a": 1}'""", """printf '{"a":1}'""", """printf '{"a":2}'"""):
+        _steps(monkeypatch, _step("terminal", {"command": data}))
+        path = tmp_path / "hermes" / "scripts" / starter_script.draft("j1")["source_script"]
+        source = path.read_text()
+        # the fingerprint covers the command too, so compare on one fixed key
+        path.write_text(source.replace("snapshot[command] =", 'snapshot["data"] ='))
+        outputs.append(subprocess.run([sys.executable, str(path)], capture_output=True, text=True).stdout)
+    assert outputs[0] == outputs[1] and outputs[1] != outputs[2]
 
 
 def test_a_draft_names_what_it_left_out(job, monkeypatch):
@@ -188,9 +184,27 @@ def test_status_command_mentions_chats():
 
 
 @pytest.mark.parametrize("digests,verdict", [
-    (["a", "a", "a", "a"], "good"), (["a", "b", "a", "b"], "poor"), (["a", "b", "b", "c", "d"], "mixed"), (["a"], "unknown"),
+    (["a", "a", "a", "a", "a"], "good"), (["a", "b", "a", "b"], "poor"), (["a", "a", "a", "b", "b"], "good"), (["a", "a", "a", "a", "b", "b", "c", "c"], "mixed"), (["a"], "unknown"),
 ])
 def test_a_job_is_told_whether_skipping_would_help(monkeypatch, digests, verdict):
     monkeypatch.setattr(history, "runs_for_job", lambda ref, only_usable=False: digests)
     monkeypatch.setattr(rhythm, "_content_fingerprint", lambda run: run)
     assert starter_script.fit("j1")["verdict"] == verdict
+
+
+def _costs(job, monkeypatch, after):
+    monkeypatch.setattr(starter_script.time, "time", lambda: 10_000)
+    job["schedule"] = {"kind": "interval", "minutes": 10}
+    runs = [SimpleNamespace(scheduled=True, finished=True, started_ts=t, cost_usd=c) for t, c in [(1, 1.0), (2, 1.0), (3, 1.0)] + after]
+    monkeypatch.setattr(history, "runs_for_job", lambda ref, only_usable=False: runs)
+    return starter_script.since_attached("j1", {"status": "applied", "applied_at": 4_000})
+
+
+def test_an_attached_job_shows_what_it_really_saved(job, monkeypatch):
+    out = _costs(job, monkeypatch, [(5_000, 1.5)])
+    assert out["checks"] == 10 and out["saved_usd"] == pytest.approx(8.5) and not out["costing_more"]
+
+
+def test_an_attached_job_warns_when_it_costs_more(job, monkeypatch):
+    out = _costs(job, monkeypatch, [(4_000 + i * 600, 2.5) for i in range(10)])
+    assert out["costing_more"] and "undo" in out["message"]

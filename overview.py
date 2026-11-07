@@ -348,6 +348,7 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
             "agent_free": a.agent_free,
             "reason": a.reason,
             "skip_fit": starter_script.fit(job_id, runs),
+            "skip_result": starter_script.since_attached(job_id, store.get_setting("native_cron:" + job_id) or {}),
         }
 
         routine = routines.get(job_id)

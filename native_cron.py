@@ -95,7 +95,7 @@ def status(job_id):
     from . import starter_script
 
     return {"ok": True, "job_id": job_id, "config_fingerprint": _fingerprint(job),
-            "state": state, "acknowledgement": ACKNOWLEDGEMENT, "fit": starter_script.fit(job_id),
+            "state": state, "acknowledgement": ACKNOWLEDGEMENT, "fit": starter_script.fit(job_id), "since_attached": starter_script.since_attached(job_id, state),
             "runtime_sha256": runtime_sha,
             "runtime_review_required": state.get("status") in {"pending", "applied"} and state.get("runtime_sha256") != runtime_sha,
             "available_modes": ["monitor", "verbatim"], "automatic_tool_replay": False,

@@ -7,7 +7,7 @@ These come from live paired runs on Nous, with the same model and the same reaso
 | Situation | What happened | What to do |
 |---|---|---|
 | **Removing a result by hand in a short chat, when the AI still needs it** | Typically 1.2 to 1.7 times the cost across 3 of 4 task types, because the AI had to get it back with extra calls | Remove results you're done with, or leave it to automatic removal, which weighs this risk first |
-| **A cron job whose data changes on every run** | Each AI run cost about 15% more with a script attached, because the snapshot is added to the prompt, and nothing gets skipped | Don't attach a script to it |
+| **A cron job whose data changes often** | On a 2-minute test schedule, a woken run cost 1.1 to 2.4 times a normal one, mainly from cache misses, and one job cost 21% more overall despite skipping half its checks | Check the job's verdict first. After attaching, its card shows what it has really cost, and warns you if that's more |
 | **A snapshot script that prints something that always changes**, such as a timestamp | The job looks changed every time, so it never skips | Print only the data that matters |
 | **A single unlucky run** | One short task cost 1.5 times as much because the provider's cache missed, even with fewer tokens sent | Nothing to fix. Judge by several runs, because the other side also misses sometimes |
 | **Hand-offs to a helper model on small tasks** | Not live-tested. The main model has to type the work out for the helper, at its own output price | Crystallize estimates this first and refuses a hand-off that won't pay. A helper with no known price stays off |
@@ -30,10 +30,10 @@ Turn it on after your first message with `/crystallize chat on`. It needs a know
 
 ## Ideal conditions for cron
 
-- **The data is often unchanged.** With a script attached, an unchanged check made no AI call. One job that changed once in 4 checks cost 43% less, and one whose data stayed the same across its checks cost about 80% less.
+- **The data is usually unchanged.** An unchanged check makes no AI call. Three live pairs on a fast schedule gave different results: about 80% cheaper when the data never changed during the test, 43% cheaper when it changed once, and 21% more with an older script that made the AI read the data twice.
 - **It checks often for something that rarely changes,** such as a status page, a queue or a report feed.
 - **It only reads,** with no skills or actions on its runs. Crystallize won't attach a script to a job with either.
 - **Silence is fine when nothing changed.** An unchanged check sends nothing, and a job that delivers somewhere needs you to confirm this.
 - **Its reads are simple,** so a script can cover them. Crystallize drafts one and names anything it couldn't cover.
 
-As a rough rule, an attached job costs less when its data changes on fewer than about 8 in 10 runs, based on about 15% more per AI run. That comes from a small sample, so check the job's own results.
+As a rough rule, attach a script when the data changes on fewer than about 4 in 10 runs. That's cautious, because a fast schedule gives a normal job its best cache hits. Each job's own card then shows its real cost.

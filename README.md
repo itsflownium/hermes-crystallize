@@ -41,9 +41,9 @@ hermes crystal brake on                       # stop runaway cron runs
 ## What to expect
 
 Savings depend on the work. In live paired tests at unchanged reasoning, working chats of 11 messages
-cost 20 to 23% less on two of three models, and a cron job whose data changed once in 4 checks cost
-43% less. Short tasks saved about 6%. It can cost more in some cases, such as a cron job whose data
-changes on every run. See [when it saves, and when it can cost more](docs/when-it-saves.md).
+cost 20 to 23% less on two of three models, and 23-message chats cost 32% less on one. Short tasks saved
+about 6%. Cron jobs that rarely change can skip most AI runs, but a job whose data changes often can
+cost more, so each job shows its own verdict and real cost. See [when it saves, and when it can cost more](docs/when-it-saves.md).
 
 A saving only counts between runs with the same model, provider and reasoning, taken from what each
 request actually sent. Prices come from public model lists or your own rate card, so they're

@@ -1071,14 +1071,14 @@ function JobBubble({ item, status, trialRuns, act, exp, ctx, compatibility }) {
     action = pill('Undo', () => act('/undo', { routine_id: item.routine_id }), C.muted)
   } else if (status === 'testing') {
     headline = projectionAvailable ? big(perWeek(item.saving_per_week)) : big('Needs measurement', C.soft)
-    sub = projectionAvailable ? `Unmeasured automatic-replay projection · ${perMonth(item.saving_per_week)}` : (item.skip_fit ? item.skip_fit.message : 'No saving measured yet.')
+    sub = projectionAvailable ? `Unmeasured automatic-replay projection · ${perMonth(item.saving_per_week)}` : (item.skip_result ? item.skip_result.message : item.skip_fit ? item.skip_fit.message : 'No saving measured yet.')
     const target = promotionTarget(item, compatibility)
     action = item.ready
       ? target ? pill(target.label, () => act('/promote', { routine_id: item.routine_id, mode: target.mode }), C.accent) : chip('Capability unavailable', C.muted)
       : jsx('span', { style: { fontSize: '0.6875rem', color: C.muted }, children: `${item.matches} of ${item.needed} observations` })
   } else {
     headline = projectionAvailable ? big(perWeek(item.saving_per_week)) : big('Needs measurement', C.soft)
-    sub = projectionAvailable ? `Unmeasured automatic-replay projection · ${perMonth(item.saving_per_week)}` : (item.skip_fit ? item.skip_fit.message : 'No saving measured yet.')
+    sub = projectionAvailable ? `Unmeasured automatic-replay projection · ${perMonth(item.saving_per_week)}` : (item.skip_result ? item.skip_result.message : item.skip_fit ? item.skip_fit.message : 'No saving measured yet.')
     action = promotionPolicy(item).try_available === true
       ? pill('Observe next runs', () => act('/try', { job_id: item.job_id }))
       : chip('Still watching', C.muted)
@@ -1382,7 +1382,8 @@ function NativeCronControl({ ctx, jobId, onChanged = () => {} }) {
     sectionButton('Skip runs when nothing changed', open, () => setOpen(value => !value)),
     ...(open ? [
       small('A small script reads the job\'s data. When the data hasn\'t changed, the AI doesn\'t run. You review the script before it\'s attached. Crystallize can draft it from what this job has already done.', C.soft),
-      data && data.fit ? small(data.fit.message, data.fit.verdict === 'poor' ? C.yellow : data.fit.verdict === 'good' ? C.green : C.soft) : null,
+      data && data.since_attached ? small(data.since_attached.message, data.since_attached.costing_more ? C.yellow : C.green) : null,
+      data && data.fit && !attached ? small(data.fit.message, data.fit.verdict === 'poor' ? C.yellow : data.fit.verdict === 'good' ? C.green : C.soft) : null,
       !attached ? actionButton('Draft a script from this job', () => draft(), pending) : null,
       draftNote ? small(draftNote, C.soft) : null,
       attached ? small(`Attached: ${data.state.mode} · ${data.state.approval_revoked ? 'requirements changed; approval revoked' : data.state.status}`, C.soft) : null,

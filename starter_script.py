@@ -10,23 +10,24 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+import time
+from typing import Any, Optional
 
 from . import analyze, history, lifecycle, store
 
 MIN_RUNS = 3
 DRAFT_DIR = "crystallize-drafts"
-# Without this the AI reads the same data again with its tools, paying for it twice.
-COMPLETE_NOTE = "This is the current result of every read this job normally does, so you don't need to run them again."
 _SAFE_NAME = re.compile(r"[^A-Za-z0-9_-]+")
 
 _TEMPLATE = '''#!/usr/bin/env python3
-"""Draft snapshot for cron job {name}, written by Crystallize from its recorded reads.
+"""Draft change check for cron job {name}, written by Crystallize from its recorded reads.
 
-Review this before attaching it. It must print everything the job needs, and only data
-that matters: a timestamp in the output would look like a change on every run.
+Review this before attaching it. It reads what the job reads and prints only a fingerprint, so the
+AI runs when that changes and reads the data itself, once, exactly as it does now. Anything that
+always changes, such as a timestamp in the output, would wake the job on every run.
 Any failed read exits with an error, so Hermes does a normal full run instead of skipping.
 """
+import hashlib
 import json
 import subprocess
 import sys
@@ -35,11 +36,10 @@ import urllib.request
 COMMANDS = {commands}
 URLS = {urls}
 TIMEOUT_SECONDS = 60
-NOTE = {note}
 
 
-def compact(text):
-    """Wasted JSON formatting would be read on every AI call of the run."""
+def stable(text):
+    """The same data in different formatting isn't a change."""
     try:
         return json.loads(text)
     except ValueError:
@@ -51,14 +51,13 @@ for command in COMMANDS:
     done = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=TIMEOUT_SECONDS)
     if done.returncode != 0:
         sys.exit(f"Read failed: {{command}}")
-    snapshot[command] = compact(done.stdout)
+    snapshot[command] = stable(done.stdout)
 for url in URLS:
     request = urllib.request.Request(url, headers={{"User-Agent": "crystallize-snapshot"}})
     with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-        snapshot[url] = compact(response.read().decode("utf-8", "replace"))
-if NOTE:
-    print(NOTE)
-print(json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"), sort_keys=True))
+        snapshot[url] = stable(response.read().decode("utf-8", "replace"))
+encoded = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+print("The data this job reads has changed (" + hashlib.sha256(encoded.encode()).hexdigest()[:16] + "). Do the task as normal.")
 '''
 
 
@@ -107,7 +106,7 @@ def draft(job_id: str) -> dict[str, Any]:
     if not found["ok"]:
         return found
     source = _TEMPLATE.format(name=json.dumps(job.get("name") or job_id), commands=json.dumps(found["commands"], indent=4),
-                              urls=json.dumps(found["urls"], indent=4), note=repr(COMPLETE_NOTE if found["complete"] else ""))
+                              urls=json.dumps(found["urls"], indent=4))
     relative = f"{DRAFT_DIR}/{_SAFE_NAME.sub('-', job_id)}.py"
     path = history._hermes_home() / "scripts" / relative
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -119,7 +118,10 @@ def draft(job_id: str) -> dict[str, Any]:
     return {**found, "source_script": relative, "source": source, "message": message}
 
 
-BREAK_EVEN_SHARE = 0.8      # attached runs cost a little more, so a job needs some unchanged runs to gain
+# A woken run can miss the provider's cache, which measured up to about 2.4 times a normal run on a
+# fast schedule. So until a job has its own numbers, it needs most of its runs to be unchanged.
+BREAK_EVEN_SHARE = 0.4
+GOOD_SHARE = 0.25
 RECENT_RUNS = 20
 
 
@@ -136,7 +138,36 @@ def fit(job_id: str, runs: Any = None) -> dict[str, Any]:
     share = changes / checks
     counted = f"Its data changed in {changes} of its last {checks} runs"
     if share >= BREAK_EVEN_SHARE:
-        return {"verdict": "poor", "share": share, "message": f"{counted}. Attaching a script would likely cost more, because almost nothing gets skipped and each AI run reads a little extra."}
-    if share <= 0.5:
+        return {"verdict": "poor", "share": share, "message": f"{counted}. Attaching a script would likely cost more, because too few runs get skipped to repay the extra cost of each run that wakes."}
+    if share <= GOOD_SHARE:
         return {"verdict": "good", "share": share, "message": f"{counted}. This is a good fit: unchanged runs make no AI call."}
     return {"verdict": "mixed", "share": share, "message": f"{counted}. It should save a little, but check its results after attaching."}
+
+
+def since_attached(job_id: str, state: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """What this job has really cost since its script was attached, against its own earlier runs."""
+    from . import rhythm
+
+    attached_at = state.get("applied_at")
+    job = lifecycle._bound_job(job_id)
+    minutes = rhythm._interval(job) if job else None
+    if state.get("status") != "applied" or not attached_at or not minutes:
+        return None
+    finished = [r for r in history.runs_for_job(job_id) if r.scheduled and r.finished]
+    before = [r.cost_usd for r in finished if r.started_ts < attached_at and r.cost_usd is not None]
+    after = [r for r in finished if r.started_ts >= attached_at]
+    elapsed = time.time() - attached_at
+    checks = int(elapsed // (minutes * 60))
+    if len(before) < MIN_RUNS or checks < MIN_RUNS or any(r.cost_usd is None for r in after):
+        return None
+    normal = sum(before) / len(before)
+    spent = sum(r.cost_usd for r in after)
+    expected = normal * checks
+    saved = expected - spent
+    if saved < 0:
+        message = (f"Since attaching, this job has cost about ${spent:.4f} against an expected ${expected:.4f} without it. "
+                   "That's more, so undo it if this keeps up.")
+    else:
+        message = f"Since attaching, this job has cost about ${spent:.4f} against an expected ${expected:.4f} without it."
+    return {"spent_usd": spent, "expected_usd": expected, "saved_usd": saved, "woke": len(after), "checks": checks,
+            "costing_more": saved < 0, "message": message}
