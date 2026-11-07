@@ -11,9 +11,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import tempfile
 import time
 from pathlib import Path
+
+
+def _create_job(lifecycle, name, schedule, prompt, model, provider, reasoning):
+    """Through Hermes's public command, then found by its unique name."""
+    subprocess.run(["hermes", "cron", "create", schedule, prompt, "--name", name, "--model", model, "--provider", provider,
+                    "--reasoning-effort", reasoning], check=True, capture_output=True, text=True)
+    return next(job for job in lifecycle.all_cron_jobs() if job.get("name") == name)
+
+
+def _remove_job(job_id):
+    subprocess.run(["hermes", "cron", "remove", job_id], check=False, capture_output=True, text=True)
 
 
 def _write(path: Path, status: str) -> None:
@@ -56,8 +68,6 @@ def main() -> None:
     if not args.run:
         print("Add --run to create two temporary cron jobs and make paid calls.")
         return
-    from cron.jobs import create_job, remove_job
-
     from crystallize import history, lifecycle, native_cron, starter_script
 
     deadline = time.time() + args.minutes * 60
@@ -66,12 +76,11 @@ def main() -> None:
         data = Path(folder) / "status.json"
         _write(data, "ok")
         prompt = f"Run `cat {data}` with the terminal tool, then say in one line whether any service is not ok, naming it."
-        jobs = [create_job(prompt=prompt, schedule="every 1m", name=f"crystal-pair-{name}", model=args.model, provider=args.provider)
+        stamp = int(time.time())
+        jobs = [_create_job(lifecycle, f"crystal-pair-{name}-{stamp}", "every 1m", prompt, args.model, args.provider, args.reasoning)
                 for name in ("normal", "attached")]
         normal, attached = jobs[0]["id"], jobs[1]["id"]
         try:
-            for job in jobs:
-                lifecycle._edit_job(job["id"], "--reasoning-effort", args.reasoning)
             if not all(_wait(history, j, 3, deadline) for j in (normal, attached)):
                 result["stopped"] = "too few baseline runs before the deadline"
                 return
@@ -108,7 +117,7 @@ def main() -> None:
                             native_cron.undo(attached, expected_config_fingerprint=state["config_fingerprint"], confirmed=True)
                 except Exception as exc:  # noqa: BLE001 — the job is removed either way
                     result.setdefault("cleanup_notes", []).append(str(exc))
-                remove_job(job["id"])
+                _remove_job(job["id"])
             report.with_suffix(".partial").unlink(missing_ok=True)
             result["limits"] = ["Costs are recorded host estimates, not bills.", "One provider and model, on a small synthetic status file.",
                                 "How often a real job's data stays unchanged decides the saving."]

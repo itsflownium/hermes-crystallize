@@ -8,9 +8,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import tempfile
 import time
 from pathlib import Path
+
+
+def _create_job(lifecycle, name, schedule, prompt, model, provider, reasoning):
+    """Through Hermes's public command, then found by its unique name."""
+    subprocess.run(["hermes", "cron", "create", schedule, prompt, "--name", name, "--model", model, "--provider", provider,
+                    "--reasoning-effort", reasoning], check=True, capture_output=True, text=True)
+    return next(job for job in lifecycle.all_cron_jobs() if job.get("name") == name)
+
+
+def _remove_job(job_id):
+    subprocess.run(["hermes", "cron", "remove", job_id], check=False, capture_output=True, text=True)
 
 
 def main() -> None:
@@ -28,8 +40,6 @@ def main() -> None:
     if not args.run:
         print("Add --run to create a temporary cron job and make paid calls.")
         return
-    from cron.jobs import create_job, remove_job
-
     from crystallize import history, lifecycle, tuning
 
     deadline = time.time() + args.minutes * 60
@@ -42,10 +52,10 @@ def main() -> None:
         data = Path(folder) / "status.json"
         data.write_text(json.dumps({"items": [{"id": i, "state": "ok", "owner": f"team-{i % 4}", "tags": ["a", "b"]} for i in range(150)]
                                     + [{"id": 999, "state": "blocked", "owner": "team-9"}]}, indent=4))
-        job = create_job(prompt=f"Run `cat {data}` with the terminal tool, then name the one item whose state isn't ok.",
-                         schedule="every 1m", name="crystal-tune-test", model=args.model, provider=args.provider)
+        job = _create_job(lifecycle, f"crystal-tune-test-{int(time.time())}", "every 1m",
+                          f"Run `cat {data}` with the terminal tool, then name the one item whose state isn't ok.",
+                          args.model, args.provider, args.reasoning)
         try:
-            lifecycle._edit_job(job["id"], "--reasoning-effort", args.reasoning)
             while time.time() < deadline and len(finished()) < tuning.MIN_BEFORE_RUNS:
                 time.sleep(5)
             result["trial"] = {"started": tuning.start(job["id"])["status"]}
@@ -70,7 +80,7 @@ def main() -> None:
                     tuning.undo(job["id"])
             except Exception as exc:  # noqa: BLE001 — the job is removed either way
                 result["cleanup_note"] = str(exc)
-            remove_job(job["id"])
+            _remove_job(job["id"])
             result["limits"] = ["One job, one model and a small sample.", "Costs are recorded host estimates, not bills."]
             report.write_text(json.dumps(result, indent=1))
             print(json.dumps({k: result.get(k) for k in ("status", "result", "cleanup_note")}))
