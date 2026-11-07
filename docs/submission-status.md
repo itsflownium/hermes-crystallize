@@ -10,7 +10,8 @@ evidence. The internal catalog pin includes the reviewed fixes. A prepared bundl
 
 | Question | Current evidence | Boundary |
 | --- | --- | --- |
-| Savings at unchanged reasoning | Retained research and typed cron pairs use Nous DeepSeek Flash with max reasoning; public helper request observers recorded max in both arms | Prompt tokens fell, but output/reasoning grew. Actual billing and a net cash-saving percentage remain unknown |
+| Savings at unchanged reasoning, version 0.6.0 | See [live savings](validation-results.md): 6% on short tasks, 20 to 32% on working chats on two of three models, 7% on the third, and 60% in one cron pair. Nous only, small samples | List prices on synthetic fixtures, not bills |
+| Earlier savings evidence | Retained research and typed cron pairs use Nous DeepSeek Flash with max reasoning; public helper request observers recorded max in both arms | Prompt tokens fell, but output/reasoning grew. Actual billing and a net cash-saving percentage remain unknown |
 | Mainstream tasks and providers | Current six-domain answer-only matrix summary, exact cron failure and separate typed rerun; offline generality tests | The full current matrix JSON was overwritten by an operator report-path error. The recovered partial record is labelled; fixtures and one Nous route do not prove universal coverage |
 | Automatic cron | Three due monitor ticks verified first/unchanged/changed behavior with two model requests; due script-only execution verified | Arbitrary learned-tool replay remains unavailable. Snapshot sources require complete reviewed input, local delivery, and no per-run actions/deadlines/repeated delivery |
 | Lifecycle quality | Pause/resume and missed-slot guards fixed; diagnostic-only error output clarified; old copied runtimes require fresh explicit review | Initial wrong fallback answer, controller deadline and zero-call preflight failure remain in the evidence |

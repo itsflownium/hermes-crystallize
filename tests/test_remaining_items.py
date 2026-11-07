@@ -184,7 +184,7 @@ def test_status_command_mentions_chats():
 
 
 @pytest.mark.parametrize("digests,verdict", [
-    (["a", "a", "a", "a", "a"], "good"), (["a", "b", "a", "b"], "poor"), (["a", "a", "a", "b", "b"], "good"), (["a", "a", "a", "a", "b", "b", "c", "c"], "mixed"), (["a"], "unknown"),
+    (["a", "a", "a", "a", "a"], "good"), (["a", "b", "a", "b"], "poor"), (["a", "a", "a", "b", "b"], "good"), (["a", "b", "c", "d", "d"], "mixed"), (["a"], "unknown"),
 ])
 def test_a_job_is_told_whether_skipping_would_help(monkeypatch, digests, verdict):
     monkeypatch.setattr(history, "runs_for_job", lambda ref, only_usable=False: digests)

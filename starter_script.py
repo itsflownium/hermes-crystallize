@@ -118,10 +118,10 @@ def draft(job_id: str) -> dict[str, Any]:
     return {**found, "source_script": relative, "source": source, "message": message}
 
 
-# A woken run can miss the provider's cache, which measured up to about 2.4 times a normal run on a
-# fast schedule. So until a job has its own numbers, it needs most of its runs to be unchanged.
-BREAK_EVEN_SHARE = 0.4
-GOOD_SHARE = 0.25
+# A woken run reads a one-line notice on top of a normal run, which measured about 5% more in one live
+# pair. Until a job has its own numbers, it should skip well over that break-even.
+BREAK_EVEN_SHARE = 0.8
+GOOD_SHARE = 0.5
 RECENT_RUNS = 20
 
 

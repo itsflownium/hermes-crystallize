@@ -7,7 +7,8 @@ These come from live paired runs on Nous, with the same model and the same reaso
 | Situation | What happened | What to do |
 |---|---|---|
 | **Removing a result by hand in a short chat, when the AI still needs it** | Typically 1.2 to 1.7 times the cost across 3 of 4 task types, because the AI had to get it back with extra calls | Remove results you're done with, or leave it to automatic removal, which weighs this risk first |
-| **A cron job whose data changes often** | On a 2-minute test schedule, a woken run cost 1.1 to 2.4 times a normal one, mainly from cache misses, and one job cost 21% more overall despite skipping half its checks | Check the job's verdict first. After attaching, its card shows what it has really cost, and warns you if that's more |
+| **A cron job whose data changes nearly every run** | With a drafted script, a woken run cost about 5% more than a normal one in one live pair, and almost nothing gets skipped | Check the job's verdict first. After attaching, its card shows its real cost and warns you if that's more |
+| **A hand-written script that prints the data** | The AI paid for the data twice, and each woken run missed the cache. One job cost 21% more overall despite skipping half its checks | Use a drafted script, which prints only a fingerprint, or print little yourself |
 | **A snapshot script that prints something that always changes**, such as a timestamp | The job looks changed every time, so it never skips | Print only the data that matters |
 | **A single unlucky run** | One short task cost 1.5 times as much because the provider's cache missed, even with fewer tokens sent | Nothing to fix. Judge by several runs, because the other side also misses sometimes |
 | **Hand-offs to a helper model on small tasks** | Not live-tested. The main model has to type the work out for the helper, at its own output price | Crystallize estimates this first and refuses a hand-off that won't pay. A helper with no known price stays off |
@@ -21,7 +22,7 @@ These come from live paired runs on Nous, with the same model and the same reaso
 
 ## Ideal conditions for chat
 
-- **The chat runs for many messages.** Working chats of 11 messages saved 23% on `tencent/hy3` and 20% on Kimi, and 23-message chats saved 32% on `tencent/hy3`. Savings grow with length. Per pair they ranged from 5% to 37%.
+- **The chat runs for many messages.** Working chats of 11 messages saved 23% on `tencent/hy3` in two separate sets of 3 pairs, and 20% on Kimi, and 23-message chats saved 32% on `tencent/hy3`. Savings grow with length. Per pair they ranged from 5% to 37%, and none of these chats cost more on `tencent/hy3` or Kimi.
 - **It reads large tool results early and moves on,** such as files, API responses and web pages.
 - **Tools return JSON.** Clean cuts the most there.
 - **Cached reads still cost something on your model.** The further they are from free, the more removal pays.
@@ -30,10 +31,10 @@ Turn it on after your first message with `/crystallize chat on`. It needs a know
 
 ## Ideal conditions for cron
 
-- **The data is usually unchanged.** An unchanged check makes no AI call. Three live pairs on a fast schedule gave different results: about 80% cheaper when the data never changed during the test, 43% cheaper when it changed once, and 21% more with an older script that made the AI read the data twice.
+- **The data is usually unchanged.** An unchanged check makes no AI call. With the drafted script, a job whose data changed once in 4 checks cost 60% less in one live pair, or about 47% less leaving out a cache miss on the normal job's side.
 - **It checks often for something that rarely changes,** such as a status page, a queue or a report feed.
 - **It only reads,** with no skills or actions on its runs. Crystallize won't attach a script to a job with either.
 - **Silence is fine when nothing changed.** An unchanged check sends nothing, and a job that delivers somewhere needs you to confirm this.
 - **Its reads are simple,** so a script can cover them. Crystallize drafts one and names anything it couldn't cover.
 
-As a rough rule, attach a script when the data changes on fewer than about 4 in 10 runs. That's cautious, because a fast schedule gives a normal job its best cache hits. Each job's own card then shows its real cost.
+As a rough rule, attach a script when the data changes on fewer than about 8 in 10 runs. That comes from one pair on a fast schedule, so check the job's own card after attaching.
