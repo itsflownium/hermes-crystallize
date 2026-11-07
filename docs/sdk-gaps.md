@@ -5,6 +5,15 @@ and tool-dispatch imports. Missing public capabilities are explicit unsupported
 features, with work left to the normal host agent. A private adapter, raw registry
 call, hidden import alias or guessed future method is not a fallback.
 
+The reviewed public helper DTO defaults absent token counters to zero and does
+not expose presence flags. Crystallize normalizes ambiguous zeroes to unknown at
+that boundary, retaining positive counts and reported host costs. Missing cache
+shares use the highest applicable declared rate; ambiguous input/output totals
+leave the estimate unknown. This may overestimate a genuinely uncached helper
+request. It prevents missing SDK metadata from manufacturing savings without
+patching Hermes or importing its private usage converter. Dedicated CI checks
+exercise usage conversion from both reviewed SDK snapshots in isolation.
+
 The independent static audit reads the **published plugin API facts** from
 `hermes_cli/data/plugin_api.json` at upstream commit
 `90d6b98fd86d20981ee06ddd5b7d93e4320f26a4`. The 5,044-byte snapshot contains 89

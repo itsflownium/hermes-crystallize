@@ -244,7 +244,7 @@ def test_cheap_output_fills_the_answer_without_retyping(world):
     assert cs.fill_placeholders(f"Here it is:\n{out['placeholder']}", session_id="s1") == "Here it is:\nlong table"
     assert cs.fill_placeholders("no placeholder here") is None
     missing = "{{crystal:0000000000000000}}"
-    assert cs.fill_placeholders(missing) is None
+    assert "unavailable" in cs.fill_placeholders(missing)
 
 
 def test_routing_estimates_break_even_instead_of_a_fixed_price_gap(monkeypatch):

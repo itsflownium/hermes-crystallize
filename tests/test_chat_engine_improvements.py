@@ -111,7 +111,7 @@ def test_originals_expire_on_read_without_another_write(engine, monkeypatch):
     monkeypatch.setattr(cs.time, "time", lambda: expiry + 1)
     assert "expired" in json.loads(cs.read_full(result_id, session_id="s1"))["error"]
     assert not path.exists()
-    assert cs.fill_placeholders(f"{{{{crystal:{result_id}}}}}", session_id="s1") is None
+    assert "expired" in cs.fill_placeholders(f"{{{{crystal:{result_id}}}}}", session_id="s1")
 
 
 def test_original_publish_is_atomic_private_and_immutable(engine, monkeypatch):
@@ -250,7 +250,7 @@ def test_worker_preserves_contextvars(engine):
 def test_routed_generation_benefit_requires_used_owned_placeholder(engine):
     answer = json.loads(cs.ask_cheap(Helper(text="long table " * 300), "write", "s1", "t1"))
     assert store.list_chat_savings("s1")[0]["output_chars"] == 0
-    assert cs.fill_placeholders(answer["placeholder"], session_id="s2", turn_id="t1") is None
+    assert "unavailable" in cs.fill_placeholders(answer["placeholder"], session_id="s2", turn_id="t1")
     assert cs.fill_placeholders(answer["placeholder"], session_id="s1", turn_id="t1") == answer["output"]
     first = store.list_chat_savings("s1")[0]["output_chars"]
     cs.fill_placeholders(answer["placeholder"], session_id="s1", turn_id="t1")

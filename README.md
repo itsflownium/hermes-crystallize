@@ -48,6 +48,9 @@ chat opt-in. Requested file reads/writes return non-executing plans for the norm
 agent to perform through its ordinary guarded tools.
 Placeholders expand only in eligible text fields before policy checks, and
 cannot become commands, URLs or file paths.
+Unavailable or expired reply results produce a recovery notice containing their
+result ID, while the rest of the reply stays intact. Recovery never starts a paid
+helper call, and only successfully recovered text receives savings credit.
 On hosts exposing the public output-buffering option, replies are delivered after
 placeholder expansion; this can defer streaming for the profile while the plugin
 is loaded. Older hosts retain their supported output-hook contract.
@@ -72,6 +75,11 @@ main model or rate card reprices the projection; it does not change the recorded
 events or establish historical billing. Missing helper cache counts use the
 highest applicable rate for the unallocated input, explicitly marked as an
 upper-bound estimate. Inconsistent counts or unavailable prices remain unknown.
+At the public helper boundary, ambiguous zero counters also remain unknown:
+reviewed Hermes SDK versions turn absent counts into zero without presence flags.
+Positive counters are retained; reported host costs, including zero, take precedence.
+Missing input/output counts leave the helper cost unknown rather than inventing a
+free input or output bucket.
 
 Cron trials require comparable recorded model/provider/reasoning and observable
 outcome checks. Source, task, route, tool or contract changes require fresh

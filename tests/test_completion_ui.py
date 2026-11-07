@@ -396,7 +396,7 @@ await test('chat projections identify current route rates and historical reprici
 await test('helper cache upper bounds remain distinct from unknown costs', async () => {
   const state={session_id:'chat-a',enabled:true,this_chat:{cheap_cost:.0022,upper_bound_cost_calls:1,unknown_cost_calls:0}};
   const view=mount('ThisChat',{state,onToggle:()=>{}});let content=text(view.tree);
-  assert.ok(content.includes('Helper cost upper bound'));assert.ok(content.includes('highest applicable rate'));
+  assert.ok(content.includes('Helper cost upper bound'));assert.ok(content.includes('highest applicable rate'));assert.ok(content.includes('missing or ambiguous cache details'));
   view.rerender({state:{...state,this_chat:{...state.this_chat,cheap_cost:null,unknown_cost_calls:1}},onToggle:()=>{}});content=text(view.tree);
   assert.equal(content.includes('Helper cost upper bound'),false);assert.ok(content.includes('Net savings are unknown.'));view.dispose();
 });
