@@ -1795,16 +1795,17 @@ function ModelPicker({ ctx, picked, onPicked }) {
 function ThisChat({ state, onToggle, heading = 'This chat', pending = false }) {
   if (!state.session_id) return bubble([label(heading), small('Send a message in any chat, then come back here to turn it on.')], 'this')
   const saved = state.this_chat
+  const projection = state.projection_pricing || saved && saved.projection_pricing || { model: state.main_model, provider: state.main_provider }
   const status = state.can_start || state.enabled
     ? actionButton(pending ? 'Saving…' : state.enabled ? 'Turn off' : 'Turn on', onToggle, pending)
     : chip('Off', C.muted)
   const cells = saved ? [
     ['Input removed', `${tokensText(saved.tokens_removed || 0)} tokens`, C.green],
-    ['Avoided input, one read', money(saved.once_at_main_price)],
-    ['Generation avoided', money(saved.estimated_output_avoided_usd)],
-    ['Delegated output read', money(saved.estimated_helper_read_usd)],
-    ['Helper cost estimate', money(saved.cheap_cost)],
-    ['Estimated net, one read', money(saved.net_once), saved.net_once == null ? C.soft : saved.net_once >= 0 ? C.green : C.yellow],
+    ['Avoided input, current price', money(saved.once_at_main_price)],
+    ['Generation avoided, current price', money(saved.estimated_output_avoided_usd)],
+    ['Delegated read, current price', money(saved.estimated_helper_read_usd)],
+    [saved.upper_bound_cost_calls && !saved.unknown_cost_calls ? 'Helper cost upper bound' : 'Helper cost estimate', money(saved.cheap_cost)],
+    ['Projected net, one read', money(saved.net_once), saved.net_once == null ? C.soft : saved.net_once >= 0 ? C.green : C.yellow],
     ['Helper calls', String(saved.helper_calls || 0)],
     state.chat_spent_usd != null ? ['Chat spend recorded', money(state.chat_spent_usd)] : null
   ].filter(Boolean) : []
@@ -1824,13 +1825,16 @@ function ThisChat({ state, onToggle, heading = 'This chat', pending = false }) {
         ]
       }))
     }) : small('Estimates appear after a tool result is reduced or a helper is used.'),
-    saved ? small('Estimates combine one avoided input read and generation actually delegated, less delegated output reads and all helper spend. They are not a bill or guaranteed savings. Context Rent below accounts for later reads.', C.soft) : null,
+    saved ? small(`Current-price projection for ${routeLabel(projection)}. All recorded turns use this main model's current rates; changing the model or rates reprices these figures. They are not historical billing or guaranteed savings.`, C.soft) : null,
+    saved ? small(`Current main prices per million tokens: ${money(projection.input_usd_per_token == null ? null : projection.input_usd_per_token * 1e6)} input · ${money(projection.output_usd_per_token == null ? null : projection.output_usd_per_token * 1e6)} output.`, C.soft) : null,
+    saved ? small('One-read net combines one avoided input read and generation actually delegated, less delegated output reads, recorded helper costs and extra main-call overhead. Context Rent below accounts for later reads.', C.soft) : null,
+    saved && saved.upper_bound_cost_calls ? small(`${saved.upper_bound_cost_calls} helper call${saved.upper_bound_cost_calls === 1 ? ' has' : 's have'} missing cache details. Those calls use a conservative upper bound, pricing unallocated input at the highest applicable rate.`, C.soft) : null,
     saved && saved.unknown_cost_calls ? small(`${saved.unknown_cost_calls} helper call${saved.unknown_cost_calls === 1 ? ' has' : 's have'} unknown cost. Net savings are unknown.`, C.yellow) : null,
     saved && (saved.failed_calls || saved.rejected_calls) ? small(`${saved.failed_calls || 0} failed and ${saved.rejected_calls || 0} rejected helper calls are included in cost estimates.`) : null,
     turns.length || (state.breakdown || []).length ? jsxs('details', { key: 'turns', children: [
       jsx('summary', { style: { color: C.soft, cursor: 'pointer', fontSize: '0.6875rem' }, children: 'Per-turn and helper breakdown' }),
       ...turns.map((t, i) => jsx('div', { key: t.turn_id || i, style: { marginTop: 5 }, children: small(
-        `Turn ${String(t.turn_id || i + 1)}: ${tokensText(t.tokens_removed || 0)} input tokens removed · helper ${money(t.cheap_cost)} · one-read net ${money(t.net_once)}`, C.soft) })),
+        `Turn ${String(t.turn_id || i + 1)}: ${tokensText(t.tokens_removed || 0)} input tokens removed · helper ${money(t.cheap_cost)} · current-price one-read net ${money(t.net_once)}`, C.soft) })),
       ...(state.breakdown || []).map((part, i) => small(`${part.kind || part.name || i}: ${part.helper_calls || 0} helper calls · ${money(part.cheap_cost)} helper cost · ${tokensText(part.tokens_removed || 0)} tokens removed`))
     ] }) : null,
     state.not_cheaper ? small('The selected helper is not cheaper than your main model. Choose a lower-cost route to allow automatic helper work.', C.yellow) : null

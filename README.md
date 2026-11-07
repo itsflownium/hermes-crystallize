@@ -64,6 +64,15 @@ cash cost. Token counts and character estimates are labelled separately. Helper
 requests, retrievals, unsuccessful attempts, comparisons and cache-rewrite
 overhead belong in net payback; a smaller visible message alone proves no saving.
 
+Chat's one-read net is a **current-price projection**, including for earlier
+turns. It applies the current main model's listed rates to recorded character
+estimates, then subtracts recorded helper costs and estimated extra-call overhead.
+The panel and API identify that route and its input/output rates. Changing the
+main model or rate card reprices the projection; it does not change the recorded
+events or establish historical billing. Missing helper cache counts use the
+highest applicable rate for the unallocated input, explicitly marked as an
+upper-bound estimate. Inconsistent counts or unavailable prices remain unknown.
+
 Cron trials require comparable recorded model/provider/reasoning and observable
 outcome checks. Source, task, route, tool or contract changes require fresh
 validation. The normal agent handles work while evidence is rebuilt. Contracts

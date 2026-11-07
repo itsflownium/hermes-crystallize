@@ -1,7 +1,7 @@
 """Record every tool call so Crystallize can line up runs later.
 
-Hooks are observers: anything that goes wrong here is logged and swallowed,
-so recording can never break a Hermes turn.
+Recording hooks are optional observers. Recovery hooks also protect transformed
+text: unavailable placeholders must not reach a tool as literal arguments.
 """
 
 from __future__ import annotations
@@ -140,15 +140,20 @@ def make_pre_tool_call(ctx: Any) -> Callable[..., Any]:
             stopped = brake.check(getattr(run, "job_name", None), session_id) if run is not None else None
             if stopped:
                 return stopped
-            from . import handoffs
-            try:
-                changed = handoffs.expand_args(args, session_id, turn_id, tool_name)
-                return {"action": "modify", "args": changed} if changed is not None else None
-            except ValueError as exc:
-                return {"action": "block", "message": str(exc)}
         except Exception:  # noqa: BLE001 — a hook must never break the run
             logger.debug("crystallize: Runaway Brake check failed", exc_info=True)
-            return None
+        # Recovery changes tool inputs, so it is not an optional observer. An
+        # unrelated Cron observation failure must not bypass placeholder checks.
+        from . import handoffs
+        try:
+            changed = handoffs.expand_args(args, session_id, turn_id, tool_name)
+            return {"action": "modify", "args": changed} if changed is not None else None
+        except ValueError as exc:
+            return {"action": "block", "message": str(exc)}
+        except Exception:  # noqa: BLE001 — never execute an unrecovered placeholder
+            logger.debug("crystallize: tool placeholder recovery failed", exc_info=True)
+            return {"action": "block", "message": "Crystallize could not recover the retained text. "
+                    "Recover the original in its owning chat before retrying this tool."}
 
     return before_tool
 
@@ -212,6 +217,9 @@ def make_transform_llm_output(ctx: Any) -> Callable[..., Any]:
             return chat_savings.fill_placeholders(response_text, session_id=session_id, turn_id=turn_id)
         except Exception:  # noqa: BLE001 — a hook must never break a turn
             logger.debug("crystallize: filling placeholders failed", exc_info=True)
+            if isinstance(response_text, str) and "{{crystal:" in response_text:
+                return ("[Crystallize could not recover the retained text for this reply. "
+                        "Use crystal_full_result in the owning chat to recover the original before retrying.]")
             return None
 
     return transform

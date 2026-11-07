@@ -45,6 +45,8 @@ CASES = [
     "compatibility explains normal host-tool file plans",
     "unsupported unchanged policies expose only a run-always reset",
     "host-tool mode never offers automatic unchanged cycling",
+    "chat projections identify current route rates and historical repricing",
+    "helper cache upper bounds remain distinct from unknown costs",
     "reasoning stays fixed and desktop imports remain public",
 ]
 
@@ -89,7 +91,7 @@ const sdk = {Codicon: () => null, ROUTES_AREA: 'routes', SIDEBAR_NAV_AREA: 'nav'
 const sandbox = {...hooks, ...sdk, jsx, jsxs: jsx, Intl, Date, URLSearchParams, console};
 vm.createContext(sandbox);
 const code = source.replace(/^import .* from .*\n/gm, '').replace('export default {', 'const desktopPlugin = {');
-vm.runInContext(code + '\nthis.parts={BlindTasteTest,RhythmHeatmap,RhythmControl,ModelAuction,AuctionResult,RereadControls,DelegationControls,JobEvidence,ReceiptSummary,Hero,RouteEntry,PricingCard,ModelPicker,CompatibilityCard,LiveOptions,JobBubble,promotionTarget,canUseMode};', sandbox);
+vm.runInContext(code + '\nthis.parts={BlindTasteTest,RhythmHeatmap,RhythmControl,ModelAuction,AuctionResult,RereadControls,DelegationControls,JobEvidence,ReceiptSummary,Hero,RouteEntry,PricingCard,ModelPicker,CompatibilityCard,LiveOptions,JobBubble,ThisChat,promotionTarget,canUseMode};', sandbox);
 const plain = value => JSON.parse(JSON.stringify(value));
 function mount(name, props) {
   const owner = {slots: [], effects: [], dirty: true, cursor: 0, tree: null, props};
@@ -383,6 +385,20 @@ await test('host-tool mode never offers automatic unchanged cycling', async () =
   const calls=[];const view=mount('LiveOptions',{item:{...modeItem,mode:'tool',when_unchanged:'quiet',promotion_availability:policy},compatibility:guarded,act:(path,body)=>calls.push({path,body})});await view.flush();
   assert.equal(all(view).filter(node=>node.type==='button' && text(node).startsWith('If unchanged:')).length,0);
   click(view,'Run always / clear saved skip');assert.deepEqual(plain(calls),[{path:'/skip',body:{routine_id:'routine-a',when:'run'}}]);view.dispose();
+});
+await test('chat projections identify current route rates and historical repricing', async () => {
+  const state={session_id:'chat-a',enabled:true,can_start:true,this_chat:{tokens_removed:1000,once_at_main_price:.01,net_once:.01,cheap_cost:0},turns:[{turn_id:'old-turn',net_once:.01}],projection_pricing:{model:'main-a',provider:'cloud-a',input_usd_per_token:.00001,output_usd_per_token:.00002}};
+  const view=mount('ThisChat',{state,onToggle:()=>{}});let content=text(view.tree);
+  for(const expected of ['Current-price projection','main-a','cloud-a','changing the model or rates reprices','not historical billing','Current main prices per million tokens: $10','current-price one-read net']) assert.ok(content.includes(expected),expected);
+  view.rerender({state:{...state,projection_pricing:{...state.projection_pricing,model:'main-b',input_usd_per_token:.001}},onToggle:()=>{}});content=text(view.tree);
+  assert.ok(content.includes('main-b'));assert.equal(content.includes('main-a'),false);assert.ok(content.includes('$1000'));view.dispose();
+});
+await test('helper cache upper bounds remain distinct from unknown costs', async () => {
+  const state={session_id:'chat-a',enabled:true,this_chat:{cheap_cost:.0022,upper_bound_cost_calls:1,unknown_cost_calls:0}};
+  const view=mount('ThisChat',{state,onToggle:()=>{}});let content=text(view.tree);
+  assert.ok(content.includes('Helper cost upper bound'));assert.ok(content.includes('highest applicable rate'));
+  view.rerender({state:{...state,this_chat:{...state.this_chat,cheap_cost:null,unknown_cost_calls:1}},onToggle:()=>{}});content=text(view.tree);
+  assert.equal(content.includes('Helper cost upper bound'),false);assert.ok(content.includes('Net savings are unknown.'));view.dispose();
 });
 await test('reasoning stays fixed and desktop imports remain public', async () => {
   assert.equal(source.includes('/reasoning-setting'),false); assert.equal(source.includes('Reasoning: also try lower'),false);

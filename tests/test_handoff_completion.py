@@ -148,7 +148,8 @@ def test_cutoff_metadata_rejects_output_and_preserves_the_charge(world, monkeypa
     response = json.loads(handoffs.execute(helper, "Produce a complete deliverable.", "s1", save_to="report.txt"))
     assert response["written"] is False and response["completion"]["cut_off"]
     row = attempts()[0]
-    assert row["status"] == "rejected" and row["cheap_cost"] == pytest.approx(0.00012)
+    assert row["status"] == "rejected" and row["cheap_cost"] == pytest.approx(0.00022)
+    assert row["cost_source"] == "list_price_upper_bound_unknown_cache"
     assert not list(world.rglob("*.json"))
 
 
@@ -221,7 +222,8 @@ def test_write_requires_affirmative_complete_success_without_losing_the_paid_ans
     assert response["written"] is False and "error" in response
     assert cs._load_full(response["full_result_id"], "s1") == helper.answer.text
     assert store.list_chat_savings("s1")[0]["output_chars"] == 0
-    assert attempts()[0]["cheap_cost"] == pytest.approx(0.00012)
+    assert attempts()[0]["cheap_cost"] == pytest.approx(0.00022)
+    assert attempts()[0]["cost_source"] == "list_price_upper_bound_unknown_cache"
 
 
 def test_guarded_write_exception_returns_recoverable_output_and_counts_response(world, guarded_test_io, monkeypatch):
