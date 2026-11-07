@@ -92,15 +92,17 @@ def status(job_id):
     job = _job(job_id)
     state = store.get_setting(_KEY + job_id) or {}
     runtime_sha = hashlib.sha256(Path(runtime.__file__).read_bytes()).hexdigest()
+    from . import starter_script
+
     return {"ok": True, "job_id": job_id, "config_fingerprint": _fingerprint(job),
-            "state": state, "acknowledgement": ACKNOWLEDGEMENT,
+            "state": state, "acknowledgement": ACKNOWLEDGEMENT, "fit": starter_script.fit(job_id), "since_attached": starter_script.since_attached(job_id, state),
             "runtime_sha256": runtime_sha,
             "runtime_review_required": state.get("status") in {"pending", "applied"} and state.get("runtime_sha256") != runtime_sha,
             "available_modes": ["monitor", "verbatim"], "automatic_tool_replay": False,
             "scope": "Explicitly reviewed, complete local Python snapshot sources only; no model or reasoning edit."}
 
 
-def preview(job_id, source_script, *, mode="monitor", snapshot_only=False, verbatim_output=False):
+def preview(job_id, source_script, *, mode="monitor", snapshot_only=False, verbatim_output=False, skipped_delivery_ok=False):
     job = _job(job_id)
     if mode not in {"monitor", "verbatim"}:
         raise NativeCronError("Choose monitor or verbatim mode.")
@@ -117,7 +119,11 @@ def preview(job_id, source_script, *, mode="monitor", snapshot_only=False, verba
     if job.get("skills") or job.get("skill") or (contracts.get(job_id) or {}).get("required_actions"):
         blockers.append("Jobs with skills or required actions cannot be replaced or suppressed by this snapshot source.")
     if job.get("deliver") not in (None, "local") or any(job.get(k) for k in ("deliver_to", "delivery_target", "webhook")):
-        blockers.append("This initial native-source integration supports local delivery only.")
+        # An unchanged run sends nothing, so the people receiving it need to be fine with silence.
+        if mode != "monitor":
+            blockers.append("Script-only mode supports local delivery only. Use monitor mode for a job that sends its answer somewhere.")
+        elif skipped_delivery_ok is not True:
+            blockers.append("This job sends its answer somewhere. Confirm that nothing should be sent when the data hasn't changed.")
     if analyze.regular_actions(history.runs_for_job(job_id, only_usable=True)):
         blockers.append("Recorded per-run actions must remain with the normal agent.")
     if job_id in history.running_job_ids() or job.get("state") in {"running", "claimed", "completed", "cancelled"}:
@@ -129,7 +135,7 @@ def preview(job_id, source_script, *, mode="monitor", snapshot_only=False, verba
     proposal = {"job_id": job_id, "mode": mode, "source_script": source["reference"],
                 "source_sha256": source["sha256"], "runtime_sha256": runtime_sha,
                 "config_fingerprint": _fingerprint(job), "snapshot_only": snapshot_only is True,
-                "verbatim_output": verbatim_output is True}
+                "verbatim_output": verbatim_output is True, "skipped_delivery_ok": skipped_delivery_ok is True}
     return {"ok": True, **proposal, "preview_sha256": _hash(proposal), "source": source,
             "can_apply": not blockers, "blockers": blockers, "host_supported": supported,
             "model_calls": 0, "savings_verified": False, "automatic_tool_replay": False,
@@ -153,11 +159,12 @@ def _write_exclusive(path, code):
 
 
 def apply(job_id, source_script, *, mode="monitor", snapshot_only=False, verbatim_output=False,
-          expected_preview_sha256, confirmed=False):
+          skipped_delivery_ok=False, expected_preview_sha256, confirmed=False):
     if confirmed is not True:
         raise NativeCronError("Review the complete source and explicitly confirm before attaching it.")
     with _LOCK:
-        proposal = preview(job_id, source_script, mode=mode, snapshot_only=snapshot_only, verbatim_output=verbatim_output)
+        proposal = preview(job_id, source_script, mode=mode, snapshot_only=snapshot_only, verbatim_output=verbatim_output,
+                           skipped_delivery_ok=skipped_delivery_ok)
         if proposal["preview_sha256"] != expected_preview_sha256:
             raise NativeCronError("The source, job or runtime changed after preview. Review it again; nothing was attached.")
         if not proposal["can_apply"]:

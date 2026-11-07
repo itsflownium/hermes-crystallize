@@ -746,7 +746,7 @@ function CompatibilityCard({ state }) {
   const dispatch = dispatchCapability(report)
   const guarded = guardedReplay(report)
   return bubble([
-    row('Host capabilities', chip(!report ? state.error ? 'Unavailable' : 'Checking' : guarded ? 'Guarded dispatch' : 'Normal host-tool flow', report ? C.soft : C.muted)),
+    row('What this install supports', chip(!report ? state.error ? 'Unavailable' : 'Checking' : guarded ? 'Automatic steps' : 'Normal Hermes tools', report ? C.soft : C.muted)),
     !report ? statusLine(state.error || 'Checking supported execution paths…', state.error ? C.yellow : C.soft) : small(guarded ? 'The host reports guarded nested-tool execution. Each routine still needs its own readiness checks.' : 'Tool reads and writes use Hermes’s regular tool flow. Automatic pre-run replay and zero-AI execution need a verified guarded-dispatch capability.', C.soft),
     sectionButton('Capability details', open, () => setOpen(value => !value)),
     ...(open && report ? [
@@ -1044,8 +1044,6 @@ function LiveOptions({ item, act, compatibility }) {
     key: 'opts', style: { display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2 }, children: [
       opts.length ? jsx('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 }, children: opts }) : null,
       !unchangedAvailable && savedSkip ? small(`Saved unchanged-input choice “${savedSkipLabel}” is unavailable in this mode. Clear it to keep the normal scheduled execution policy.`, C.yellow) : null,
-      !prerun ? small(`Pre-run unavailable: ${unavailableMode(item, 'prerun')}`, C.soft) : null,
-      !noAI ? small(`No-AI mode unavailable: ${unavailableMode(item, 'no_ai')}`, C.soft) : null,
       item.mode === 'tool' ? small('Host-tool plan active. The main agent executes its tools normally.', C.soft) : null
     ]
   })
@@ -1073,17 +1071,17 @@ function JobBubble({ item, status, trialRuns, act, exp, ctx, compatibility }) {
     action = pill('Undo', () => act('/undo', { routine_id: item.routine_id }), C.muted)
   } else if (status === 'testing') {
     headline = projectionAvailable ? big(perWeek(item.saving_per_week)) : big('Needs measurement', C.soft)
-    sub = projectionAvailable ? `Unmeasured automatic-replay projection · ${perMonth(item.saving_per_week)}` : 'Host-tool guidance; savings require normal-run evidence.'
+    sub = projectionAvailable ? `Unmeasured automatic-replay projection · ${perMonth(item.saving_per_week)}` : (item.skip_result ? item.skip_result.message : item.skip_fit ? item.skip_fit.message : 'No saving measured yet.')
     const target = promotionTarget(item, compatibility)
     action = item.ready
       ? target ? pill(target.label, () => act('/promote', { routine_id: item.routine_id, mode: target.mode }), C.accent) : chip('Capability unavailable', C.muted)
       : jsx('span', { style: { fontSize: '0.6875rem', color: C.muted }, children: `${item.matches} of ${item.needed} observations` })
   } else {
     headline = projectionAvailable ? big(perWeek(item.saving_per_week)) : big('Needs measurement', C.soft)
-    sub = projectionAvailable ? `Unmeasured automatic-replay projection · ${perMonth(item.saving_per_week)}` : 'Host-tool guidance; savings require normal-run evidence.'
+    sub = projectionAvailable ? `Unmeasured automatic-replay projection · ${perMonth(item.saving_per_week)}` : (item.skip_result ? item.skip_result.message : item.skip_fit ? item.skip_fit.message : 'No saving measured yet.')
     action = promotionPolicy(item).try_available === true
       ? pill('Observe next runs', () => act('/try', { job_id: item.job_id }))
-      : chip('Observation unavailable', C.muted)
+      : chip('Still watching', C.muted)
   }
   const open = isOpen(exp, item.job_id, item.cron)
   const running = item.cron && item.cron.status === 'running'
@@ -1134,7 +1132,7 @@ function Hero({ data, act }) {
       key: 'score',
       style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' },
       children: [
-        label('Optimization coverage'),
+        label('Jobs on lower-cost settings'),
         jsxs('div', {
           style: { fontSize: '1.75rem', lineHeight: 1, color: C.text, fontVariantNumeric: 'tabular-nums' },
           children: [data.score === null ? '—' : data.score, jsx('span', { style: { fontSize: '0.6875rem', color: C.muted }, children: '/100' })]
@@ -1143,20 +1141,19 @@ function Hero({ data, act }) {
     }),
     scoreBar,
     small(data.score === null
-      ? 'No active scheduled jobs to score right now.'
-      : 'How much of your active scheduled work uses lower-cost settings. Review each trial and its evidence below.'),
+      ? 'No scheduled jobs yet. Create one with hermes cron create, and after a few runs it appears here with what it costs. To lower the cost of a chat, turn it on in the Chat tab.'
+      : 'How much of your scheduled work uses lower-cost settings. Each job shows what its trial found.'),
     jsxs('div', {
       key: 'stats',
       style: { display: 'flex', gap: 8, marginTop: 4 },
       children: [
-        stat('Qualified reduction', money(data.qualified_efficiency_savings_usd), C.soft),
-        stat('Qualified net', money(data.qualified_net_payback_usd), C.soft),
-        stat('Projected potential', perWeek(data.could_save_usd_per_week))
+        stat('Proven saving', money(data.qualified_efficiency_savings_usd), C.soft),
+        stat('After costs', money(data.qualified_net_payback_usd), C.soft),
+        stat('Could save (estimate)', perWeek(data.could_save_usd_per_week))
       ]
     }),
-    small('Qualified totals need comparable runs with matching model, provider and full reasoning settings. Potential rates are projections; review each receipt for costs and uncertainty.', C.soft),
-    small('Reasoning preserved. Trials keep your main model’s reasoning setting.', C.soft),
-    ready > 0 ? jsx('div', { key: 'all', children: pill(`Make ${ready === 1 ? '1 job' : `all ${ready} jobs`} cheaper`, () => act('/tune-all', {}), C.accent) }) : null,
+    small('A saving only counts when runs used the same model, provider and reasoning, so thinking less never shows as a saving. Estimates are projections, not bills.', C.soft),
+    ready > 0 ? jsx('div', { key: 'all', children: pill(`Try lower-cost settings on ${ready === 1 ? '1 job' : `all ${ready} jobs`}`, () => act('/tune-all', {}), C.accent) }) : null,
     jsx(Periods, { key: 'periods', periods: data.periods })
   ], 'hero')
 }
@@ -1195,8 +1192,9 @@ function RunawayBrake({ ctx, act, refresh }) {
 function HowItWorks({ onHide }) {
   return bubble([
     row('How Crystallize Cron saves', pill('Got it', onHide, C.muted)),
+    small('Saves most on jobs that check often for something that rarely changes, only read, and can stay quiet when nothing changed. It can cost more on a job whose data changes every run, so each job shows how often its data changes.'),
     small('A cron job costs roughly its prompt size times its AI calls, plus reasoning. Crystallize shows where each job\'s money goes and works on all of it.', C.soft),
-    small('Trials use supported controls and recorded cost and outcome checks. Your main reasoning setting is preserved. A stage stays only when its checks pass and comparable cost falls; failed stages restore the prior settings.', C.soft),
+    small('Trials use supported controls and recorded cost and outcome checks. Your main reasoning setting is preserved. A change stays only when its checks pass and its cost, or its tokens where no price is known, falls beyond normal variation. Otherwise the earlier settings come back.', C.soft),
     small('Repeated jobs can learn a read plan from normal runs. When guarded nested execution is unavailable, the main agent follows the plan through normal Hermes tools. Automatic pre-run and no-AI modes stay unavailable until their host capability is verified.', C.soft)
   ], 'how')
 }
@@ -1337,8 +1335,10 @@ function NativeCronControl({ ctx, jobId, onChanged = () => {} }) {
   const [message, setMessage] = useState(null)
   const scope = useRequestScope(jobId)
   const running = useRef(false)
+  const [draftNote, setDraftNote] = useState(null)
+  const [skippedDelivery, setSkippedDelivery] = useState(false)
   const edit = update => { update(); scope.current.version += 1; setPreview(null); setConfirmed(false); setMessage(null) }
-  useEffect(() => { setData(null); setPreview(null); setConfirmed(false); setUndoConfirmed(false); setMessage(null); setSource(''); setSnapshot(false); setVerbatim(false) }, [jobId])
+  useEffect(() => { setData(null); setPreview(null); setConfirmed(false); setUndoConfirmed(false); setMessage(null); setSource(''); setSnapshot(false); setVerbatim(false); setSkippedDelivery(false); setDraftNote(null) }, [jobId])
   const load = useCallback((preserveError = false) => {
     if (!open) return
     const version = ++scope.current.version
@@ -1361,17 +1361,37 @@ function NativeCronControl({ ctx, jobId, onChanged = () => {} }) {
     }).catch(() => { if (scope.current.scope === jobId && scope.current.version === version) setError('Could not complete this source action.') })
       .finally(() => { running.current = false; if (scope.current.scope === jobId) setPending(false) })
   }
-  const values = { source_script: source, mode, snapshot_only: snapshot, verbatim_output: verbatim }
+  const values = { source_script: source, mode, snapshot_only: snapshot, verbatim_output: verbatim, skipped_delivery_ok: skippedDelivery }
+  const draft = () => {
+    if (running.current) return
+    running.current = true; setPending(true); setError(null); setDraftNote(null)
+    const version = ++scope.current.version
+    ctx.rest('/native-cron-draft', { method: 'POST', body: { job_id: jobId } }).then(res => {
+      if (scope.current.scope !== jobId || scope.current.version !== version) return
+      if (!res || res.ok === false) setError(errorText(res, res && res.why || 'Could not draft a script for this job.'))
+      else {
+        edit(() => setSource(res.source_script))
+        const missing = (res.left_out || []).map(step => `${step.tool}: ${step.why}`).join('; ')
+        setDraftNote(missing ? `${res.message} Left out: ${missing}` : res.message)
+      }
+    }).catch(() => { if (scope.current.scope === jobId && scope.current.version === version) setError('Could not draft a script for this job.') })
+      .finally(() => { running.current = false; if (scope.current.scope === jobId) setPending(false) })
+  }
   const attached = data && data.state && ['pending', 'applied'].includes(data.state.status)
   return jsxs('div', { style: panelStyle, children: [
-    sectionButton('Automatic source snapshots', open, () => setOpen(value => !value)),
+    sectionButton('Skip runs when nothing changed', open, () => setOpen(value => !value)),
     ...(open ? [
-      small('Use an explicitly reviewed Python source for a local latest-state snapshot. Other tasks keep normal Hermes execution and reasoning.', C.soft),
+      small('A small script reads the job\'s data. When the data hasn\'t changed, the AI doesn\'t run. You review the script before it\'s attached. Crystallize can draft it from what this job has already done.', C.soft),
+      data && data.since_attached ? small(data.since_attached.message, data.since_attached.costing_more ? C.yellow : C.green) : null,
+      data && data.fit && !attached ? small(data.fit.message, data.fit.verdict === 'poor' ? C.yellow : data.fit.verdict === 'good' ? C.green : C.soft) : null,
+      !attached ? actionButton('Draft a script from this job', () => draft(), pending) : null,
+      draftNote ? small(draftNote, C.soft) : null,
       attached ? small(`Attached: ${data.state.mode} · ${data.state.approval_revoked ? 'requirements changed; approval revoked' : data.state.status}`, C.soft) : null,
       attached && data.runtime_review_required ? small('This source uses an older or unverified runtime. Undo it, then review and attach the source again to use the current fixes.', C.yellow) : null,
       !attached ? field('Python source under this profile’s scripts directory', jsx('input', { value: source, maxLength: 400, placeholder: 'snapshot.py', disabled: pending, style: fieldStyle, onChange: e => edit(() => setSource(e.target.value)) })) : null,
       !attached ? field('Snapshot behavior', jsx('select', { value: mode, disabled: pending, style: fieldStyle, onChange: e => edit(() => setMode(e.target.value)), children: [jsx('option', { value: 'monitor', children: 'Wake the model when data changes' }), jsx('option', { value: 'verbatim', children: 'Use script output, no model' })] })) : null,
-      !attached ? checkField('This source is the complete read-only snapshot; this job has no per-run action, deadline or required repeated delivery', snapshot, value => edit(() => setSnapshot(value)), pending) : null,
+      !attached ? checkField('This script only reads, covers everything this job depends on, and the job has no per-run action or deadline', snapshot, value => edit(() => setSnapshot(value)), pending) : null,
+      !attached && mode === 'monitor' ? checkField('If this job sends its answer somewhere, nothing should be sent when the data hasn\'t changed', skippedDelivery, value => edit(() => setSkippedDelivery(value)), pending) : null,
       !attached && mode === 'verbatim' ? checkField('The script output is the complete requested final answer', verbatim, value => edit(() => setVerbatim(value)), pending) : null,
       !attached ? actionButton('Preview source · no execution', () => request('/native-cron-preview', values), pending || !source) : null,
       preview ? jsxs('div', { children: [
@@ -1506,11 +1526,11 @@ function ReceiptSummary({ receipt }) {
     label('Receipt'),
     small(`${receipt.sample_count || 0} recorded runs · ${receipt.comparison_call_count || 0} comparison calls · ${receipt.helper_call_count || 0} helper calls`, C.soft),
     jsx('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 5 }, children: [
-      jsx(Tile, { title: 'Qualified reduction', value: money(qualified) }),
+      jsx(Tile, { title: 'Proven saving', value: money(qualified) }),
       jsx(Tile, { title: 'Recorded overhead', value: money(costs && costs.overhead_usd) }),
-      jsx(Tile, { title: 'Qualified net', value: money(net), color: net == null ? C.soft : net >= 0 ? C.green : C.yellow })
+      jsx(Tile, { title: 'After costs', value: money(net), color: net == null ? C.soft : net >= 0 ? C.green : C.yellow })
     ] }),
-    small(basis === 'actual' ? 'Uses recorded actual costs with matching comparison settings.' : basis === 'estimated' ? 'Uses cost estimates with matching comparison settings.' : 'Qualified net is unknown until comparable costs and settings are recorded.'),
+    small(basis === 'actual' ? 'Uses recorded actual costs with matching comparison settings.' : basis === 'estimated' ? 'Uses cost estimates with matching comparison settings.' : 'Proven saving after costs is unknown until comparable costs and settings are recorded.'),
     receipt.efficiency_savings_proven !== true ? small('Efficiency savings are not established by the available evidence. A model switch or missing reasoning identity cannot qualify as same-settings efficiency savings.', C.yellow) : null,
     costs && (costs.unproven_settings_comparison_count || costs.excluded_settings_comparison_count) ? small(`${costs.unproven_settings_comparison_count || 0} comparisons lack complete settings evidence · ${costs.excluded_settings_comparison_count || 0} excluded from matching-settings savings.`) : null,
     costs && costs.historical_savings_usd != null && qualified == null ? small(`Historical counterfactual: ${money(costs.historical_savings_usd)} reduction before overhead. This unqualified estimate is separate from the qualified totals.`) : null,
@@ -1547,7 +1567,7 @@ function TuneRow({ tune, trialRuns, act }) {
         style: { display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start' },
         children: [
           pill('Try cheaper settings', () => act('/tune', { job }), C.accent),
-          small(`Tests fewer tools and AI calls while preserving your main reasoning setting. After ${trialRuns} answers it keeps a stage only when the recorded checks pass and its cost falls.`)
+          small(`Tests cleaned tool results and a short efficiency note, with the same model and reasoning. After ${trialRuns} answers it stays only if its checks pass and it used less.`)
         ]
       }) : null
     ]
@@ -1771,10 +1791,11 @@ function Panel({ ctx }) {
       watching: (data.watching || []).filter(seen) }
     const finishedShown = (data.finished || []).filter(seen)
     const hiddenCount = [...data.testing, ...data.live, ...data.spotted, ...(data.watching || []), ...(data.finished || [])].filter(x => !seen(x)).length
-    body = [jsx(Hero, { key: 'hero', data, act }), jsx(CompatibilityCard, { key: 'capabilities', state: compatibilityState }), jsx(RunawayBrake, { key: 'brake', ctx, act, refresh: data })]
+    body = [jsx(Hero, { key: 'hero', data, act }), jsx(RunawayBrake, { key: 'brake', ctx, act, refresh: data })]
     if (prefs.explain !== false) body.push(jsx(HowItWorks, { key: 'how', onHide: () => setPref('explain', false) }))
     if (prefs.jobs) body.push(jsx(Jobs, { key: 'jobs', data: shown, act, exp, ctx, compatibility: compatibilityState.data }))
     if (prefs.jobs) body.push(jsx(Finished, { key: 'finished', items: finishedShown, exp }))
+    body.push(jsx(CompatibilityCard, { key: 'capabilities', state: compatibilityState }))
     if (prefs.jobs && hiddenCount) body.push(jsx('div', { key: 'hidden', children: pill(`Show ${hiddenCount} removed job${hiddenCount === 1 ? '' : 's'}`, showHidden, C.muted) }))
   }
 
@@ -2013,6 +2034,11 @@ function ContextRent({ ctx, sessionId, refresh, onTools }) {
   })
   return bubble([
     row('Context Rent', data.per_call_usd != null ? chip(`${money(data.per_call_usd)} a call`, C.yellow) : chip(`${tokensText(data.tokens)} tokens`, C.muted)),
+    small(data.cache_read_share != null && data.cache_read_share < 0.1
+      ? 'Your model\'s cached reads are nearly free, so removing old results rarely pays and savings here will be smaller.'
+      : data.calls < 8 ? 'This chat is still short, so there\'s little to save yet. Savings grow as it goes on.'
+        : 'Long chats like this one save the most, because old results are re-read on every call.', C.soft),
+    data.auto && data.auto.removed ? small(`Removed ${data.auto.removed} old result${data.auto.removed === 1 ? '' : 's'} automatically because the numbers showed it would pay. ${data.auto.read_backs ? `The AI read ${data.auto.read_backs} back.` : 'None were needed again.'}${data.auto.off ? ' Stopped for this chat because they kept being needed.' : ''}`, C.soft) : null,
     small(`Every AI call re-reads this chat: about ${tokensText(data.tokens)} tokens right now. The biggest blocks cost the most. Pick a tool result to see what it costs.`, C.soft),
     jsx('div', {
       key: 'map',
@@ -2098,13 +2124,13 @@ function ChatSession({ ctx, sessionId, focused }) {
     children: [
       error ? jsx('div', { role: 'status', children: small(error, C.soft) }) : null,
       !current && !error ? small('Loading…') : null,
-      current ? jsx(CompatibilityCard, { key: 'capabilities', state: compatibilityState }) : null,
       current ? jsx(ThisChat, { key: 'this', state: current, onToggle: toggle, pending, heading: focused ? 'This chat' : `Your last chat${current.title ? `: ${current.title}` : ''}` }) : null,
       current ? small(!current.enabled
         ? 'Start with lossless Clean after enabling this chat. A helper model is optional; your main model and reasoning stay unchanged.'
         : current.routing && current.routing.cost_basis === 'unknown'
           ? 'Helper cost/payback is unknown for this route. Clean needs no helper call; add an exact-route rate card to estimate paid handoffs.'
           : 'Savings shown here are estimates. Review exact originals whenever a summary or excerpt lacks a needed fact.', C.soft) : null,
+      current ? small('Saves most in long chats that read large files or results early and move on. Short chats save little, and a single run can still cost more if the provider\'s cache misses.', C.soft) : null,
       current && sessionId ? jsx(ChatControls, { key: `controls:${sessionId}`, ctx, sessionId, policy: current.policy || { default_mode: 'clean', focus: '', tools: {} }, observedTools: current.tool_names || observedTools, onSaved: policy => { requests.current.version += 1; setState(old => old && old.session_id === sessionId ? { ...old, policy } : old) } }) : null,
       current && sessionId ? jsx(RereadControls, { key: `reread:${sessionId}`, ctx, sessionId, chatEnabled: current.enabled }) : null,
       current && sessionId ? jsx(ContextRent, { key: `rent:${sessionId}`, ctx, sessionId, refresh: current, onTools: setObservedTools }) : null,
@@ -2116,7 +2142,8 @@ function ChatSession({ ctx, sessionId, focused }) {
         small('For a large artifact, let Hermes read the input through its normal tools, route one complete text subtask, and save the reviewed result through normal Hermes tools. Main reasoning and decisions stay with your chosen model.', C.soft),
         small('Re-read controls are an additional opt-in for repeated text and batching guidance. Context Rent shows later read estimates and cache payback. Global tool settings require a separate choice in Hermes.', C.soft),
         small(current.why_not_first, C.soft)
-      ] }) : null
+      ] }) : null,
+      current ? jsx(CompatibilityCard, { key: 'capabilities', state: compatibilityState }) : null
     ]
   })
 }
@@ -2147,27 +2174,29 @@ function ChatPage({ ctx }) {
 const NOTES = [
   ['The difference', [
     ['Crystallize Cron', 'Tests cheaper settings for scheduled jobs using recorded cost and outcome checks. Task-specific requirements make the checks more useful.'],
-    ['Crystallize Chat', 'Makes the chat you\'re in cheaper. You turn it on for each chat, and your main model sends routine work to a cheap model you pick.']
+    ['Crystallize Chat', 'Works to lower the cost of the chat you\'re in. You turn it on for each chat, and your main model can send routine work to a cheaper model you pick.']
   ]],
   ['How Cron saves', [
-    ['Make cheaper', 'Starts a measured trial of fewer AI calls, narrower tools and safe cleanup. Your main reasoning setting is preserved. Each stage needs fresh checks and lower cost before it stays.'],
+    ['Try lower-cost settings', 'Starts a measured trial of cleaned tool results and a short efficiency note. Your model and reasoning stay the same. It stays only if its checks pass and it used less.'],
+    ['Skip runs when nothing changed', 'A reviewed script reads the job\'s data and the AI only runs when that data changes. Crystallize can draft the script. Any failed read does a normal run instead.'],
+    ['Prices', 'List prices come from public model lists for your exact provider and model, or from a rate card you enter. They are estimates, not your bill. With no price, a paid helper stays off.'],
     ['Read plan', 'Repeated read steps learned from normal Hermes runs. Use host-tool plan explicitly to guide the main agent through the regular tool pipeline. Automatic pre-run replay requires verified guarded nested dispatch.'],
     ['Host-tool plan', 'The learned plan is in use, while Hermes executes each tool through its normal permissions, hooks and approvals. Automatic execution modes remain unavailable when their public capability is missing.'],
-    ['Optimization coverage', 'How much of your active scheduled work uses lower-cost settings. Qualified savings require matching model, provider and full reasoning identity; review each receipt.'],
+    ['Jobs on lower-cost settings', 'How much of your scheduled work uses them. A saving only counts between runs with the same model, provider and reasoning.'],
     ['Runaway Brake', 'Off until you turn it on. Each job gets a token limit from its own recent runs: at least 3 times a normal run and 1.5 times its largest. A run past that limit is told to stop using tools and answer with what it has, and to say it stopped early. Jobs that send or change things are never stopped, and jobs with fewer than 5 finished runs have no limit yet.']
   ]],
-  ['When nothing has changed', [
-    ['If unchanged: stay quiet', 'In a supported pre-run mode, unchanged complete data can skip the model and its message. This mode remains unavailable without the required host capability.'],
-    ['If unchanged: repeat last answer', 'In a supported pre-run mode, one short AI call can repeat the last answer. This option remains unavailable without the required host capability.'],
-    ['If unchanged: run the AI', 'Runs the model every time in a supported pre-run mode. With no guarded execution capability, normal Hermes execution remains the fallback.'],
-    ['Run with no AI', 'Available only when the host reports verified guarded execution and this job meets the mode requirements. Current public SDK gaps leave this control unavailable; normal Hermes execution continues.']
+  ['When it saves most', [
+    ['Best for chat', 'Long chats that read large tool results early and move on, especially JSON. Short chats with small results save little.'],
+    ['Best for cron', 'Jobs that check often for something that rarely changes, only read, and can stay quiet when nothing changed. An unchanged check makes no AI call.'],
+    ['Where it can cost more', 'Removing a result by hand when the AI still needs it, and attaching a script to a job whose data changes on every run. A single run can also cost more when the provider\'s cache misses, so judge by several runs.'],
+    ['Models with cheap cached reads', 'When re-reading is nearly free, removing old results doesn\'t pay, so Crystallize leaves them and savings are smaller.']
   ]],
   ['How Chat saves', [
     ['Cleaned results', 'Uses safe cleanup without an AI call when Clean is selected. Exact leaves a result unchanged; Summary permits a helper call. File contents and failed results stay exact.'],
     ['Routing', 'Your main model decides when to send routine work to your cheap model and takes the output straight back, such as summarizing or extracting data. It keeps decisions, anything that sends or changes something, and the final answer.'],
     ['Helper model', 'Handles explicit routed tasks and summaries permitted by this chat’s controls. Your main model stays the same. Unknown costs remain unknown in the breakdown.'],
     ['Full results', 'When a result is noticeably reduced, the exact original is kept for 7 days. Your main model can read it, or ask the cheap model about it.'],
-    ['Context Rent', 'Every AI call re-reads the whole chat, so each old tool result costs a little on every call after it. This shows what each one costs. Remove leaves a result out of what is sent to the AI, while your chat stays the same and the AI can still read the original. It works without turning on Crystallize Chat. Removing can reset the provider\'s cache once, so each result shows how many calls that takes to pay back.'],
+    ['Context Rent', 'Every AI call re-reads the whole chat, so each old tool result costs a little on every call after it. This shows what each one costs. In a chat with Crystallize on, old results are removed automatically when real prices show it would pay, counting the chance the AI needs one back. Remove leaves a result out of what is sent to the AI, while your chat stays the same and the AI can still read the original. It works without turning on Crystallize Chat. Removing can reset the provider\'s cache once, so each result shows how many calls that takes to pay back.'],
     ['Why not from the start', 'Hermes creates the chat when your first prompt is sent, and savings come from tool results, which don\'t exist until the work starts.']
   ]],
   ['Review and control', [
@@ -2177,7 +2206,7 @@ const NOTES = [
     ['Reasoning', 'Your main model, its reasoning setting and reasoning text are preserved. Cheaper execution comes from explicit subtasks, fewer repeated reads and measured trials.'],
     ['Whole-text subtasks', 'For large artifacts, ask for one complete text subtask. On hosts without guarded nested dispatch, input_files and save_to return explicit read/write plans for normal Hermes tools. The main model reviews the result and keeps decisions and the final answer.'],
     ['Global settings', 'Chat controls apply to one chat; Cron controls apply to the selected job. Any global tool configuration is a separate, explicit choice in Hermes.'],
-    ['Compatibility', 'Model choices come from configured and user-declared routes. The public SDK does not provide authenticated inventory. Hermes checks authentication on an actual request; prices are user-supplied estimates, and unsupported automatic replay uses normal host-tool plans.']
+    ['Compatibility', 'Model choices come from configured and user-declared routes. The public SDK does not provide authenticated inventory. Hermes checks authentication on an actual request; prices are public list prices or your own rate card, and unsupported automatic replay uses normal host-tool plans.']
   ]],
   ['Reading the numbers', [
     ['Spent', 'What Hermes recorded as the real cost.'],
@@ -2206,7 +2235,7 @@ function NotesSection() {
 
 const SECTION_NOTES = {
   cron: 'Crystallize Cron tests cheaper settings for scheduled jobs. Review each trial, its checks and the cost receipt.',
-  chat: 'Crystallize Chat makes the chat you\'re in cheaper. You turn it on for each chat, and your main model sends routine work to a cheap model you pick.'
+  chat: 'Crystallize Chat works to lower the cost of the chat you\'re in. You turn it on for each chat, and your main model can send routine work to a cheaper model you pick.'
 }
 
 function SectionTabs({ section, onPick }) {

@@ -1,0 +1,250 @@
+{
+ "schema": 1,
+ "mode": "long",
+ "reread": false,
+ "model": "deepseek/deepseek-v4.1-flash",
+ "provider": "nous",
+ "requested_reasoning": "high",
+ "seed": 1794044698,
+ "frozen_list_rates_per_token": {
+  "input": 1.06e-07,
+  "output": 5.13e-07,
+  "cache_read": 4e-09,
+  "cache_write": 1.06e-07,
+  "request_cost": 0.0,
+  "cache_rates_assumed": true
+ },
+ "stopped": null,
+ "by_task": {
+  "working chat": {
+   "valid_pairs": 3,
+   "invalid_pairs": 0,
+   "median_cost_ratio_on_vs_off": 0.9135138619057704,
+   "median_cost_ratio_excluding_reasoning_output": 0.8894662180090075,
+   "median_prompt_token_ratio": 0.9011303195512608,
+   "checks_passed_off": 3,
+   "checks_passed_on": 3
+  }
+ },
+ "pairs": [
+  {
+   "domain": "working chat",
+   "repeat": 0,
+   "order": [
+    "on",
+    "off"
+   ],
+   "valid": true,
+   "on": {
+    "on": true,
+    "ok": true,
+    "session": "local-a448cd7d76dedd129983e2b20fad373b46e9af3a09a585c4b409e7bfc004a02a",
+    "delta": {
+     "input_tokens": 13687,
+     "output_tokens": 2112,
+     "cache_read_tokens": 284160,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 1157,
+     "api_call_count": 16,
+     "prompt_tokens": 297847
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.0036709180000000004,
+    "list_cost_without_reasoning_usd": 0.003077377,
+    "host_estimated_delta_usd": 0.0036709180000000004,
+    "recorded": {
+     "model": "deepseek/deepseek-v4.1-flash",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "high",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "auto_rent": {
+     "removed": 0,
+     "read_backs": 0,
+     "off": false
+    },
+    "answer_chars": 160
+   },
+   "off": {
+    "on": false,
+    "ok": true,
+    "session": "local-d48f6970e99cefd322bd7b743ec634ea884a094d721e0845957a65a721d036da",
+    "delta": {
+     "input_tokens": 16542,
+     "output_tokens": 1967,
+     "cache_read_tokens": 313984,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 1089,
+     "api_call_count": 16,
+     "prompt_tokens": 330526
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.004018459,
+    "list_cost_without_reasoning_usd": 0.003459802,
+    "host_estimated_delta_usd": 0.004018459,
+    "recorded": {
+     "model": "deepseek/deepseek-v4.1-flash",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "high",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "auto_rent": null,
+    "answer_chars": 63
+   }
+  },
+  {
+   "domain": "working chat",
+   "repeat": 1,
+   "order": [
+    "on",
+    "off"
+   ],
+   "valid": true,
+   "on": {
+    "on": true,
+    "ok": true,
+    "session": "local-448f3fec0d32b52baed47491815add6f3a76b1a1ff45dc93ff94fd4ae18014b7",
+    "delta": {
+     "input_tokens": 13947,
+     "output_tokens": 1836,
+     "cache_read_tokens": 302848,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 942,
+     "api_call_count": 17,
+     "prompt_tokens": 316795
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.003631642,
+    "list_cost_without_reasoning_usd": 0.0031483960000000004,
+    "host_estimated_delta_usd": 0.0036316419999999996,
+    "recorded": {
+     "model": "deepseek/deepseek-v4.1-flash",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "high",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "auto_rent": {
+     "removed": 0,
+     "read_backs": 0,
+     "off": false
+    },
+    "answer_chars": 126
+   },
+   "off": {
+    "on": false,
+    "ok": true,
+    "session": "local-2792b85cb3889dafbcce414b22847b3c370d52d212cff0da37253f74e17735ca",
+    "delta": {
+     "input_tokens": 16774,
+     "output_tokens": 2698,
+     "cache_read_tokens": 380032,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 1257,
+     "api_call_count": 19,
+     "prompt_tokens": 396806
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.004682246,
+    "list_cost_without_reasoning_usd": 0.004037405,
+    "host_estimated_delta_usd": 0.004682246,
+    "recorded": {
+     "model": "deepseek/deepseek-v4.1-flash",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "high",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "auto_rent": null,
+    "answer_chars": 139
+   }
+  },
+  {
+   "domain": "working chat",
+   "repeat": 2,
+   "order": [
+    "on",
+    "off"
+   ],
+   "valid": true,
+   "on": {
+    "on": true,
+    "ok": true,
+    "session": "local-eaa5c4f76d8f0dd8185469f5194362da6a89a54b6da2c77e7da7c39546d9b2d9",
+    "delta": {
+     "input_tokens": 16451,
+     "output_tokens": 4261,
+     "cache_read_tokens": 411648,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 2258,
+     "api_call_count": 21,
+     "prompt_tokens": 428099
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.005576291000000001,
+    "list_cost_without_reasoning_usd": 0.004417937,
+    "host_estimated_delta_usd": 0.005576290999999999,
+    "recorded": {
+     "model": "deepseek/deepseek-v4.1-flash",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "high",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "auto_rent": {
+     "removed": 0,
+     "read_backs": 0,
+     "off": false
+    },
+    "answer_chars": 518
+   },
+   "off": {
+    "on": false,
+    "ok": true,
+    "session": "local-af1987d9015186c47779735dd2de0c019aebb125c9bbe5ff3d2f147007d4a842",
+    "delta": {
+     "input_tokens": 17581,
+     "output_tokens": 3428,
+     "cache_read_tokens": 391168,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 1643,
+     "api_call_count": 19,
+     "prompt_tokens": 408749
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.005186822000000001,
+    "list_cost_without_reasoning_usd": 0.004343962999999999,
+    "host_estimated_delta_usd": 0.005186821999999999,
+    "recorded": {
+     "model": "deepseek/deepseek-v4.1-flash",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "high",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "auto_rent": null,
+    "answer_chars": 367
+   }
+  }
+ ],
+ "limits": [
+  "Costs are list prices applied to recorded usage, not bills.",
+  "Fixtures are synthetic; JSON is pretty-printed like API output.",
+  "One provider and model. It does not extend to other routes.",
+  "The checks cover named facts, not overall answer quality."
+ ]
+}

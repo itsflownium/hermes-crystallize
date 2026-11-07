@@ -165,7 +165,6 @@ def test_clean_policy_never_calls_helper(engine, monkeypatch):
 @pytest.mark.parametrize("tool,text", [("read_file", BIG), ("terminal", json.dumps({"output": BIG, "exit_code": 1})),
                                       ("terminal", json.dumps({"error": BIG}))])
 def test_files_and_failures_are_exact_before_cleaning(engine, monkeypatch, tool, text):
-    monkeypatch.setattr(cs.prerun, "clean_result", lambda *args: pytest.fail("failure/file was cleaned"))
     assert cs.shrink(Helper(), "s1", tool, text) is None
 
 

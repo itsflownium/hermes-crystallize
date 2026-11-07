@@ -37,6 +37,10 @@ ordinary workloads. No prose, markup, file content, status or error is dropped
 to manufacture a gain. Both arms receive complete fresh task text. Neither
 receives earlier reasoning or a reasoning summary.
 
+## Whole-loop live tests
+
+`scripts/validation_whole_loop.py`, `validation_cron_pair.py` and `validation_cron_tune.py` run paired tests through the real gateway and scheduler, and only make paid calls with `--run`. They need a running gateway on the code under test, and they write a new report file each time.
+
 ## Explicit live workflow
 
 Only the root operator runs paid validation. Current authorization is Nous

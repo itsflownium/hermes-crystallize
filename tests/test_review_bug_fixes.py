@@ -230,8 +230,10 @@ def test_a_run_that_changes_reasoning_midway_establishes_no_setting():
 def test_a_recorded_request_makes_a_cron_run_comparable():
     request_settings.record("e1", {"reasoning_effort": "high"})
     run = history.Run(execution_id="e1", job_id="j", job_name="j", session_id="s", scheduled=True, started_ts=1, model="m")
-    history._apply_session(run, {"billing_provider": "p", "model": "m", "model_config": None})
+    history._apply_session(run, {"billing_provider": "p", "model": "m", "model_config": None,
+                                 "identity_attribution_complete": False, "identity_except_reasoning": True})
     assert history.comparison_identity(run)[:3] == ("m", "p", "high")
+    assert run.attribution_evidence["reasoning_per_request_verified"]
 
 
 def test_the_request_hook_records_settings_without_changing_the_request():
@@ -343,3 +345,52 @@ def test_a_helper_inherits_the_main_reasoning(monkeypatch):
     monkeypatch.setattr(cs.subprocess, "run", lambda cmd, **k: sent.append(cmd) or SimpleNamespace(returncode=0, stderr="", stdout=""))
     cs.set_model("p", "m")
     assert json.loads(sent[0][-1])["reasoning_effort"] == "high"
+
+
+def _terminal(output):
+    return json.dumps({"output": output, "exit_code": 0, "error": None})
+
+
+def test_clean_compacts_json_inside_a_terminal_result():
+    from crystallize import prerun
+
+    inner = json.dumps({"items": [{"id": i, "name": "a  b"} for i in range(40)]}, indent=2).replace('"name"', '"score": 1.50,\n  "name"')
+    cleaned = prerun.clean_result("terminal", _terminal(inner))
+    assert cleaned and len(cleaned) < len(_terminal(inner)) * 0.8
+    assert json.loads(json.loads(cleaned)["output"]) == json.loads(inner)
+    assert "1.50" in json.loads(cleaned)["output"] and "a  b" in cleaned
+
+
+def test_clean_keeps_line_breaks_and_indentation_in_plain_text():
+    from crystallize import prerun
+
+    code = "\n".join(f"def f{i}():   \n    return {i}\033[0m" for i in range(200))
+    cleaned = prerun.clean_result("terminal", _terminal(code))
+    output = json.loads(cleaned)["output"]
+    assert "\n    return 5\n" in output and "\033" not in output and "():   \n" in output
+
+
+def test_clean_leaves_a_result_alone_when_a_float_could_change():
+    from crystallize import prerun
+
+    assert prerun._clean_wrapped('{"output": "x", "score": 1.50}') is None
+
+
+def test_clean_leaves_a_failed_result_exact():
+    from crystallize import prerun
+
+    assert prerun.clean_result("terminal", json.dumps({"output": "x" * 5000, "error": "boom"})) is None
+
+
+def test_data_that_mentions_a_failure_is_still_compacted(monkeypatch):
+    store.set_chat_enabled("s", True)
+    monkeypatch.setattr(cs, "_main_model", lambda sid: {"model": "m", "provider": "p"})
+    inner = json.dumps([{"id": i, "status": "failed" if i == 3 else "ok"} for i in range(200)], indent=2)
+    out = cs.shrink(SimpleNamespace(), "s", "terminal", _terminal(inner))
+    assert json.loads(json.loads(out)["output"]) == json.loads(inner) and len(out) < len(inner)
+
+
+def test_a_failed_command_is_never_touched(monkeypatch):
+    store.set_chat_enabled("s", True)
+    result = json.dumps({"output": json.dumps({"a": list(range(900))}, indent=2), "exit_code": 1})
+    assert cs.shrink(SimpleNamespace(), "s", "terminal", result) is None

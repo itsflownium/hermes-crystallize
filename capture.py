@@ -180,6 +180,8 @@ def make_llm_request(ctx: Any) -> Callable[..., Any]:
             run = ctx.current_cron_execution()
             if run is not None:
                 request_settings.record(getattr(run, "execution_id", None), request)
+            elif store.get_setting(request_settings.RECORD_CHATS, False):  # on only during a paired test
+                request_settings.record("chat:" + session_id, request)
             if run is not None or store.chat_enabled(session_id):
                 estimate.note_request(session_id, request)
         except Exception:  # noqa: BLE001
@@ -220,6 +222,12 @@ def make_pre_llm_call(ctx: Any) -> Callable[..., Any]:
         try:
             if ctx.current_cron_execution() is not None:
                 return None
+            try:
+                from . import rent
+                # Before this message's first AI call, so a removal only resends the chat once.
+                rent.auto_evict(kwargs.get("session_id") or "")
+            except Exception:  # noqa: BLE001 — a saving must never stop a turn
+                logger.debug("crystallize: automatic removal failed", exc_info=True)
             return chat_savings.routing_context(**kwargs)
         except Exception:  # noqa: BLE001 — a hook must never break a turn
             logger.debug("crystallize: routing note failed", exc_info=True)

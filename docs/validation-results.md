@@ -4,6 +4,33 @@ These results distinguish the current follow-up and public-SDK migration from th
 implementation in this follow-up to PR #7. They do not establish universal model
 compatibility, semantic equivalence or marketplace admission.
 
+## Live savings at unchanged reasoning (version 0.6.0)
+
+Paired runs through the real Hermes gateway: the same task, model and provider on both sides, with the reasoning read from each request as sent. A pair is marked invalid if those differ, and none were. Costs are list prices from the route's public model list applied to recorded usage, not bills. Order is randomised per pair, and every attempt is kept. Fixtures are synthetic, samples are small, and everything ran on Nous only.
+
+| Test | Model and reasoning | Pairs | Off | On | Saving | Checks passed, off / on |
+| --- | --- | --- | --- | --- | --- | --- |
+| Working chat, 11 messages | `tencent/hy3`, medium | 3 | $0.0374 | $0.0286 | 23% | 3 / 3 |
+| Same, repeated on the final code | `tencent/hy3`, medium | 3 | $0.0379 | $0.0293 | 23% | 3 / 3 |
+| Working chat, 23 messages | `tencent/hy3`, medium | 2 | $0.0450 | $0.0308 | 32% | 2 / 2 |
+| Working chat, 11 messages | `moonshotai/kimi-k3`, high | 2 | $0.1824 | $0.1462 | 20% | 2 / 2 |
+| Working chat, 11 messages | `deepseek/deepseek-v4.1-flash`, high | 3 | $0.0139 | $0.0129 | 7% | 3 / 3 |
+| Short tasks in 7 domains, Clean only | `tencent/hy3`, medium | 14 | $0.0203 | $0.0191 | 6% | 14 / 14 |
+| Cron, drafted script, 4 checks with one change | `tencent/hy3`, medium | 1 | $0.0065 | $0.0026 | 60% | not checked |
+
+Things that came out badly or unclear, which are kept in `docs/evidence/`:
+
+- **Removing a result by hand in a short chat cost more** when the AI needed it: 1.22, 1.74 and 1.61 times the cost for analysis, coding and research, and 0.67 times for logs. One research check failed. This is why automatic removal counts the chance of a read-back.
+- **One DeepSeek pair cost 8% more.** Removal doesn't pay on near-free cached reads, so only Clean ran there.
+- **A script that printed the data cost 21% more** in one cron pair, despite skipping half its checks. Scripts now print only a fingerprint. An earlier pair with that script saved 43%, so the variation is wide.
+- **The first chat pilot is not a fair measure of Clean.** It ran before Clean's fix for data mentioning a failure.
+- **A `tune` trial ran 27% cheaper in typical runs** ($0.00164 against $0.00224), but hadn't reached its keep-or-revert decision when the 15-minute test ended. That decision is not live-verified.
+- **Re-read on its own shows no clear saving** beyond what Clean gives: median cost ratios of 0.77, 1.00 and 1.07 across 3 task types, at 3 pairs each.
+
+Not measured live: other providers, hand-offs, Blind Taste Test, Model Auction, Rhythm, Runaway Brake on this version, context compression, and how a real user's work compares with these fixtures.
+
+Reproduce with `scripts/validation_whole_loop.py`, `scripts/validation_cron_pair.py` and `scripts/validation_cron_tune.py`.
+
 ## Final activation and CI record
 
 PR #18's Python 3.13 CI job passed **1,309 tests with 2 optional source-backed

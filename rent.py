@@ -105,7 +105,8 @@ def report(session_id: Optional[str]) -> dict[str, Any]:
         payback = (math.ceil(once / gain) if gain else None) if prices else None
         items.append({"id": key, "tool": row["tool_name"] or "tool", "what": labels.get(key, ""), "tokens": size,
                       "per_call_usd": gain, "paid_usd": gain * later_calls if prices else None,
-                      "payback_calls": payback, "removed": key in removed,
+                      "payback_calls": payback, "removed": key in removed, "once_usd": once,
+                      "turns_since": sum(r["role"] == "user" for r in rows[i + 1:]),
                       # A chat that has gone this long is likely to go about as long again.
                       "worth_it": payback is not None and payback <= calls})
     items.sort(key=lambda it: -it["tokens"])
@@ -118,7 +119,9 @@ def report(session_id: Optional[str]) -> dict[str, Any]:
     return {"items": shown, "groups": [{"name": k, "tokens": v} for k, v in groups.items() if v], "calls": calls,
             "tokens": kept, "removed_tokens": gone, "model": main.get("model"), "priced": bool(prices),
             "per_call_usd": kept * reread if prices else None,
-            "saving_per_call_usd": gone * reread if prices else None}
+            "saving_per_call_usd": gone * reread if prices else None, "auto": auto_state(session_id),
+            "cache_read_share": prices["cache_read"] / prices["input"] if prices and prices["input"] else None,
+            "auto_on": bool(store.get_setting(AUTO_SETTING, True))}
 
 
 def evict(session_id: str, call_id: str) -> dict[str, Any]:
@@ -230,3 +233,80 @@ def apply(request: Any, session_id: str) -> Optional[dict[str, Any]]:
     if isinstance(request.get("input"), list):
         out["input"] = [swap_item(i) for i in request["input"]]
     return out if changed else None
+
+
+# ---------------------------------------------------------------- automatic removal
+
+AUTO_SETTING = "auto_rent"      # on by default for chats with Crystallize Chat on
+MIN_READ_BACKS = 2              # how many read-backs it takes to tell removal isn't working here
+
+
+def _auto_key(session_id: str) -> str:
+    return "auto_rent_state:" + chat_savings._session_key_text(session_id)
+
+
+def auto_state(session_id: str) -> dict[str, Any]:
+    saved = store.get_setting(_auto_key(session_id)) or {}
+    return {"removed": saved.get("removed", 0), "read_backs": saved.get("read_backs", 0), "off": bool(saved.get("off"))}
+
+
+def note_read_back(session_id: str, result_id: str) -> None:
+    """A removed result was needed after all. Too many of those and removal stops in this chat."""
+    if result_id not in store.evictions(session_id).values():
+        return
+    state = auto_state(session_id)
+    state["read_backs"] += 1
+    if state["read_backs"] >= MIN_READ_BACKS and state["read_backs"] * 2 >= state["removed"]:
+        state["off"] = True
+    store.set_setting(_auto_key(session_id), state)
+
+
+def auto_plan(session_id: str) -> dict[str, Any]:
+    """Which old results are worth removing now, judged from this route's real prices.
+
+    Removing text resends everything after it uncached once, and the AI may need the result
+    back, which costs an extra call. It only happens if the expected saving beats both. Without
+    prices, or on anything uncertain, nothing is removed."""
+    report_data = report(session_id)
+    if not report_data.get("priced") or not report_data["calls"]:
+        return {"items": [], "why": "no price known"}
+    old = [item for item in report_data["items"] if not item["removed"] and item.get("turns_since", 0) >= 1 and item["per_call_usd"]]
+    if not old:
+        return {"items": [], "why": "no old results"}
+    gain = sum(item["per_call_usd"] for item in old)
+    once = max(item["once_usd"] for item in old)  # removing them together only resends once
+    # A long chat tends to keep going, so its length so far stands in for what's left of it.
+    future_calls = report_data["calls"]
+    # How often removed results get read back in this chat, starting from an even chance.
+    state = auto_state(session_id)
+    read_back_chance = (state["read_backs"] + 1) / (state["removed"] + 2)
+    prices = modelinfo.token_prices(report_data.get("model"), chat_savings._main_model(session_id).get("provider"))
+    if not prices:
+        return {"items": [], "why": "no price known"}
+    # Reading one back costs an extra AI call over the whole chat, plus the text itself again.
+    extra_call = report_data["tokens"] * prices["cache_read"]
+    read_back = sum(item["tokens"] * prices["input"] + extra_call for item in old) * read_back_chance
+    expected = gain * future_calls - once - read_back
+    if expected <= 0:
+        return {"items": [], "why": "wouldn't pay back", "expected_saving_usd": expected, "read_back_chance": read_back_chance}
+    return {"items": old, "expected_saving_usd": expected, "saving_per_call_usd": gain, "one_time_cost_usd": once,
+            "read_back_chance": read_back_chance, "payback_calls": math.ceil(once / gain) if gain else None}
+
+
+def auto_evict(session_id: str) -> Optional[dict[str, Any]]:
+    """Remove results that have stopped paying their way, once per message."""
+    if not session_id or not store.chat_enabled(session_id) or not store.get_setting(AUTO_SETTING, True):
+        return None
+    state = auto_state(session_id)
+    if state["off"]:
+        return None
+    plan = auto_plan(session_id)
+    if not plan["items"]:
+        return None
+    for item in plan["items"]:
+        if evict(session_id, item["id"])["ok"]:
+            state["removed"] += 1
+            store.add_chat_event(session_id, kind="auto_rent", chars=0, results=1,
+                                 tokens_removed=item["tokens"], added_input_chars=len(_NOTE))
+    store.set_setting(_auto_key(session_id), state)
+    return plan
