@@ -78,6 +78,11 @@ edits. Timeouts retain pending recovery. Copied sources, wrappers and approval
 records remain under `scripts/crystallize-native/` for review; this may include
 sensitive source text. Do not delete an artifact while a job still refers to it.
 
+Runtime fixes do not rewrite an approved copied wrapper. If status reports
+`runtime_review_required`, Undo and explicitly review/attach the source again.
+Version 0.5.1 fixes the created-paused/resumed lifecycle: the host's changing
+pause reason is bookkeeping and no longer invalidates a reviewed snapshot.
+
 ```bash
 hermes crystal native-cron JOB_ID
 # Copy config_fingerprint from that fresh status:

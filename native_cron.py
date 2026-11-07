@@ -87,8 +87,11 @@ def _capability(mode):
 def status(job_id):
     job = _job(job_id)
     state = store.get_setting(_KEY + job_id) or {}
+    runtime_sha = hashlib.sha256(Path(runtime.__file__).read_bytes()).hexdigest()
     return {"ok": True, "job_id": job_id, "config_fingerprint": _fingerprint(job),
             "state": state, "acknowledgement": ACKNOWLEDGEMENT,
+            "runtime_sha256": runtime_sha,
+            "runtime_review_required": state.get("status") in {"pending", "applied"} and state.get("runtime_sha256") != runtime_sha,
             "available_modes": ["monitor", "verbatim"], "automatic_tool_replay": False,
             "scope": "Explicitly reviewed, complete local Python snapshot sources only; no model or reasoning edit."}
 
@@ -175,6 +178,7 @@ def apply(job_id, source_script, *, mode="monitor", snapshot_only=False, verbati
         owned = {"monitor_script": wrapper_ref} if mode == "monitor" else {"script": wrapper_ref, "no_agent": True}
         original = {key: bool(job.get(key)) if key == "no_agent" else job.get(key) or None for key in owned}
         record = {"version": 1, "status": "pending", "job_id": job_id, "mode": mode,
+                  "runtime_sha256": proposal["runtime_sha256"],
                   "source_script": source_script, "source_sha256": proposal["source_sha256"],
                   "preview_sha256": expected_preview_sha256, "original": original, "owned": owned,
                   "approval_ref": approval_ref,

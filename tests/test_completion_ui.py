@@ -43,6 +43,7 @@ CASES = [
     "host-tool plans require an explicit mode choice",
     "unavailable replay never advertises stale projected savings",
     "native source preview requires review and resets approval on edits",
+    "native source runtime updates require explicit source review",
     "native source undo requires current configuration and explicit approval",
     "observation starts only through its explicit control",
     "compatibility explains normal host-tool file plans",
@@ -376,6 +377,11 @@ await test('native source preview requires review and resets approval on edits',
   const view=mount('NativeCronControl',{ctx:api.ctx,jobId:'job-a'});await view.flush();assert.equal(api.calls.length,0);click(view,'▸ Automatic source snapshots');await view.flush();
   change(view,'Python source under','snapshot.py');change(view,'This source is the complete',true);click(view,'Preview source · no execution');await view.flush();assert.equal(button(view,'Attach reviewed source').props.disabled,true);
   change(view,'I approve attaching',true);change(view,'Python source under','different.py');assert.equal(button(view,'Attach reviewed source'),undefined);assert.equal(api.posts().filter(c=>c.base==='/native-cron').length,0);view.dispose();
+});
+await test('native source runtime updates require explicit source review', async () => {
+  const api=makeContext({'GET /native-cron':()=>({ok:true,state:{status:'applied',mode:'monitor'},runtime_review_required:true,config_fingerprint:'current'})});
+  const view=mount('NativeCronControl',{ctx:api.ctx,jobId:'job-a'});click(view,'▸ Automatic source snapshots');await view.flush();
+  assert.ok(text(view.tree).includes('older or unverified runtime'));assert.equal(api.posts().length,0);assert.equal(button(view,'Undo native source').props.disabled,true);view.dispose();
 });
 await test('native source undo requires current configuration and explicit approval', async () => {
   const api=makeContext({'GET /native-cron':()=>({ok:true,state:{status:'applied',mode:'monitor'},config_fingerprint:'current'}),'POST /native-cron-undo':()=>({ok:true,state:{status:'undone'},message:'Restored.'})});

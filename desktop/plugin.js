@@ -1368,6 +1368,7 @@ function NativeCronControl({ ctx, jobId, onChanged = () => {} }) {
     ...(open ? [
       small('Use an explicitly reviewed Python source for a local latest-state snapshot. Other tasks keep normal Hermes execution and reasoning.', C.soft),
       attached ? small(`Attached: ${data.state.mode} · ${data.state.approval_revoked ? 'requirements changed; approval revoked' : data.state.status}`, C.soft) : null,
+      attached && data.runtime_review_required ? small('This source uses an older or unverified runtime. Undo it, then review and attach the source again to use the current fixes.', C.yellow) : null,
       !attached ? field('Python source under this profile’s scripts directory', jsx('input', { value: source, maxLength: 400, placeholder: 'snapshot.py', disabled: pending, style: fieldStyle, onChange: e => edit(() => setSource(e.target.value)) })) : null,
       !attached ? field('Snapshot behavior', jsx('select', { value: mode, disabled: pending, style: fieldStyle, onChange: e => edit(() => setMode(e.target.value)), children: [jsx('option', { value: 'monitor', children: 'Wake the model when data changes' }), jsx('option', { value: 'verbatim', children: 'Use script output, no model' })] })) : null,
       !attached ? checkField('This source is the complete read-only snapshot; this job has no per-run action, deadline or required repeated delivery', snapshot, value => edit(() => setSnapshot(value)), pending) : null,
