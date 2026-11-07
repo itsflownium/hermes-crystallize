@@ -1,28 +1,26 @@
 # Submission bundle only. Copy into hermes-agent/plugin-catalog/ in a maintainer-reviewed PR.
 name: "crystallize"
 repo: "https://github.com/itsflownium/hermes-crystallize"
-sha: "5928049cb15bc28df823692787619c01d9714501"
+sha: "349c2fc2ce8b42c8ff0d0e0d2dc1a4ca972f6613"
 description: "Reduces repeated Hermes chat and cron work with explicit controls and local receipts."
 maintainer: "itsflownium"
 tier: "community"
 category: "automation"
 requires_hermes: ">=0.22.7"
-version: "0.5.3"
+version: "0.6.0"
 title: "Crystallize"
 readme: true
 known_issues:
-  - "No live savings percentage at unchanged reasoning is established for this public-SDK candidate."
+  - "Live savings at unchanged reasoning are measured on Nous only, with small samples and synthetic fixtures; other providers are untested."
   - "Frozen fixture checks do not prove semantic equivalence or universal provider coverage."
   - "Automatic nested tool execution and pre-run/no-AI replay of learned tool plans are unavailable on the audited SDK; explicit tool mode returns pending normal-host-tool plans."
   - "Configured/declared routes have unverified authentication and availability. User rate cards and public provider quotes are estimates, not billing evidence."
-  - "Optional native Python snapshot sources require explicit complete-source approval and local delivery; copied code/imports run with ordinary cron permissions, and host text trimming/redaction still apply."
+  - "Optional native Python snapshot sources require explicit source approval, and a job that delivers needs confirmation that an unchanged run sends nothing; copied code/imports run with ordinary cron permissions, and host text trimming/redaction still apply."
 capabilities:
   provides_tools: ["crystal_cheap", "crystal_full_result", "crystal_list", "crystal_run"]
   provides_hooks: ["on_session_end", "post_api_request", "post_tool_call", "pre_llm_call", "pre_tool_call", "transform_llm_output", "transform_tool_result"]
   provides_middleware: ["llm_request", "tool_execution"]
   requires_env: []
 screenshots:
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/public-capabilities-and-host-plan-desktop.png"
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/public-routes-and-manual-pricing-desktop.png"
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/chat-quality-and-onboarding-desktop.png"
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/native-cron-source-review-desktop.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/349c2fc2ce8b42c8ff0d0e0d2dc1a4ca972f6613/assets/review/panel-cron-and-chat.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/349c2fc2ce8b42c8ff0d0e0d2dc1a4ca972f6613/assets/review/panel-job-details.png"

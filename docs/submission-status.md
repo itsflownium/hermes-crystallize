@@ -5,7 +5,7 @@ marketplace admission and activation are recorded separately.
 
 **Owner hold on upstream submission:** all development, PRs and merges stay in
 `itsflownium/hermes-crystallize`. No PR on `NousResearch/hermes-agent` was created.
-PRs #12–#19 are merged; the final record publishes v0.5.3 activation and CI
+PRs #12–#19 are merged, and #20–#22 are open; the final record publishes v0.5.3 activation and CI
 evidence. The internal catalog pin includes the reviewed fixes. A prepared bundle is not a catalog listing.
 
 | Question | Current evidence | Boundary |

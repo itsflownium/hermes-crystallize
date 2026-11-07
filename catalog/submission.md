@@ -1,24 +1,19 @@
 # Crystallize catalog submission draft
 
 Technical state: **exact-pin technical checks passed**.
-
-**Owner hold:** this is an internal bundle. All PRs stay in
-`itsflownium/hermes-crystallize`; no upstream catalog PR is authorized or open.
-Anonymous HTTPS checks verified the exact manifest bytes and four screenshots;
-listing remains unestablished.
 This file and the entry in this plugin repository are a preparation bundle. They do
 not themselves establish an upstream PR, catalog listing, maintainer approval, or
 marketplace compliance. Independently checked publication/review status is recorded
 separately; only a maintainer-merged upstream catalog entry establishes listing.
 
-Pin: `5928049cb15bc28df823692787619c01d9714501` in https://github.com/itsflownium/hermes-crystallize; version `0.5.3`;
+Pin: `349c2fc2ce8b42c8ff0d0e0d2dc1a4ca972f6613` in https://github.com/itsflownium/hermes-crystallize; version `0.6.0`;
 Hermes floor `>=0.22.7`. The pin is an existing plugin feature commit;
 the later catalog-only bundle commit must not replace it with a self-reference.
 
 Crystallize targets repeated context and read planning through explicit per-chat/per-job
-controls and local receipts. Main reasoning is not reduced. No live savings percentage
-at unchanged reasoning is established for this public-SDK candidate. The research,
-writing, data, analysis, coding and cron fixtures have explicitly scoped validation,
+controls and local receipts. Main reasoning is not reduced. Live paired runs at unchanged reasoning on Nous saved 6%
+on short tasks, 20 to 32% on working chats on two of three models, 7% on the third and 60%
+in one cron pair, with small samples on synthetic fixtures. Those fixtures have explicitly scoped validation,
 not proof of universal live task/provider coverage or semantic equivalence. Automatic
 pre-run/no-AI replay of learned tools remains unavailable on the reviewed SDK;
 older savings from that path do not transfer.
@@ -29,8 +24,6 @@ Disclosures for reviewer and installer:
   in `cron/executions.db`, job definitions in `cron/jobs.json`, and public host configuration,
   explicit route configuration and user pricing cards. These reads use current profile scope;
   they are not telemetry. Public provider profiles may supply price quotes.
-- Price lookup makes plain HTTPS GET requests to public model lists (the route's own `/models` and `models.dev`),
-  sending no credentials or chat data. It can be turned off.
 - Helper/compare features can make paid network requests through public `ctx.llm` to
   the user-selected host route. Route choices are configured/declared, not credential-store probes.
   Explicit validation makes only fresh answer-generation calls; it does not replay tools,

@@ -1,0 +1,13 @@
+{
+  "source_kind": "hermes_plugins_validate",
+  "pinned_commit": "349c2fc2ce8b42c8ff0d0e0d2dc1a4ca972f6613",
+  "host_source_commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
+  "ok": true,
+  "checks_passed": 16,
+  "errors": [],
+  "warnings": [],
+  "warnings_reviewed": true,
+  "private_import_findings": [],
+  "private_attribute_findings": [],
+  "security_status": "safe"
+}

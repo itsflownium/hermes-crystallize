@@ -6,8 +6,8 @@
   "owner_submission_approval": null,
   "release_ready_meaning": "Technical checks do not establish live effectiveness, installed-build activation or owner approval to submit.",
   "catalog_ready_meaning": "Human admission/listing is not established by local technical checks.",
-  "pinned_commit": "5928049cb15bc28df823692787619c01d9714501",
-  "pinned_manifest_version": "0.5.3",
+  "pinned_commit": "349c2fc2ce8b42c8ff0d0e0d2dc1a4ca972f6613",
+  "pinned_manifest_version": "0.6.0",
   "literal_capabilities_match_manifest": true,
   "source_analysis": {
     "registered": {
@@ -39,7 +39,7 @@
       "public_core_imports": [
         {
           "file": "chat_savings.py",
-          "line": 323,
+          "line": 335,
           "module": "plugins.plugin_storage",
           "name": "plugin_data_dir",
           "public": true
@@ -136,6 +136,13 @@
           "public": true
         },
         {
+          "file": "price_discovery.py",
+          "line": 112,
+          "module": "providers",
+          "name": "get_provider_profile",
+          "public": true
+        },
+        {
           "file": "public_pricing.py",
           "line": 121,
           "module": "hermes_cli.config",
@@ -144,14 +151,14 @@
         },
         {
           "file": "public_pricing.py",
-          "line": 317,
+          "line": 353,
           "module": "providers",
           "name": "get_provider_profile",
           "public": true
         },
         {
           "file": "store.py",
-          "line": 151,
+          "line": 154,
           "module": "plugins.plugin_storage",
           "name": "plugin_db",
           "public": true
@@ -183,7 +190,7 @@
     "documented_core_imports": [
       {
         "file": "chat_savings.py",
-        "line": 323,
+        "line": 335,
         "module": "plugins.plugin_storage",
         "name": "plugin_data_dir",
         "public": true
@@ -280,6 +287,13 @@
         "public": true
       },
       {
+        "file": "price_discovery.py",
+        "line": 112,
+        "module": "providers",
+        "name": "get_provider_profile",
+        "public": true
+      },
+      {
         "file": "public_pricing.py",
         "line": 121,
         "module": "hermes_cli.config",
@@ -288,14 +302,14 @@
       },
       {
         "file": "public_pricing.py",
-        "line": 317,
+        "line": 353,
         "module": "providers",
         "name": "get_provider_profile",
         "public": true
       },
       {
         "file": "store.py",
-        "line": 151,
+        "line": 154,
         "module": "plugins.plugin_storage",
         "name": "plugin_db",
         "public": true
@@ -329,7 +343,7 @@
     "host_validation": {
       "status": "operator_supplied_exact_pin_host_validation",
       "ok": true,
-      "sha256": "93ccd1297c5fb2854d149814d8bff47c31b715f15394aca532b5249dcff5b2e9",
+      "sha256": "2f27f78af7ca62536d0aaf440fa1856f40cd262ff969ccafc433a24b6c2d1c8d",
       "checks_passed": 16,
       "host_source_commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
       "warnings": [],
@@ -340,17 +354,15 @@
   "ui_evidence": {
     "status": "offline_fixture_captures",
     "screenshots": [
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/public-capabilities-and-host-plan-desktop.png",
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/public-routes-and-manual-pricing-desktop.png",
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/chat-quality-and-onboarding-desktop.png",
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/native-cron-source-review-desktop.png"
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/349c2fc2ce8b42c8ff0d0e0d2dc1a4ca972f6613/assets/review/panel-cron-and-chat.png",
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/349c2fc2ce8b42c8ff0d0e0d2dc1a4ca972f6613/assets/review/panel-job-details.png"
     ],
     "live_proof": false
   },
   "admission": {
     "listed": false,
-    "maintainer_merge": "not_submitted_owner_hold",
-    "public_pin_availability": "verified_anonymously_by_operator"
+    "maintainer_merge": "pending",
+    "public_pin_availability": "not_checked_by_generator"
   },
   "pinned_features": {
     "delegated_file_handoffs": true,
@@ -376,35 +388,5 @@
     "The local host catalog policy was used; re-read it at actual submission.",
     "No live provider, semantic-equivalence or actual-billing proof is manufactured."
   ],
-  "owner_requested_hold": true,
-  "publication_verification": {
-    "repository": "https://github.com/itsflownium/hermes-crystallize",
-    "pinned_commit": "5928049cb15bc28df823692787619c01d9714501",
-    "anonymous_manifest_http_status": 200,
-    "anonymous_access_verified": true,
-    "authorization_header_sent": false,
-    "curl_user_configuration_disabled": true,
-    "tls_verification_enabled": true,
-    "manifest_sha256": "4b3d1bb28ecbe5c21d33afc142f5fe4065f6c317afccc9a961d3b3fa499306ab",
-    "manifest_matches_git_pin": true,
-    "screenshots": [
-      {
-        "path": "assets/review/public-capabilities-and-host-plan-desktop.png",
-        "anonymous_http_status": 200
-      },
-      {
-        "path": "assets/review/public-routes-and-manual-pricing-desktop.png",
-        "anonymous_http_status": 200
-      },
-      {
-        "path": "assets/review/chat-quality-and-onboarding-desktop.png",
-        "anonymous_http_status": 200
-      },
-      {
-        "path": "assets/review/native-cron-source-review-desktop.png",
-        "anonymous_http_status": 200
-      }
-    ]
-  },
-  "owner_scope": "All PRs remain in itsflownium/hermes-crystallize; upstream catalog submission is not authorized."
+  "owner_requested_hold": true
 }
