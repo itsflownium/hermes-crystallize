@@ -1,0 +1,364 @@
+{
+  "schema_version": 1,
+  "scope": "read-only functional review of completed v0.5.2 scheduled snapshot stages; not a qualified savings benchmark",
+  "source_controller_sha256": "6eb81d454032c52d527e7b0fab41d92daad524645316893349198c21c9acbb21",
+  "source_controller_completed": false,
+  "source_controller_error_type": "AssertionError",
+  "plugin_commit": "ebf2ba073f3c0096b588f5a29e097834aad76fb1",
+  "runtime_sha256": "74577f36975b953f8bfeab1eaf911973dc66f6312568aaeb778b07b16d1c86e8",
+  "requested_job_reasoning": "max",
+  "requested_settings_evidence": "Explicit per-job pins and gateway construction logs; session records do not preserve reasoning settings",
+  "per_request_reasoning_verified": false,
+  "server_effective_reasoning": "not exposed",
+  "actual_billed_usd": null,
+  "settings_cost_comparison_eligible": false,
+  "config_unchanged_after": true,
+  "baseline_changed_data_pair_run": false,
+  "paired_savings_scope": "Baseline has two value-42 runs. Candidate has a separately reviewed three-tick value-42/unchanged/value-43 sequence. No paired cash percentage is inferred.",
+  "evidence": {
+    "baseline": {
+      "job_id": "e3821220b5d8",
+      "ledger": [
+        {
+          "id": "e812c25d929f4828b2d86fcf9842a624",
+          "job_id": "e3821220b5d8",
+          "source": "builtin",
+          "status": "completed",
+          "scheduled_instant": "2026-11-07T06:08:28.036632+00:00",
+          "started_at": "2026-11-07T17:08:49.087124+11:00",
+          "finished_at": "2026-11-07T17:09:02.417050+11:00",
+          "delivery_outcome": "suppressed"
+        },
+        {
+          "id": "c630d81c3f744781bff74d505d2fa9e5",
+          "job_id": "e3821220b5d8",
+          "source": "builtin",
+          "status": "completed",
+          "scheduled_instant": "2026-11-07T06:10:02.401857+00:00",
+          "started_at": "2026-11-07T17:10:49.093567+11:00",
+          "finished_at": "2026-11-07T17:10:56.265672+11:00",
+          "delivery_outcome": "suppressed"
+        }
+      ],
+      "sessions": [
+        {
+          "execution_id": "e812c25d929f4828b2d86fcf9842a624",
+          "session_id": "local-74823e9b387d8acd0ac18f586d51fe059fc07528bce57a09659f3f9d48474822",
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "nous",
+          "reasoning_effort": null,
+          "reasoning_config_fingerprint": null,
+          "api_calls": 1,
+          "input_tokens": 14232,
+          "output_tokens": 480,
+          "reasoning_tokens": 457,
+          "cache_read_tokens": 1920,
+          "cache_write_tokens": 0,
+          "cost_usd": 0.001762512,
+          "cost_provenance": "estimated",
+          "execution_binding": "scheduler_admission",
+          "identity_attribution_complete": false,
+          "usage_totals_complete": true,
+          "answer": "{\"value\": 42, \"source\": \"validation-fixture\", \"actions_performed\": false}"
+        },
+        {
+          "execution_id": "c630d81c3f744781bff74d505d2fa9e5",
+          "session_id": "local-b1f837a27380ec7186471dd636a1eea31e70f05c8a1775e4c926cc1a983973b4",
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "nous",
+          "reasoning_effort": null,
+          "reasoning_config_fingerprint": null,
+          "api_calls": 1,
+          "input_tokens": 152,
+          "output_tokens": 316,
+          "reasoning_tokens": 293,
+          "cache_read_tokens": 16000,
+          "cache_write_tokens": 0,
+          "cost_usd": 0.00024222,
+          "cost_provenance": "estimated",
+          "execution_binding": "scheduler_admission",
+          "identity_attribution_complete": false,
+          "usage_totals_complete": true,
+          "answer": "{\"source\": \"validation-fixture\", \"value\": 42, \"actions_performed\": false}"
+        }
+      ],
+      "local_output_documents": [
+        {
+          "path": "e3821220b5d8/2026-11-07_17-09-02.md",
+          "sha256": "9d7247ca7da7c44442b0d4d76acb8b7384b34d386e7e3327baf57b873f08ab98",
+          "no_change_status": false
+        },
+        {
+          "path": "e3821220b5d8/2026-11-07_17-10-56.md",
+          "sha256": "ceb02ca05a9eb55b17a55780313bb18041b7db185dd771fcbf5ee2eba024411d",
+          "no_change_status": false
+        }
+      ]
+    },
+    "candidate": {
+      "job_id": "f4694c0bb6ff",
+      "ledger": [
+        {
+          "id": "432331c5ef8d4f2db17cdf6f9f5c8e8b",
+          "job_id": "f4694c0bb6ff",
+          "source": "builtin",
+          "status": "completed",
+          "scheduled_instant": "2026-11-07T06:08:30.098614+00:00",
+          "started_at": "2026-11-07T17:08:49.087820+11:00",
+          "finished_at": "2026-11-07T17:11:46.526321+11:00",
+          "delivery_outcome": "suppressed"
+        },
+        {
+          "id": "2ea7bcc8194749288f95699d3d05c88d",
+          "job_id": "f4694c0bb6ff",
+          "source": "scheduler",
+          "status": "missed",
+          "scheduled_instant": "2026-11-07T06:12:46.525100+00:00",
+          "started_at": null,
+          "finished_at": "2026-11-07T17:30:51.747297+11:00",
+          "delivery_outcome": null
+        },
+        {
+          "id": "95520b47e1ec401a9441aa2675d9df54",
+          "job_id": "f4694c0bb6ff",
+          "source": "builtin",
+          "status": "completed",
+          "scheduled_instant": "2026-11-07T06:12:46.525100+00:00",
+          "started_at": "2026-11-07T17:30:51.802487+11:00",
+          "finished_at": "2026-11-07T17:30:59.014227+11:00",
+          "delivery_outcome": "suppressed"
+        },
+        {
+          "id": "f93b8ae94afe4c6fab85d38e41b5e4c5",
+          "job_id": "f4694c0bb6ff",
+          "source": "scheduler",
+          "status": "missed",
+          "scheduled_instant": "2026-11-07T06:31:59.012732+00:00",
+          "started_at": null,
+          "finished_at": "2026-11-07T17:37:51.785313+11:00",
+          "delivery_outcome": null
+        },
+        {
+          "id": "6bbf6244a8cd47faa8fd83c2867ae90f",
+          "job_id": "f4694c0bb6ff",
+          "source": "builtin",
+          "status": "completed",
+          "scheduled_instant": "2026-11-07T06:31:59.012732+00:00",
+          "started_at": "2026-11-07T17:37:51.826526+11:00",
+          "finished_at": "2026-11-07T17:38:05.107385+11:00",
+          "delivery_outcome": "suppressed"
+        },
+        {
+          "id": "c57ca5c47df04c04a34763d5ae232b24",
+          "job_id": "f4694c0bb6ff",
+          "source": "builtin",
+          "status": "completed",
+          "scheduled_instant": "2026-11-07T06:39:05.106079+00:00",
+          "started_at": "2026-11-07T17:39:51.819988+11:00",
+          "finished_at": "2026-11-07T17:39:52.190370+11:00",
+          "delivery_outcome": "suppressed"
+        },
+        {
+          "id": "06a9767e292045c29070eb115e8218da",
+          "job_id": "f4694c0bb6ff",
+          "source": "builtin",
+          "status": "completed",
+          "scheduled_instant": "2026-11-07T06:40:52.188894+00:00",
+          "started_at": "2026-11-07T17:41:51.996375+11:00",
+          "finished_at": "2026-11-07T17:42:21.113846+11:00",
+          "delivery_outcome": "suppressed"
+        }
+      ],
+      "sessions": [
+        {
+          "execution_id": "432331c5ef8d4f2db17cdf6f9f5c8e8b",
+          "session_id": "local-7e4dae25cf5ff63e0c10419b2ba676926931547baa9d7be66c53ea58219e63bc",
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "nous",
+          "reasoning_effort": null,
+          "reasoning_config_fingerprint": null,
+          "api_calls": 1,
+          "input_tokens": 210,
+          "output_tokens": 18043,
+          "reasoning_tokens": 18011,
+          "cache_read_tokens": 16000,
+          "cache_write_tokens": 0,
+          "cost_usd": 0.009342319,
+          "cost_provenance": "estimated",
+          "execution_binding": "scheduler_admission",
+          "identity_attribution_complete": false,
+          "usage_totals_complete": true,
+          "answer": "{\"value\": 1794031729447397000, \"source\": \"crystallize_native\", \"actions_performed\": false}"
+        },
+        {
+          "execution_id": "95520b47e1ec401a9441aa2675d9df54",
+          "session_id": "local-5dab785e2feb3951b6bbb30458558431fc387a73fdf1ee30d07c6b97f59c7a46",
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "nous",
+          "reasoning_effort": null,
+          "reasoning_config_fingerprint": null,
+          "api_calls": 1,
+          "input_tokens": 571,
+          "output_tokens": 143,
+          "reasoning_tokens": 120,
+          "cache_read_tokens": 16000,
+          "cache_write_tokens": 0,
+          "cost_usd": 0.000197885,
+          "cost_provenance": "estimated",
+          "execution_binding": "scheduler_admission",
+          "identity_attribution_complete": false,
+          "usage_totals_complete": true,
+          "answer": "{\"value\": 42, \"source\": \"validation-fixture\", \"actions_performed\": false}"
+        },
+        {
+          "execution_id": "6bbf6244a8cd47faa8fd83c2867ae90f",
+          "session_id": "local-50ba4ad4954be9e587299088f42c5a611d3f6416eb607db6c5c9db5555feb4ab",
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "nous",
+          "reasoning_effort": null,
+          "reasoning_config_fingerprint": null,
+          "api_calls": 1,
+          "input_tokens": 576,
+          "output_tokens": 681,
+          "reasoning_tokens": 658,
+          "cache_read_tokens": 16000,
+          "cache_write_tokens": 0,
+          "cost_usd": 0.000474409,
+          "cost_provenance": "estimated",
+          "execution_binding": "scheduler_admission",
+          "identity_attribution_complete": false,
+          "usage_totals_complete": true,
+          "answer": "{\"value\": 42, \"source\": \"validation-fixture\", \"actions_performed\": false}"
+        },
+        {
+          "execution_id": "c57ca5c47df04c04a34763d5ae232b24",
+          "session_id": "local-f3c04716b4924c45de3439808bd9ecc18657662e83ec3f86df6d6a36b86166c1",
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": null,
+          "reasoning_effort": null,
+          "reasoning_config_fingerprint": null,
+          "api_calls": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "reasoning_tokens": 0,
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "cost_usd": null,
+          "cost_provenance": "unknown",
+          "execution_binding": "scheduler_admission",
+          "identity_attribution_complete": false,
+          "usage_totals_complete": true,
+          "answer": null
+        },
+        {
+          "execution_id": "06a9767e292045c29070eb115e8218da",
+          "session_id": "local-01e726c19822f2339728b477598a91065cf0ce7b498b369bade86b41bc4f4fec",
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "nous",
+          "reasoning_effort": null,
+          "reasoning_config_fingerprint": null,
+          "api_calls": 1,
+          "input_tokens": 524,
+          "output_tokens": 445,
+          "reasoning_tokens": 422,
+          "cache_read_tokens": 16000,
+          "cache_write_tokens": 0,
+          "cost_usd": 0.000347829,
+          "cost_provenance": "estimated",
+          "execution_binding": "scheduler_admission",
+          "identity_attribution_complete": false,
+          "usage_totals_complete": true,
+          "answer": "{\"value\": 43, \"source\": \"validation-fixture\", \"actions_performed\": false}"
+        }
+      ],
+      "local_output_documents": [
+        {
+          "path": "f4694c0bb6ff/2026-11-07_17-39-52.md",
+          "sha256": "55f5cd14e03d5198c5c08401ff4045823c75b35f7692cd495530617f564ac5d7",
+          "no_change_status": true
+        },
+        {
+          "path": "f4694c0bb6ff/2026-11-07_17-42-21.md",
+          "sha256": "12f84ee7593fc7689fe368679f5b788c6680e98da5d29d7fb35c30cd934855ad",
+          "no_change_status": false
+        },
+        {
+          "path": "f4694c0bb6ff/2026-11-07_17-38-05.md",
+          "sha256": "cc1f70fd6a9c6b624608ecb55c8ace8133a5187c09110566bbe530dc97d8b68a",
+          "no_change_status": false
+        },
+        {
+          "path": "f4694c0bb6ff/2026-11-07_17-30-58.md",
+          "sha256": "0a735676b5aa9918edb4217cb3a97204f9029463734511fa0bb32a4dd92156fb",
+          "no_change_status": false
+        },
+        {
+          "path": "f4694c0bb6ff/2026-11-07_17-11-46.md",
+          "sha256": "498a2429b608a28f266a00ef79ca9d87eadc53ba5fa613bf264aed35ae410763",
+          "no_change_status": false
+        }
+      ]
+    }
+  },
+  "checks": {
+    "baseline_all_served_routes_nous": true,
+    "candidate_all_served_routes_nous": true,
+    "first_snapshot_answer_matches_42": true,
+    "changed_snapshot_answer_matches_43": true,
+    "unchanged_tick_no_model_request": true,
+    "unchanged_tick_local_no_change_document": true
+  },
+  "functional_checks_passed": true,
+  "total_cron_main_model_calls_including_superseded": 6,
+  "new_runtime_three_tick_model_calls": 2,
+  "prior_candidate_calls_retained_as_overhead": [
+    {
+      "execution_id": "432331c5ef8d4f2db17cdf6f9f5c8e8b",
+      "session_id": "local-7e4dae25cf5ff63e0c10419b2ba676926931547baa9d7be66c53ea58219e63bc",
+      "model": "deepseek/deepseek-v4.1-flash",
+      "provider": "nous",
+      "reasoning_effort": null,
+      "reasoning_config_fingerprint": null,
+      "api_calls": 1,
+      "input_tokens": 210,
+      "output_tokens": 18043,
+      "reasoning_tokens": 18011,
+      "cache_read_tokens": 16000,
+      "cache_write_tokens": 0,
+      "cost_usd": 0.009342319,
+      "cost_provenance": "estimated",
+      "execution_binding": "scheduler_admission",
+      "identity_attribution_complete": false,
+      "usage_totals_complete": true,
+      "answer": "{\"value\": 1794031729447397000, \"source\": \"crystallize_native\", \"actions_performed\": false}"
+    },
+    {
+      "execution_id": "95520b47e1ec401a9441aa2675d9df54",
+      "session_id": "local-5dab785e2feb3951b6bbb30458558431fc387a73fdf1ee30d07c6b97f59c7a46",
+      "model": "deepseek/deepseek-v4.1-flash",
+      "provider": "nous",
+      "reasoning_effort": null,
+      "reasoning_config_fingerprint": null,
+      "api_calls": 1,
+      "input_tokens": 571,
+      "output_tokens": 143,
+      "reasoning_tokens": 120,
+      "cache_read_tokens": 16000,
+      "cache_write_tokens": 0,
+      "cost_usd": 0.000197885,
+      "cost_provenance": "estimated",
+      "execution_binding": "scheduler_admission",
+      "identity_attribution_complete": false,
+      "usage_totals_complete": true,
+      "answer": "{\"value\": 42, \"source\": \"validation-fixture\", \"actions_performed\": false}"
+    }
+  ],
+  "gateway_max_reasoning_construction_observations": [
+    "2026-11-07 17:08:50,513 INFO cron.scheduler: Job 'e3821220b5d8': using per-job reasoning_effort 'max'",
+    "2026-11-07 17:08:50,562 INFO cron.scheduler: Job 'f4694c0bb6ff': using per-job reasoning_effort 'max'",
+    "2026-11-07 17:10:49,237 INFO cron.scheduler: Job 'e3821220b5d8': using per-job reasoning_effort 'max'",
+    "2026-11-07 17:30:52,700 INFO cron.scheduler: Job 'f4694c0bb6ff': using per-job reasoning_effort 'max'",
+    "2026-11-07 17:37:52,182 INFO cron.scheduler: Job 'f4694c0bb6ff': using per-job reasoning_effort 'max'",
+    "2026-11-07 17:41:58,635 INFO cron.scheduler: Job 'f4694c0bb6ff': using per-job reasoning_effort 'max'"
+  ]
+}

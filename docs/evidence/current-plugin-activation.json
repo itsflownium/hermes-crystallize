@@ -1,0 +1,37 @@
+{
+  "scope": "public gateway plugin reload while idle; no gateway restart",
+  "reloaded": true,
+  "crystallize_registered": true,
+  "crystallize_activation": [
+    {
+      "name": "crystallize",
+      "key": "crystallize",
+      "activated_now": {
+        "gateway_commands": [
+          "crystallize"
+        ],
+        "gateway_transforms": [
+          "transform_llm_output",
+          "transform_tool_result"
+        ],
+        "hooks": [
+          "on_session_end",
+          "post_api_request",
+          "post_tool_call",
+          "pre_llm_call",
+          "pre_tool_call"
+        ]
+      },
+      "deferred": {
+        "tools": [
+          "crystal_cheap",
+          "crystal_full_result",
+          "crystal_list",
+          "crystal_run"
+        ]
+      }
+    }
+  ],
+  "adapters_rewired": 1,
+  "version_on_disk": "0.5.2"
+}

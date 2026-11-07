@@ -1,0 +1,7 @@
+{
+  "scope": "only the two newly created validation jobs; existing jobs and configuration untouched",
+  "removed": [
+    "e3821220b5d8",
+    "f4694c0bb6ff"
+  ]
+}

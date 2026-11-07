@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "scope": "separate bounded v0.5.1 runtime-fix validation on the same paused local jobs; prior failed controller and answer remain overhead",
+  "started_at": "2026-11-07T06:29:23.656016+00:00",
+  "initial_controller_sha256": "80b8693e46e055228f2d419f57650f23b021c219da2991d8542c48edc697b1f2",
+  "initial_controller_status": false,
+  "initial_controller_error_type": "TimeoutError",
+  "reservation_scope": "same existing US$0.90 cron allocation, not a new allocation",
+  "actual_billed_usd": null,
+  "job_ids": {
+    "baseline": "e3821220b5d8",
+    "candidate": "f4694c0bb6ff"
+  },
+  "steps": [],
+  "plugin_commit": "0e8008c4a5e4a8827e431bf940dde077f81f1cab",
+  "runtime_sha256": "c4b03dabf1b8fd17ac736ff889a99474db7ba6340fcb6bf3ecf4d61034733bfa",
+  "runtime_fix_allocation_remaining_usd": 0.45,
+  "maximum_total_cron_model_calls": 6,
+  "prior_candidate_execution_id": "432331c5ef8d4f2db17cdf6f9f5c8e8b",
+  "reviewed_source": {
+    "source_sha256": "4433da21ae6e6cf12fecebb9b43fcfd2f0998c6f11161097c65a0bad71c7e0ec",
+    "runtime_sha256": "c4b03dabf1b8fd17ac736ff889a99474db7ba6340fcb6bf3ecf4d61034733bfa",
+    "preview_sha256": "29b4ab9b5b20170b7bed7ea17d76f53304bd551c09598773a6094c137dc8ac63",
+    "source": {
+      "reference": "crystallize-validation-3b597e8fd210/snapshot.py",
+      "sha256": "4433da21ae6e6cf12fecebb9b43fcfd2f0998c6f11161097c65a0bad71c7e0ec",
+      "text": "from pathlib import Path\nprint(Path(\"snapshot.json\").read_text())\n"
+    }
+  },
+  "failed_execution_records": {
+    "baseline": [
+      {
+        "id": "e812c25d929f4828b2d86fcf9842a624",
+        "job_id": "e3821220b5d8",
+        "source": "builtin",
+        "status": "completed",
+        "scheduled_instant": "2026-11-07T06:08:28.036632+00:00",
+        "started_at": "2026-11-07T17:08:49.087124+11:00",
+        "finished_at": "2026-11-07T17:09:02.417050+11:00",
+        "delivery_outcome": "suppressed"
+      },
+      {
+        "id": "c630d81c3f744781bff74d505d2fa9e5",
+        "job_id": "e3821220b5d8",
+        "source": "builtin",
+        "status": "completed",
+        "scheduled_instant": "2026-11-07T06:10:02.401857+00:00",
+        "started_at": "2026-11-07T17:10:49.093567+11:00",
+        "finished_at": "2026-11-07T17:10:56.265672+11:00",
+        "delivery_outcome": "suppressed"
+      }
+    ],
+    "candidate": [
+      {
+        "id": "432331c5ef8d4f2db17cdf6f9f5c8e8b",
+        "job_id": "f4694c0bb6ff",
+        "source": "builtin",
+        "status": "completed",
+        "scheduled_instant": "2026-11-07T06:08:30.098614+00:00",
+        "started_at": "2026-11-07T17:08:49.087820+11:00",
+        "finished_at": "2026-11-07T17:11:46.526321+11:00",
+        "delivery_outcome": "suppressed"
+      },
+      {
+        "id": "2ea7bcc8194749288f95699d3d05c88d",
+        "job_id": "f4694c0bb6ff",
+        "source": "scheduler",
+        "status": "missed",
+        "scheduled_instant": "2026-11-07T06:12:46.525100+00:00",
+        "started_at": null,
+        "finished_at": "2026-11-07T17:30:51.747297+11:00",
+        "delivery_outcome": null
+      },
+      {
+        "id": "95520b47e1ec401a9441aa2675d9df54",
+        "job_id": "f4694c0bb6ff",
+        "source": "builtin",
+        "status": "running",
+        "scheduled_instant": "2026-11-07T06:12:46.525100+00:00",
+        "started_at": "2026-11-07T17:30:51.802487+11:00",
+        "finished_at": null,
+        "delivery_outcome": null
+      }
+    ]
+  },
+  "completed": false,
+  "error_type": "RuntimeError",
+  "error": "Continuation stopped; private exception text omitted",
+  "baseline_paused": true,
+  "candidate_paused": true,
+  "config_unchanged_after": true,
+  "finished_at": "2026-11-07T06:30:57.820608+00:00",
+  "explanation": "The controller stopped on a missed catch-up receipt. The same ledger separately contains a completed scheduled execution. This record is retained as a controller failure, not relabelled as a passed test."
+}

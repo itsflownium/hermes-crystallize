@@ -75,8 +75,12 @@ def _retry_anchor(home, job_id):
 
 
 def _fallback(reason, checkpoint="verification"):
-    print(json.dumps({"crystallize_native": {"status": reason, "checkpoint": checkpoint, "fresh_run_nonce": time.time_ns()},
-                      "instruction": "Source verification is unavailable. Complete the original task with your normal tools and configured reasoning."}))
+    print(json.dumps({"crystallize_native": {"kind": "diagnostic_only", "snapshot_available": False,
+                      "status": reason, "checkpoint": checkpoint,
+                      "fresh_run_nonce": f"diagnostic-{time.time_ns():x}"},
+                      "instruction": "No verified snapshot was supplied. These status fields and the diagnostic nonce are not task data. "
+                      "Use normal tools and configured reasoning to verify the original task. If verification is unavailable, "
+                      "state that the task could not be verified; do not invent values or treat this diagnostic as the snapshot."}))
 
 
 def run(config):

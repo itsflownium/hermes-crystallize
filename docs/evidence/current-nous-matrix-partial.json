@@ -1,0 +1,141 @@
+{
+  "observed_matrix_summary": {
+    "cases": [
+      [
+        "research",
+        "completed",
+        true
+      ],
+      [
+        "writing",
+        "completed",
+        true
+      ],
+      [
+        "data",
+        "completed",
+        true
+      ],
+      [
+        "analysis",
+        "completed",
+        true
+      ],
+      [
+        "coding",
+        "completed",
+        true
+      ],
+      [
+        "cron",
+        "completed",
+        false
+      ]
+    ],
+    "reserved": 1.7999999999999996,
+    "in_flight": null,
+    "stop_reason": null,
+    "error_type": null,
+    "events": 24
+  },
+  "observed_cron_answers": {
+    "domain": "cron",
+    "calls": [
+      {
+        "arm": "candidate",
+        "status": "ok",
+        "quality": {
+          "ok": false,
+          "checks": [
+            {
+              "name": "json_object",
+              "ok": true
+            },
+            {
+              "name": "field:new_ids",
+              "ok": true
+            },
+            {
+              "name": "field:unchanged_ids",
+              "ok": true
+            },
+            {
+              "name": "field:failed_sources",
+              "ok": true
+            },
+            {
+              "name": "field:can_silence",
+              "ok": true
+            },
+            {
+              "name": "field:agent_required",
+              "ok": true
+            },
+            {
+              "name": "field:action_performed",
+              "ok": false
+            }
+          ],
+          "checker_revision": "2-analysis-rational-rates",
+          "semantic_equivalence": "not_established"
+        },
+        "answer": "{\"new_ids\":[\"b\",\"c\"],\"unchanged_ids\":[\"a\"],\"failed_sources\":[\"feed-2\"],\"can_silence\":false,\"agent_required\":true,\"action_performed\":\"none\"}",
+        "truncated_or_empty": false
+      },
+      {
+        "arm": "baseline",
+        "status": "ok",
+        "quality": {
+          "ok": true,
+          "checks": [
+            {
+              "name": "json_object",
+              "ok": true
+            },
+            {
+              "name": "field:new_ids",
+              "ok": true
+            },
+            {
+              "name": "field:unchanged_ids",
+              "ok": true
+            },
+            {
+              "name": "field:failed_sources",
+              "ok": true
+            },
+            {
+              "name": "field:can_silence",
+              "ok": true
+            },
+            {
+              "name": "field:agent_required",
+              "ok": true
+            },
+            {
+              "name": "field:action_performed",
+              "ok": true
+            }
+          ],
+          "checker_revision": "2-analysis-rational-rates",
+          "semantic_equivalence": "not_established"
+        },
+        "answer": "{\"new_ids\":[\"b\",\"c\"],\"unchanged_ids\":[\"a\"],\"failed_sources\":[\"feed-2\"],\"can_silence\":false,\"agent_required\":true,\"action_performed\":false}",
+        "truncated_or_empty": false
+      }
+    ],
+    "fresh_reserved_usd": 1.7999999999999996
+  },
+  "schema_version": 1,
+  "scope": "Partial matrix evidence recovered verbatim from prior tool output",
+  "original_full_report_available": false,
+  "provenance_note": "The cron v2 rerun accidentally overwrote the original full matrix JSON because the operator report-name expression had incorrect conditional precedence. Earlier reviewed summary and exact cron answers were recovered from saved tool output. Full request/usage details for the original matrix were not recovered; this is not a reconstructed full report.",
+  "source_commit": "9c624f61c279618fd1bd06c3caf0ed54595f4a9a",
+  "working_tree_dirty": true,
+  "actual_billed_usd": null,
+  "cost_savings_claim": null,
+  "provider_allowlist": [
+    "nous"
+  ],
+  "requested_reasoning": "max"
+}
