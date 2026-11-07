@@ -269,8 +269,11 @@ def record_overhead(session_id: str, turn_id: str, plan: dict) -> None:
 
 
 def overhead(session_id: str, turn_id: str | None = None) -> dict:
-    rows = store.get_setting("handoff_overhead:" + session_id) if session_id else None
-    selected = ([rows.get(turn_id, {})] if turn_id is not None else list(rows.values())) if isinstance(rows, dict) else []
+    selected = []
+    for sid in store._chat_ids(session_id) if session_id else ():
+        rows = store.get_setting("handoff_overhead:" + sid)
+        if isinstance(rows, dict):
+            selected += [rows.get(turn_id, {})] if turn_id is not None else list(rows.values())
     total = {key: sum(row.get(key, 0) for row in selected if isinstance(row, dict))
              for key in ("usd", "calls", "unknown_calls")}
     return {**total, "usd": None if total["unknown_calls"] else total["usd"]}
@@ -284,7 +287,11 @@ def execute(ctx: Any, text: str, session_id: str, turn_id: str = "", *, input_fi
 
     def respond(payload):
         encoded = json.dumps(payload, ensure_ascii=False)
-        store.add_chat_event(session_id, turn_id=turn_id, kind="routed", results=0, added_input_chars=len(encoded))
+        try:
+            store.add_chat_event(session_id, turn_id=turn_id, kind="routed", results=0, added_input_chars=len(encoded),
+                                 main_output_chars=len(text) if isinstance(text, str) else 0)
+        except Exception:  # noqa: BLE001 — bookkeeping must never throw away a paid answer
+            logger.warning("crystallize: recording a handoff failed", exc_info=True)
         return encoded
 
     if not isinstance(text, str) or not text.strip():
@@ -408,8 +415,8 @@ def expand_args(args: Any, session_id: str, turn_id: str = "", tool_name: str = 
     from . import chat_savings as chat
     if not isinstance(args, dict):
         return None
-    if "{{crystal:" not in json.dumps(args, ensure_ascii=False):
-        return None
+    if not chat._PLACEHOLDER.search(json.dumps(args, ensure_ascii=False)):
+        return None  # text about placeholders, such as searching for them, isn't one
     if not session_id:
         raise ValueError("Crystallize needs the owning chat to recover this placeholder; no tool should execute it.")
     changed = False

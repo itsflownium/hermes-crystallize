@@ -50,6 +50,7 @@ def _run(days_ago, cost=0.01, api=None, tokens=1000, model="m"):
     r = Run(execution_id=str(days_ago), job_id="j", job_name="job", session_id="s", scheduled=True,
             started_ts=NOW - days_ago * 86400, cost_usd=cost, input_tokens=tokens, duration_s=10.0, model=model)
     r.api_cost_usd = api
+    r.outcome = "completed"
     return r
 
 
@@ -110,7 +111,7 @@ def test_ladder_follows_the_job():
     trial = _states(None, {"status": "trial", "hint": True, "clean": True, "level": "low", "toolsets": ["web"]})
     assert trial["calls"] == "trying" and trial["tools"] == "trying"
     kept = _states(None, {"status": "kept", "hint": True, "clean": True, "level": None, "toolsets": None})
-    assert kept["clean"] == "on" and kept["reasoning"] == "n/a"
+    assert kept["clean"] == "on" and "reasoning" not in kept
     live = {"status": "live", "meta": {"mode": "prerun"}, "steps": {}}
     on = _states(live, None, {"when_unchanged": "repeat", "no_ai_fit": True})
     assert on["fetch"] == "on" and on["unchanged"] == "on" and on["no_ai"] == "available"

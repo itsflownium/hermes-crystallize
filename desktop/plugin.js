@@ -265,14 +265,14 @@ function RhythmControl({ ctx, jobId, onChanged = () => {} }) {
   const [timezone] = useState(localTimezone)
   const scope = useRequestScope(jobId)
   const running = useRef(false)
-  const load = useCallback(() => {
+  const load = useCallback((preserveError = false) => {
     if (!open || !jobId) return
     const version = ++scope.current.version
     setPreview(null); setConfirmed(false)
     return ctx.rest(`/rhythm?job_id=${encodeURIComponent(jobId)}&timezone=${encodeURIComponent(timezone)}`).then(res => {
       if (scope.current.scope !== jobId || scope.current.version !== version) return
       if (!res || res.ok === false || res.error) { setData(null); setError(errorText(res, 'Could not load Rhythm.')); return }
-      setData(res); setError(null)
+      setData(res); if (!preserveError) setError(null)
       const initial = res.recommendation && res.recommendation.interval_minutes || res.current_interval_minutes || 60
       setIntervalMinutes(initial); setStaleness(String(initial))
     }).catch(() => { if (scope.current.scope === jobId && scope.current.version === version) { setData(null); setError('Could not load Rhythm. Retry when the backend is available.') } })
@@ -305,7 +305,7 @@ function RhythmControl({ ctx, jobId, onChanged = () => {} }) {
     const version = ++scope.current.version
     ctx.rest('/rhythm-undo', { method: 'POST', body: { job_id: jobId, confirmed: true, expected_config_fingerprint: data.config_fingerprint } }).then(res => {
       if (scope.current.scope !== jobId || scope.current.version !== version) return
-      if (!res || res.ok === false) setError(errorText(res, 'Could not restore this schedule.'))
+      if (!res || res.ok === false) { setError(errorText(res, 'Could not restore this schedule.')); load(true) }
       else { setMessage(res.message || 'Previous schedule restored.'); setPreview(null); setConfirmed(false); onChanged(); return load() }
     }).catch(() => { if (scope.current.scope === jobId && scope.current.version === version) setError('Could not restore the schedule. Refresh before trying again.') })
       .finally(() => { running.current = false; if (scope.current.scope === jobId) setPending(null) })
@@ -1339,13 +1339,13 @@ function NativeCronControl({ ctx, jobId, onChanged = () => {} }) {
   const running = useRef(false)
   const edit = update => { update(); scope.current.version += 1; setPreview(null); setConfirmed(false); setMessage(null) }
   useEffect(() => { setData(null); setPreview(null); setConfirmed(false); setUndoConfirmed(false); setMessage(null); setSource(''); setSnapshot(false); setVerbatim(false) }, [jobId])
-  const load = useCallback(() => {
+  const load = useCallback((preserveError = false) => {
     if (!open) return
     const version = ++scope.current.version
     ctx.rest(`/native-cron?job_id=${encodeURIComponent(jobId)}`).then(res => {
       if (scope.current.scope !== jobId || scope.current.version !== version) return
       if (!res || res.ok === false) setError(errorText(res, 'Could not inspect this source attachment.'))
-      else { setData(res); setError(null) }
+      else { setData(res); if (!preserveError) setError(null) }
     }).catch(() => { if (scope.current.scope === jobId && scope.current.version === version) setError('Could not inspect this source attachment.') })
   }, [ctx, jobId, open])
   useEffect(() => { load(); return () => { scope.current.version += 1 } }, [load])
@@ -1355,7 +1355,7 @@ function NativeCronControl({ ctx, jobId, onChanged = () => {} }) {
     const version = ++scope.current.version
     ctx.rest(path, { method: 'POST', body: { job_id: jobId, ...body } }).then(res => {
       if (scope.current.scope !== jobId || scope.current.version !== version) return
-      if (!res || res.ok === false) setError(errorText(res, 'Could not complete this source action.'))
+      if (!res || res.ok === false) { setError(errorText(res, 'Could not complete this source action.')); if (mutation) load(true) }
       else if (!mutation) { setPreview(res); setConfirmed(false) }
       else { setData(res); setPreview(null); setConfirmed(false); setUndoConfirmed(false); setMessage(res.message || 'Source fields updated.'); onChanged() }
     }).catch(() => { if (scope.current.scope === jobId && scope.current.version === version) setError('Could not complete this source action.') })

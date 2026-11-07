@@ -105,7 +105,9 @@ def test_cache_hit_still_requires_host_policy_gate():
             return '{"error":"blocked"}'
         return middleware(tool_name="web_extract", args={"url": "https://e.invalid"}, next_call=handler)
     with fetch_cache.activate({"ttl_seconds": 60, "namespace": "public-test"}) as active:
-        assert host_call() == host_call()
+        first, second = host_call(), host_call()
+        assert json.loads(second)["content"] == json.loads(first)["content"]
+        assert fetch_cache.is_marked(second) and not fetch_cache.is_marked(first)
         assert "blocked" in host_call(False)
         assert active.hits == 1
     assert len(calls) == 1 and guards == [True, True, False]

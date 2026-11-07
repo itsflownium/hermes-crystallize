@@ -8,12 +8,13 @@ prompt cache from that point once, so each item shows how many calls it takes to
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
 from typing import Any, Optional
 
-from . import chat_savings, history, modelinfo, store
+from . import chat_savings, estimate, history, modelinfo, store
 
 CHARS_PER_TOKEN = 4         # Hermes's own rough rule, good enough to compare items
 TOP_ITEMS = 12
@@ -22,13 +23,20 @@ _NOTE = ("[Crystallize: removed from this chat to save money. If you need it, re
 MIN_REMOVABLE_CHARS = len(_NOTE) * 3    # below this the note saves too little to be worth it
 
 
-def _tokens(text: Any) -> int:
-    return math.ceil(len(text or "") / CHARS_PER_TOKEN)
+def _tokens(text: Any, model: Optional[str] = None) -> int:
+    return math.ceil(len(text or "") / estimate.chars_per_token(model))
 
 
 def _key(call_id: Any) -> str:
     """Some routes send "call_id|item_id", while the saved chat has only the first part."""
     return str(call_id or "").split("|")[0]
+
+
+def _digest(text: Any) -> str:
+    """Providers may reuse a call id, so the text tells two results apart."""
+    if isinstance(text, list):
+        text = "".join(str(block.get("text", "")) if isinstance(block, dict) else str(block) for block in text)
+    return hashlib.sha256(str(text or "").encode("utf-8", "replace")).hexdigest()
 
 
 def _read_chat(session_id: str) -> tuple[list[Any], str]:
@@ -75,11 +83,12 @@ def report(session_id: Optional[str]) -> dict[str, Any]:
     # Text after a removed item is re-sent uncached once, at the price of writing the cache.
     extra = max(0.0, prices["cache_write"] - prices["cache_read"]) if prices else None
 
-    sizes = [_tokens(r["content"]) + _tokens(r["tool_calls"]) for r in rows]
+    model = main.get("model")
+    sizes = [_tokens(r["content"], model) + _tokens(r["tool_calls"], model) for r in rows]
     is_call = [r["role"] == "assistant" for r in rows]
     calls = sum(is_call)
     labels = _call_labels(rows)
-    groups = {"Instructions": _tokens(system_prompt), "Your messages": 0, "AI replies": 0, "Small tool results": 0}
+    groups = {"Instructions": _tokens(system_prompt, model), "Your messages": 0, "AI replies": 0, "Small tool results": 0}
     items = []
     for i, row in enumerate(rows):
         key = _key(row["tool_call_id"])
@@ -119,7 +128,7 @@ def evict(session_id: str, call_id: str) -> dict[str, Any]:
     row = next((r for r in rows if r["role"] == "tool" and _key(r["tool_call_id"]) == key), None)
     if row is None:
         return {"ok": False, "message": "That result isn't in this chat any more."}
-    store.add_eviction(session_id, key, chat_savings._keep_full(row["content"] or "", session_id))
+    store.add_eviction(session_id, key, chat_savings._keep_full(row["content"] or "", session_id), _digest(row["content"]))
     return {"ok": True, "message": "Removed. Your next message sends the chat without it."}
 
 
@@ -128,12 +137,38 @@ def restore(session_id: str, call_id: str) -> dict[str, Any]:
     return {"ok": True, "message": "Put back. Your next message sends it again."}
 
 
+def _call_counts(request: dict[str, Any]) -> dict[str, int]:
+    """How many results in this request use each call id, across every request shape."""
+    counts: dict[str, int] = {}
+
+    def add(value: Any) -> None:
+        key = _key(value)
+        if key:
+            counts[key] = counts.get(key, 0) + 1
+
+    for message in request.get("messages") if isinstance(request.get("messages"), list) else []:
+        if not isinstance(message, dict):
+            continue
+        if message.get("role") == "tool":
+            add(message.get("tool_call_id"))
+        for block in message.get("content") if isinstance(message.get("content"), list) else []:
+            if isinstance(block, dict) and block.get("type") == "tool_result":
+                add(block.get("tool_use_id"))
+            elif isinstance(block, dict) and isinstance(block.get("toolResult"), dict):
+                add(block["toolResult"].get("toolUseId"))
+    for item in request.get("input") if isinstance(request.get("input"), list) else []:
+        if isinstance(item, dict) and item.get("type") == "function_call_output":
+            add(item.get("call_id"))
+    return counts
+
+
 def apply(request: Any, session_id: str) -> Optional[dict[str, Any]]:
     """The request with removed results swapped for a short note, or None if nothing changes.
     Copies only what it changes, because Hermes keeps using the original messages."""
     if not session_id or not isinstance(request, dict):
         return None
-    removed = store.evictions(session_id)
+    rows = store.eviction_rows(session_id)
+    removed = {key: row["full_id"] for key, row in rows.items()}
     if not removed:
         return None
     # Expiry or a missing original must never turn a saved result into an
@@ -146,16 +181,25 @@ def apply(request: Any, session_id: str) -> Optional[dict[str, Any]]:
         return None
     note = lambda key: _NOTE.format(id=removed[key])  # noqa: E731
     changed = False
+    seen = _call_counts(request)
+
+    def is_removed(key: str, content: Any) -> bool:
+        """When a call id appears once it's the removed result. When it repeats, only the
+        text that was removed goes, so a later result with the same id is never lost."""
+        if key not in removed:
+            return False
+        digest = rows[key].get("content_sha256")
+        return seen.get(key, 0) <= 1 or not digest or _digest(content) == digest
 
     def swap_block(block: Any) -> Any:
         nonlocal changed
         if not isinstance(block, dict):
             return block
-        if block.get("type") == "tool_result" and _key(block.get("tool_use_id")) in removed:  # Anthropic
+        if block.get("type") == "tool_result" and is_removed(_key(block.get("tool_use_id")), block.get("content")):  # Anthropic
             changed = True
             return {**block, "content": note(_key(block["tool_use_id"]))}
         inner = block.get("toolResult")  # Bedrock
-        if isinstance(inner, dict) and _key(inner.get("toolUseId")) in removed:
+        if isinstance(inner, dict) and is_removed(_key(inner.get("toolUseId")), inner.get("content")):
             changed = True
             return {**block, "toolResult": {**inner, "content": [{"text": note(_key(inner["toolUseId"]))}]}}
         return block
@@ -164,7 +208,7 @@ def apply(request: Any, session_id: str) -> Optional[dict[str, Any]]:
         nonlocal changed
         if not isinstance(message, dict):
             return message
-        if message.get("role") == "tool" and _key(message.get("tool_call_id")) in removed:  # OpenAI-style
+        if message.get("role") == "tool" and is_removed(_key(message.get("tool_call_id")), message.get("content")):  # OpenAI-style
             changed = True
             return {**message, "content": note(_key(message["tool_call_id"]))}
         if isinstance(message.get("content"), list):
@@ -175,7 +219,7 @@ def apply(request: Any, session_id: str) -> Optional[dict[str, Any]]:
 
     def swap_item(item: Any) -> Any:
         nonlocal changed
-        if isinstance(item, dict) and item.get("type") == "function_call_output" and _key(item.get("call_id")) in removed:  # Codex
+        if isinstance(item, dict) and item.get("type") == "function_call_output" and is_removed(_key(item.get("call_id")), item.get("output")):  # Codex
             changed = True
             return {**item, "output": note(_key(item["call_id"]))}
         return item

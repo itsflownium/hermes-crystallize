@@ -98,7 +98,8 @@ def make_transform_tool_result(ctx: Any) -> Callable[..., Any]:
                 if not session_id or not store.chat_enabled(session_id):
                     return None
                 return chat_savings.shrink(ctx, session_id, tool_name, result, turn_id=turn_id)
-            name = getattr(run, "job_name", None) if run else None
+            # A job's id, because two jobs can share a name.
+            name = (getattr(run, "job_id", None) or getattr(run, "job_name", None)) if run else None
             if not name or tool_name not in prerun.CLEANED_TOOLS or not tuning.cleans_results(name):
                 return None
             cleaned = prerun.clean_result(tool_name, result)
@@ -113,17 +114,26 @@ def make_transform_tool_result(ctx: Any) -> Callable[..., Any]:
     return transform
 
 
+def _run_key(run: Any, session_id: str) -> str:
+    execution_id = getattr(run, "execution_id", None)
+    return str(execution_id) if execution_id is not None else session_id
+
+
 def make_post_api_request(ctx: Any) -> Callable[..., None]:
     """Observe real Chat usage and keep Cron token totals for Runaway Brake."""
     from . import brake
 
-    def after_call(session_id: str = "", usage: Any = None, **_: Any) -> None:
+    def after_call(session_id: str = "", usage: Any = None, model: Any = None, **_: Any) -> None:
         try:
-            from . import handoffs
-            if ctx.current_cron_execution() is None:
-                handoffs.note_usage(session_id, usage)
-            if ctx.current_cron_execution() is not None and brake.enabled():
-                brake.note_usage(session_id, usage)
+            from . import estimate, handoffs
+            estimate.note_usage(session_id, model, usage)
+            run = ctx.current_cron_execution()
+            if run is None:
+                if store.chat_enabled(session_id):
+                    handoffs.note_usage(session_id, usage)
+            elif brake.enabled():
+                # Compression gives a run a new session id, but it's still one run.
+                brake.note_usage(_run_key(run, session_id), usage)
         except Exception:  # noqa: BLE001 — a hook must never break the run
             logger.debug("crystallize: counting tokens failed", exc_info=True)
 
@@ -137,7 +147,8 @@ def make_pre_tool_call(ctx: Any) -> Callable[..., Any]:
     def before_tool(session_id: str = "", args: Any = None, tool_name: str = "", turn_id: str = "", **_: Any) -> Any:
         try:
             run = ctx.current_cron_execution()
-            stopped = brake.check(getattr(run, "job_name", None), session_id) if run is not None else None
+            stopped = (brake.check(getattr(run, "job_name", None), session_id, _run_key(run, session_id))
+                       if run is not None else None)
             if stopped:
                 return stopped
         except Exception:  # noqa: BLE001 — a hook must never break the run
@@ -164,6 +175,15 @@ def make_llm_request(ctx: Any) -> Callable[..., Any]:
 
     def rewrite(request: Any = None, session_id: str = "", **_: Any) -> Any:
         current = request
+        try:  # observed before any change, and never allowed to affect the call
+            from . import estimate, request_settings
+            run = ctx.current_cron_execution()
+            if run is not None:
+                request_settings.record(getattr(run, "execution_id", None), request)
+            if run is not None or store.chat_enabled(session_id):
+                estimate.note_request(session_id, request)
+        except Exception:  # noqa: BLE001
+            logger.debug("crystallize: recording the request failed", exc_info=True)
         try:
             changed = rent.apply(request, session_id)
             if isinstance(changed, dict):
@@ -217,7 +237,7 @@ def make_transform_llm_output(ctx: Any) -> Callable[..., Any]:
             return chat_savings.fill_placeholders(response_text, session_id=session_id, turn_id=turn_id)
         except Exception:  # noqa: BLE001 — a hook must never break a turn
             logger.debug("crystallize: filling placeholders failed", exc_info=True)
-            if isinstance(response_text, str) and "{{crystal:" in response_text:
+            if isinstance(response_text, str) and chat_savings._PLACEHOLDER.search(response_text):
                 return ("[Crystallize could not recover the retained text for this reply. "
                         "Use crystal_full_result in the owning chat to recover the original before retrying.]")
             return None
@@ -255,7 +275,8 @@ def make_on_session_end(ctx: Any) -> Callable[..., None]:
             # This hook also runs for ordinary/manual sessions and bookkeeping errors.
             # Only this profile/session's active in-memory observations are removed.
             try:
-                brake.forget(session_id)
+                run = ctx.current_cron_execution()
+                brake.forget(_run_key(run, session_id) if run is not None else session_id)
             except Exception:  # noqa: BLE001
                 logger.debug("crystallize: brake cleanup failed", exc_info=True)
             try:

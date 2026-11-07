@@ -115,7 +115,7 @@ async def _serve(call: Callable[[], dict[str, Any]], *, message: str) -> dict[st
         code = "action_blocked" if type(exc).__name__ in {"ExperimentError", "ComparisonError", "AuctionError", "BlindError"} else "invalid_request"
         return {"ok": False, "code": code, "error": str(exc), "message": str(exc)}
     except Exception as exc:  # noqa: BLE001 — preserve friendly domain errors, hide internals
-        if type(exc).__name__ in {"LifecycleError", "ExperimentError", "ComparisonError", "RhythmError", "AuctionError", "BlindError", "NativeCronError"}:
+        if type(exc).__name__ in {"LifecycleError", "PublicToolsetRecovery", "ExperimentError", "ComparisonError", "RhythmError", "AuctionError", "BlindError", "NativeCronError"}:
             return {"ok": False, "code": "action_blocked", "error": str(exc), "message": str(exc)}
         logger.warning("crystallize: %s: %s", message, exc, exc_info=True)
         return {"ok": False, "code": "internal_error", "error": message, "message": message}
@@ -476,6 +476,12 @@ def _auction_args(body: dict) -> dict:
 async def auction_history(job_id: str) -> dict[str, Any]:
     return await _serve(lambda: {"ok": True, "auctions": _module("auction").history(_identifier(job_id, "job"))},
                         message="Couldn't load model comparisons.")
+
+
+@router.post("/auction-reconcile")
+async def auction_reconcile(body: dict) -> dict[str, Any]:
+    return await _serve(lambda: _module("auction").reconcile(confirmed=_boolean(body.get("confirmed"), "confirmed")),
+                        "Couldn't clear that auction")
 
 
 @router.post("/auction-preview")

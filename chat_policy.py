@@ -44,7 +44,9 @@ def _key(session_id: str) -> str:
 
 
 def _read(session_id: str) -> dict[str, Any]:
-    value = store.get_setting(_key(session_id), {})
+    # Choices carry across context compression; the newest segment with one wins.
+    value = next((found for found in (store.get_setting(_key(sid)) for sid in reversed(store._chat_ids(session_id)))
+                  if found is not None), {})
     value = value if isinstance(value, dict) else {}
     mode = value.get("default_mode")
     focus = value.get("focus")

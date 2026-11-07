@@ -60,12 +60,12 @@ def counted_runs(before: list[history.Run], trial: list[history.Run], answers: d
 def _measure(before: list[history.Run], trial: list[history.Run]) -> tuple[str, Optional[float], Optional[float]]:
     """What to compare: real cost if both sides have one. A subscription run costs $0 and some
     routes have no price, so those compare the cost at listed API prices. A model on no price
-    list compares all the tokens it used, since prompt tokens are usually most of the saving,
-    then time."""
+    list compares all the tokens it used, since prompt tokens are usually most of the saving.
+    Time isn't money, so a faster run alone is never a saving."""
     if not history.comparable_runs(before, trial):
         return "nothing", None, None
     fields = (("cost", lambda r: r.cost_usd), ("api cost", lambda r: r.api_cost_usd),
-              ("tokens", lambda r: r.total_tokens), ("seconds", lambda r: r.duration_s))
+              ("tokens", lambda r: r.total_tokens))
     for name, field in fields:
         if name == "api cost" and any(getattr(r, "pricing_uncertain", False) for r in before + trial):
             continue  # aggregate session totals cannot establish request-tier savings
@@ -88,6 +88,19 @@ def _amount(metric: Optional[str], value: Optional[float]) -> str:
     if value is None:
         return "?"
     return {"cost": f"${value:.4f}", "api cost": f"${value:.4f}", "tokens": f"{value:,.0f} tokens", "seconds": f"{value:.0f}s"}.get(metric or "", str(value))
+
+
+def _tokens_mislead(before: list[history.Run], trial: list[history.Run]) -> Optional[str]:
+    """Output costs far more than cached input, so fewer tokens can still cost more."""
+    def typical(runs: list[history.Run], field: str) -> Optional[float]:
+        values = [getattr(r, field, None) for r in runs]
+        return _mid(values) if values and all(isinstance(v, (int, float)) for v in values) else None
+
+    for field, label in (("api_cost_usd", "its listed price"), ("output_tokens", "its output")):
+        old, new = typical(before, field), typical(trial, field)
+        if old is not None and new is not None and new > old:
+            return f"it used fewer tokens overall, but {label} went up"
+    return None
 
 
 def evaluate(before: list[history.Run], trial: list[history.Run],
@@ -142,11 +155,18 @@ def evaluate(before: list[history.Run], trial: list[history.Run],
         if not history.comparable_runs(before, trial):
             return fail("model, provider and reasoning evidence must be known and identical to compare savings", "identity")
         return fail("there were no numbers to compare", "saving")
+    if metric == "tokens":
+        why = _tokens_mislead(before, trial)
+        if why:
+            return fail(why, "saving")
     uncertainty = adaptive.savings_evidence(_measurements(before, metric), _measurements(trial, metric))
     result["saving_evidence"] = uncertainty
     if not uncertainty.get("ok"):
         return fail(f"it wasn't cheaper beyond observed variation and sample uncertainty "
                     f"({_amount(metric, new_value)} vs {_amount(metric, old_value)} a run)", "saving")
+    if metric == "tokens":
+        return {**result, "ok": True, "why": "structural checks passed and it used fewer tokens; no price was available to show it got cheaper",
+                "money_saving_shown": False, "quality": {**result["quality"], "ok": True, "why": "structural checks passed"}}
     return {**result, "ok": True, "why": "structural checks passed and it got cheaper",
             "quality": {**result["quality"], "ok": True, "why": "structural checks passed"}}
 
@@ -200,7 +220,7 @@ def _save(name: str, data: dict[str, Any]) -> None:
     """Keep immutable campaign boundaries when the mutable control row changes."""
     from . import receipts
 
-    store.save_tuning(name, data)
+    store.save_tuning(data.get("job_id") or name, data)
     receipts.snapshot_tuning(data)
 
 
@@ -487,22 +507,35 @@ def _finish_restore(t: dict[str, Any]) -> None:
 
 def refresh() -> None:
     """Decide any trial that has enough runs. Never raises: the panel calls this on every load."""
+    for check in (lifecycle.recover_promotions, lifecycle.refresh_drift):
+        try:
+            check()
+        except Exception:  # noqa: BLE001
+            logger.warning("crystallize: %s failed", check.__name__, exc_info=True)
     try:
-        lifecycle.recover_promotions()
-        lifecycle.refresh_drift()
-        for t in store.list_tuning():
-            if _migrate_legacy(t):
-                continue
-            if t.get("needs_restore") or (t["status"] == "starting" and time.time() - t["started_at"] > STALE_START):
-                _finish_restore(t)
-            elif t["status"] in ("trial", "kept") and _configuration_drift(t):
-                continue
-            elif t["status"] == "trial":
-                _decide(t)
-            elif t["status"] == "kept":
-                _guard_kept(t)
+        trials = store.list_tuning()
     except Exception:  # noqa: BLE001
-        logger.warning("crystallize: checking efficiency trials failed", exc_info=True)
+        logger.warning("crystallize: reading efficiency trials failed", exc_info=True)
+        return
+    for t in trials:
+        # Each job stands alone: a job Hermes can't edit must not block rollbacks for the others.
+        try:
+            _refresh_one(t)
+        except Exception:  # noqa: BLE001
+            logger.warning("crystallize: checking the trial for %s failed", t.get("job_name"), exc_info=True)
+
+
+def _refresh_one(t: dict[str, Any]) -> None:
+    if _migrate_legacy(t):
+        return
+    if t.get("needs_restore") or (t["status"] == "starting" and time.time() - t["started_at"] > STALE_START):
+        _finish_restore(t)
+    elif t["status"] in ("trial", "kept") and _configuration_drift(t):
+        return
+    elif t["status"] == "trial":
+        _decide(t)
+    elif t["status"] == "kept":
+        _guard_kept(t)
 
 
 def _configuration_drift(t: dict[str, Any]) -> bool:
@@ -654,7 +687,13 @@ def measured(name: str, t: dict[str, Any]) -> Optional[dict[str, Any]]:
     since = t.get("first_started_at") or t.get("started_at")
     before, every = _split(t.get("job_id") or name, since)
     runs = [r for r in every if r.outcome in (None, "completed")]
-    if not before or not runs or t["status"] not in ("trial", "kept"):
+    if not before or t["status"] not in ("trial", "kept", "reverted"):
+        return None
+    if t["status"] == "reverted":  # what a failed trial cost still counts after it's undone
+        ended = t.get("reverted_at") or t.get("finished_at") or time.time()
+        every = [r for r in every if (r.session_started or 0) < ended]
+        runs = [r for r in every if r.outcome in (None, "completed")]
+    if not runs:
         return None
     metric, old, new = _measure(before, runs)
     if old is None or new is None:
@@ -750,7 +789,7 @@ def cards() -> list[dict[str, Any]]:
             "can_try": (not t or t["status"] in ("reverted", "undone", "revalidation") or (t["status"] == "kept" and not t.get("clean"))) and len(
                 [r for r in _split(job["id"], time.time())[0] if not t or t.get("status") != "revalidation" or
                  (r.session_started or r.started_ts) >= t.get("revalidation_at", 0)]) >= MIN_BEFORE_RUNS,
-            "cleaned_chars": store.get_cleaned(name) or None,
+            "cleaned_chars": (store.get_cleaned(job["id"]) + store.get_cleaned(name)) or None,
             "can_undo": bool(t and t["status"] in ("starting", "trial", "kept")),
         })
     out.sort(key=lambda c: c["cost_now"] or 0.0, reverse=True)

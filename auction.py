@@ -8,6 +8,7 @@ limit can guarantee a provider's final bill.
 
 from __future__ import annotations
 
+import logging
 import copy
 import json
 import math
@@ -16,6 +17,8 @@ import uuid
 from typing import Any, Callable, Optional
 
 from . import configured_models, contracts, experiments as ex, history as run_history, modelinfo, receipts, store
+
+logger = logging.getLogger(__name__)
 
 MIN_MODELS = 2
 MAX_MODELS = 6
@@ -240,7 +243,7 @@ def _start(record: dict[str, Any], plan: dict[str, Any], profile_key: str) -> No
             conn.execute("BEGIN IMMEDIATE")
             existing = conn.execute("SELECT auction_id FROM auction_profile_locks WHERE profile_key=?", (profile_key,)).fetchone()
             if existing:
-                raise AuctionError("An auction already holds this profile's budget. A running or interrupted call must be reconciled before another auction starts.")
+                raise AuctionError("An auction already holds this profile's budget. A running or interrupted call must be reconciled first: check its spend, then run `hermes crystal auction-reconcile --confirm`.")
             conn.execute("INSERT INTO auction_records VALUES (?, ?, ?, ?)",
                          (record["id"], record["job_id"], record["created_at"], encoded))
             conn.execute("INSERT OR IGNORE INTO auction_inputs VALUES (?, ?, ?, ?, ?)",
@@ -257,6 +260,36 @@ def _release(profile_key: str, auction_id: str) -> None:
         conn = store._db()
         conn.execute("DELETE FROM auction_profile_locks WHERE profile_key=? AND auction_id=?", (profile_key, auction_id))
         conn.commit()
+
+
+def locked() -> Optional[dict[str, Any]]:
+    """The auction holding this profile's budget, if any."""
+    with store._lock:
+        conn = store._db()
+        conn.executescript(_SCHEMA)
+        row = conn.execute("SELECT auction_id, created_at FROM auction_profile_locks WHERE profile_key=?",
+                           (_profile_key(),)).fetchone()
+    return {"auction_id": row[0], "created_at": row[1]} if row else None
+
+
+def reconcile(*, confirmed: bool = False) -> dict[str, Any]:
+    """Clear an auction that never finished, after you've checked what it cost.
+
+    The lock exists because billing for an interrupted call is unknown. So this never happens
+    by itself, and the record stays marked unresolved instead of looking like a clean result."""
+    held = locked()
+    if not held:
+        return {"ok": True, "cleared": False, "message": "No auction is holding this profile's budget."}
+    if not confirmed:
+        raise AuctionError("Check your provider's usage for any interrupted call first, then confirm to clear this auction.")
+    record = get(held["auction_id"])
+    if record:
+        record.update(status="reconciled_unknown_spend", finished_at=time.time(),
+                      stop_reason="Interrupted before finishing. Spend for its last call is unknown.")
+        _save(record)
+    _release(_profile_key(), held["auction_id"])
+    return {"ok": True, "cleared": True, "auction_id": held["auction_id"],
+            "message": "Cleared. Any spend from the interrupted call stays unknown in its record."}
 
 
 def _receipt(record: dict[str, Any], call: dict[str, Any]) -> None:
@@ -409,8 +442,36 @@ def run(job_id: str, models: Any, *, max_tokens: int = 1024, cost_cap_usd: float
                          "unknown_call_count": 0, "billing_cap_guaranteed": False}}
     profile_key = _profile_key()
     _start(record, plan, profile_key)
-    # A crash/persistence failure leaves the durable profile lock in place. No
-    # time-based lease may silently retry a call whose billing is unresolved.
+    # A process crash leaves the durable profile lock in place, and reconcile() clears it after
+    # review. No time-based lease may silently retry a call whose billing is unresolved.
+    try:
+        _run_routes(record, plan, completion, accept_estimated_cap)
+    except BaseException as exc:
+        # The call's billing is unknown, so the lock stays until reconcile(). The record says why.
+        record.update(status="interrupted_unknown_spend", finished_at=time.time(),
+                      stop_reason=f"Interrupted: {type(exc).__name__}. Spend for its last call is unknown.")
+        try:
+            _save(record)
+        except Exception:  # noqa: BLE001 — the original interruption is the one to report
+            logger.warning("crystallize: recording an interrupted auction failed", exc_info=True)
+        raise
+    if record["status"] == "running":
+        record["status"] = "completed"
+    record["failed_call_count"] = sum(c["status"] == "failed" for c in record["calls"])
+    record["all_answers_completed"] = len(record["calls"]) == len(record["models"]) and record["failed_call_count"] == 0
+    record["finished_at"] = time.time()
+    record["scoreboard"] = _scoreboard(record)
+    try:
+        record["blind_pairs"] = _blind_pairs(record)
+    except Exception as exc:
+        # Blind presentation is optional; its persistence cannot erase paid calls.
+        record["blind_review_error"] = str(exc)[:500]
+    _save(record)
+    _release(profile_key, record["id"])
+    return receipts.redact_export(record)
+
+
+def _run_routes(record: dict[str, Any], plan: dict[str, Any], completion: Callable[..., Any], accept_estimated_cap: bool) -> None:
     for route in plan["models"]:
         try:
             _grant([{k: route[k] for k in ("provider", "model")}])
@@ -447,20 +508,6 @@ def run(job_id: str, models: Any, *, max_tokens: int = 1024, cost_cap_usd: float
             _save(record)
             break
         _save(record)
-    if record["status"] == "running":
-        record["status"] = "completed"
-    record["failed_call_count"] = sum(c["status"] == "failed" for c in record["calls"])
-    record["all_answers_completed"] = len(record["calls"]) == len(record["models"]) and record["failed_call_count"] == 0
-    record["finished_at"] = time.time()
-    record["scoreboard"] = _scoreboard(record)
-    try:
-        record["blind_pairs"] = _blind_pairs(record)
-    except Exception as exc:
-        # Blind presentation is optional; its persistence cannot erase paid calls.
-        record["blind_review_error"] = str(exc)[:500]
-    _save(record)
-    _release(profile_key, record["id"])
-    return receipts.redact_export(record)
 
 
 def get(auction_id: str) -> Optional[dict[str, Any]]:
