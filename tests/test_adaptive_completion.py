@@ -230,7 +230,7 @@ def pruning(monkeypatch):
     monkeypatch.setattr(lifecycle, "_tuning_for_job", lambda found: tune)
     monkeypatch.setattr(lifecycle, "configuration_fingerprint", lambda *args: {"fingerprint": "same"})
     monkeypatch.setattr(store, "routine_for_job", lambda ref: None)
-    monkeypatch.setattr(history, "load_runs", lambda ref: runs)
+    monkeypatch.setattr(history, "load_runs", lambda ref, only_usable=False: runs)
     return request, tune, runs
 
 
@@ -259,6 +259,13 @@ def test_host_top_level_schema_shape_and_provider_reasoning_fields_are_preserved
     result = adaptive.prune_request(request, "job-id")
     assert result["thinking"] == request["thinking"]
     assert result["tools"][0] == request["tools"][0]
+
+
+def test_foreign_job_runs_cannot_justify_pruning_this_jobs_tools(pruning):
+    request, tune, runs = pruning
+    for run in runs:
+        run.job_id = "unrelated-job"
+    assert adaptive.prune_request(request, "job-id") is None
 
 
 @pytest.mark.parametrize("uncertainty", ["off", "legacy_reasoning", "incomplete", "new_tool", "tool_error", "drift", "varying", "no_discovery", "explicit_tool"])

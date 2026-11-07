@@ -100,7 +100,7 @@ def test_script_prompt_and_interpreter_promote_and_restore_in_one_cli_edit(monke
             job[fields[flag]] = value or None
 
     monkeypatch.setattr(lifecycle, "_edit_job", edit)
-    lifecycle.promote("r")
+    lifecycle.promote("r", mode="prerun")
     assert len(calls) == 1 and "--interpreter" in calls[0][1]
     routine = store.get_routine("r")
     assert lifecycle._restore_attachment(routine, routine["meta"])

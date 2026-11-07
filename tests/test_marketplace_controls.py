@@ -67,13 +67,17 @@ def test_ordinary_host_tool_promotion_is_explicit_and_does_not_claim_replay(monk
     result = call(api.promote_routine, {"routine_id": "r-a", "mode": "tool"})
     assert result["ok"] and "normal host-tool guidance" in result["message"]
     assert calls == [("r-a", "tool")]
+    result = call(api.promote_routine, {"routine_id": "r-b"})
+    assert result["ok"] and "normal host-tool guidance" in result["message"]
+    assert calls[-1] == ("r-b", "tool")
     assert call(api.promote_routine, {"routine_id": "r-a", "mode": "override"})["code"] == "invalid_request"
-    assert len(calls) == 1
+    assert len(calls) == 2
 
 
 def test_cli_can_use_host_tool_mode_and_requires_explicit_price_acknowledgment(monkeypatch, tmp_path):
     parser = argparse.ArgumentParser()
     cli._setup(parser)
+    assert parser.parse_args(["promote", "daily"]).mode == "tool"
     assert parser.parse_args(["promote", "daily", "--mode", "tool"]).mode == "tool"
     args = parser.parse_args(["rate-card", "--file", str(tmp_path / "card.json")])
     monkeypatch.setattr(public_pricing, "save_rate_card", lambda value: pytest.fail("Unconfirmed card was saved"))

@@ -134,7 +134,7 @@ def _with_tools(sid, cost, tools):
 
 
 def _choices(monkeypatch, runs, job=None, answered=True):
-    monkeypatch.setattr(tuning.history, "load_runs", lambda name: runs)
+    monkeypatch.setattr(tuning.history, "load_runs", lambda name, only_usable=False: runs)
     monkeypatch.setattr(tuning.history, "final_answers", lambda ids: {i: ANSWER for i in ids} if answered else {})
     monkeypatch.setattr(tuning.store, "routine_for_job", lambda job_id: None)
     names = {"web_extract": "web", "terminal": "terminal", "skill_view": "skills", "send_message": "messaging"}

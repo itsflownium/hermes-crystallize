@@ -48,7 +48,7 @@ def env(monkeypatch, *, prompt="Summarize https://example.com/feed", own_script=
 def test_installed_wrappers_hints_and_tool_order_do_not_create_drift(monkeypatch):
     job, _, _ = env(monkeypatch)
     original = lifecycle.configuration_fingerprint(job, store.get_routine("cr_1"))
-    lifecycle.promote("cr_1")
+    lifecycle.promote("cr_1", mode="prerun")
     assert lifecycle.check_drift("cr_1")
     assert store.get_routine("cr_1")["meta"]["config_snapshot"]["fingerprint"] == original["fingerprint"]
     job["prompt"] += tuning.EFFICIENCY_HINT
@@ -72,7 +72,7 @@ def test_harmless_prompt_formatting_is_ignored_but_code_indentation_is_not(monke
                                                ("enabled_toolsets", ["web"]), ("workdir", "/new/work")])
 def test_meaningful_user_changes_detach_and_require_fresh_revalidation(monkeypatch, field, value):
     job, _, _ = env(monkeypatch)
-    lifecycle.promote("cr_1")
+    lifecycle.promote("cr_1", mode="prerun")
     job[field] = value
     assert not lifecycle.check_drift("cr_1")
     current = store.get_routine("cr_1")
@@ -97,7 +97,7 @@ def test_contract_recipe_bindings_and_shared_cache_settings_are_fingerprinted(mo
 
 def test_undo_preserves_updated_task_and_user_script_instead_of_saved_snapshot(monkeypatch):
     job, _, _ = env(monkeypatch)
-    lifecycle.promote("cr_1")
+    lifecycle.promote("cr_1", mode="prerun")
     job["prompt"] = lifecycle.prerun_prompt("cr_1", "New user task; retain this edit")
     job["script"] = "user-replacement.sh"
     lifecycle.undo("cr_1")
@@ -107,7 +107,7 @@ def test_undo_preserves_updated_task_and_user_script_instead_of_saved_snapshot(m
 
 def test_unrecognized_edited_wrapper_keeps_fallback_script_and_user_text(monkeypatch):
     job, _, _ = env(monkeypatch)
-    lifecycle.promote("cr_1")
+    lifecycle.promote("cr_1", mode="prerun")
     job["prompt"] = job["prompt"].replace("Current and complete", "checked") + "\nExtra user instruction"
     # Make a real wrapper-prefix edit, rather than an edit in its task body.
     job["prompt"] = job["prompt"].replace("The Script Output", "My Script Output")
@@ -145,7 +145,7 @@ def test_routine_undo_does_not_resurrect_an_undone_efficiency_hint(monkeypatch):
     store.save_tuning("job", {"job_name": "job", "job_id": "j1", "status": "kept", "hint": True, "finished_at": 1})
     routine = store.get_routine("cr_1")
     store.update_routine("cr_1", meta={**routine["meta"], "config_snapshot": lifecycle.configuration_fingerprint(job, routine)})
-    lifecycle.promote("cr_1")
+    lifecycle.promote("cr_1", mode="prerun")
     tuning.undo("j1")
     lifecycle.undo("cr_1")
     assert job["prompt"] == "Summarize https://example.com/feed"
@@ -170,7 +170,7 @@ def test_tuning_drift_stops_transforms_and_uses_fresh_baseline(monkeypatch):
 
 def test_revalidation_rebuilds_targets_from_fresh_runs_not_old_shape(monkeypatch):
     job, _, _ = env(monkeypatch)
-    lifecycle.promote("cr_1")
+    lifecycle.promote("cr_1", mode="prerun")
     monkeypatch.setattr(lifecycle.time, "time", lambda: 10)
     job["prompt"] = "Fetch https://new.example/feed"
     assert not lifecycle.check_drift("cr_1")

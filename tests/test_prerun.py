@@ -198,7 +198,7 @@ def test_promote_attaches_the_script_and_undo_removes_it(monkeypatch, tmp_path):
             if flag in flags:
                 job[key] = flags[flags.index(flag) + 1]
     monkeypatch.setattr(lifecycle, "_edit_job", edit)
-    lifecycle.promote("cr_1")
+    lifecycle.promote("cr_1", mode="prerun")
     job_id, flags = edits[-1]
     assert job_id == "job1" and "--script" in flags and flags[flags.index("--script") + 1] == "crystallize/cr_1.py"
     assert "Script Output" in flags[flags.index("--prompt") + 1]

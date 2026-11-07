@@ -6,7 +6,8 @@ admission and activation of an installed copy are separate states.
 **Owner hold:** the work is unfinished. Continue development and review only in
 `itsflownium/hermes-crystallize`; do not open a PR on `NousResearch/hermes-agent`.
 The prepared catalog entry is an internal review artifact. No upstream PR was
-created, and PR #12 remains a draft until the remaining work is reviewed.
+created. PR #12 and its stacked follow-ups remain drafts until the remaining work
+is reviewed. Their individual code/CI results do not complete release validation.
 
 | Question | Current evidence | What remains |
 | --- | --- | --- |

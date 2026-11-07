@@ -92,12 +92,12 @@ def _skipped_runs(meta: dict[str, Any], job_name: str) -> list[history.Run]:
             for ts in meta.get(key) or []]
 
 
-def _live_runs(name: str, meta: dict[str, Any]) -> list[history.Run]:
+def _live_runs(job_id: str, meta: dict[str, Any]) -> list[history.Run]:
     """Every run since Promote, including failed ones and ones that made no tool calls or were skipped."""
     promoted_at = meta.get("promoted_at") or 0
-    ran = [r for r in history.load_runs(name)
+    ran = [r for r in history.runs_for_job(job_id)
            if r.scheduled and r.outcome not in ("running", "claimed") and r.started_ts >= promoted_at]
-    return sorted(ran + _skipped_runs(meta, name), key=lambda r: r.started_ts)
+    return sorted(ran + _skipped_runs(meta, job_id), key=lambda r: r.started_ts)
 
 
 _WINDOWS = (("24h", "24 hours", 86400), ("7d", "7 days", 7 * 86400), ("30d", "30 days", 30 * 86400), ("all", "All time", None))
@@ -264,9 +264,12 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
     routines: dict[str, Any] = {}
     for r in store.list_routines():
         if r["source"] == "cron":
-            routines[r["source_ref"]] = r
-            routines.setdefault(f"name:{r['name']}", r)  # a re-created job keeps its routine
-    jobs = {j.get("name") or j.get("id"): j for j in lifecycle.all_cron_jobs()}
+            routines.setdefault(r["source_ref"], r)
+    jobs = {j["id"]: j for j in lifecycle.all_cron_jobs() if j.get("id")}
+    tuning_by_id = {}
+    for t in store.list_tuning():
+        if t.get("job_id"):
+            tuning_by_id.setdefault(t["job_id"], t)
     running = history.running_job_ids()
     spotted, testing, live, watching, finished = [], [], [], [], []
     all_rows: list[list[dict[str, Any]]] = []
@@ -284,17 +287,18 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
 
     for summary in history.job_summaries():
         job_id = summary["job_id"]
-        name = summary["job_name"] or job_id
-        seen.add(name)
-        job = jobs.get(name)
+        job = jobs.get(job_id)
+        name = (job or {}).get("name") or summary["job_name"] or job_id
+        seen.add(job_id)
         cron = cron_state(job, running)
         active = cron["status"] != "finished"
-        runs = history.load_runs(summary["job_name"] or job_id, only_usable=True)
+        runs = history.runs_for_job(job_id, only_usable=True)
         a = analyze.analyze_runs(runs, analyze.job_prompt(job_id))
+        projection = lifecycle.analysis_projection(a)
         per_week = _capped_per_week(_schedule_runs_per_week(job) or _runs_per_week(runs), cron)
         per_run_saving = None
-        if a.avg_cost_usd is not None and a.est_cost_after_usd is not None:
-            per_run_saving = max(0.0, a.avg_cost_usd - a.est_cost_after_usd)
+        if a.avg_cost_usd is not None and projection["cost_after_usd"] is not None:
+            per_run_saving = max(0.0, a.avg_cost_usd - projection["cost_after_usd"])
 
         fetch_steps = sum(1 for s in a.steps if s.kind in ("fixed", "fill-in", "varies", "frozen"))
         card = {
@@ -302,17 +306,18 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
             "cron": cron,
             "strategy": a.strategy,
             "job_id": job_id,
-            "name": summary["job_name"] or job_id,
+            "name": name,
             "runs": a.runs_used,
             "steps": len(a.steps),
             "scriptable_steps": sum(1 for s in a.steps if s.kind in ("fixed", "fill-in", "varies")),
             "cost_now": a.avg_cost_usd,
-            "cost_after": a.est_cost_after_usd,
+            "cost_after": projection["cost_after_usd"],
+            "projection": projection,
             "agent_free": a.agent_free,
             "reason": a.reason,
         }
 
-        routine = routines.get(job_id) or routines.get(f"name:{summary['job_name']}")
+        routine = routines.get(job_id)
         meta = (routine or {}).get("meta") or {}
         if routine:
             card["fetch_steps"] = routine.get("steps") or card["fetch_steps"]  # list_routines gives the step count
@@ -320,11 +325,11 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         promoted_at = meta.get("promoted_at") if is_live else None
         cutoff = (meta.get("first_promoted_at") or promoted_at) if is_live else None
         before = [r for r in runs if not cutoff or r.started_ts < cutoff]
-        after = _live_runs(summary["job_name"] or job_id, meta) if is_live else None
+        after = _live_runs(job_id, meta) if is_live else None
         card.update(_before_after(before, after))
         card["timeline"] = _timeline(before, after or [])
-        tune = store.get_tuning(name)
-        tuned = tuning.measured(name, tune) if tune and not is_live else None
+        tune = tuning_by_id.get(job_id)
+        tuned = tuning.measured(job_id, tune) if tune and not is_live else None
         tuned_saving = 0.0
         tuned_runs = None
         if tuned:
@@ -339,7 +344,7 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
             else:
                 saved += tuned_saving
         promoted = (promoted_at or 0)
-        earlier = [r for r in history.load_runs(name)
+        earlier = [r for r in history.runs_for_job(job_id)
                    if r.scheduled and r.finished and not (is_live and r.started_ts >= promoted)]
         everything = earlier + (after or [])
         if tuned and tuned["metric"] == "cost":
@@ -362,7 +367,7 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
             score_done += weight * (1.0 if tune["status"] == "kept" else 0.5)
         elif active and not routine:
             score_weight += weight
-        week_saving = per_run_saving * per_week if per_run_saving is not None and per_week is not None else 0.0
+        week_saving = per_run_saving * per_week if per_run_saving is not None and per_week is not None else None
         card["saving_per_week"] = week_saving
         card["runs_per_week"] = per_week
         if not active:  # nothing it can do now, so no promises and no buttons: only what it saved
@@ -403,24 +408,24 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
             needed = meta.get("needed", 3) or 3
             score_weight += weight
             score_done += weight * 0.5 * min(1.0, meta.get("matches", 0) / needed)
-            could_save_week += week_saving
+            could_save_week += week_saving or 0.0
             tests = meta.get("tests") or []
             testing.append({**card, "routine_id": routine["id"], "matches": meta.get("matches", 0),
                             "needed": meta.get("needed", 3), "ready": bool(meta.get("ready")),
                             "last_test": tests[-1] if tests else None})
         elif a.ready:
             spotted.append(card)
-            could_save_week += week_saving
+            could_save_week += week_saving or 0.0
         else:
             watching.append({**card, "reason": f"Routine: {a.reason}"})
 
-    for name, job in jobs.items():  # scheduled, but no runs recorded yet
-        if name in seen or job.get("state") == "completed":
+    for job_id, job in jobs.items():  # scheduled, but no runs recorded yet
+        if job_id in seen or job.get("state") == "completed":
             continue
         cron = cron_state(job, running)
         if not cron["no_ai"]:
             waiting_jobs += 1
-        watching.append({"job_id": job.get("id"), "name": name, "cron": cron, "reason": (
+        watching.append({"job_id": job_id, "name": job.get("name") or job_id, "cron": cron, "reason": (
             "Runs with no AI, so there's nothing to save." if cron["no_ai"] else "Waiting for its first runs.")})
 
     # A job with no runs yet still counts: it has simply saved nothing so far.
@@ -429,21 +434,20 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
     score = round(100 * score_done / score_weight) if score_weight > 0 else None
 
     quick = tuning.cards()
-    tune_by_name = {c["name"]: c for c in quick}
-    routine_rows = {r["name"]: store.get_routine(r["id"]) for r in store.list_routines()
-                    if r["source"] == "cron" and r["status"] != "retired"}
+    tune_by_id = {c["job_id"]: c for c in quick}
+    routine_rows = {job_id: routine_full(row) for job_id, row in routines.items()}
     for card in spotted + testing + live + watching:
-        name = card["name"]
-        card["tune"] = tune_by_name.get(name)
-        job = jobs.get(name) or {}
+        job_id = card["job_id"]
+        card["tune"] = tune_by_id.get(job_id)
+        job = jobs.get(job_id) or {}
         route = tuning.modelinfo.route(job)
-        recent = [r for r in history.load_runs(name) if r.scheduled and r.finished][-8:]
+        recent = [r for r in history.runs_for_job(job_id) if r.scheduled and r.finished][-8:]
         card["cost_parts"] = cost_parts(recent, tuning.modelinfo.token_prices(route.get("model"), route.get("provider")))
-        card["ladder"] = ladder(routine_rows.get(name), store.get_tuning(name), card,
+        card["ladder"] = ladder(routine_rows.get(job_id), tuning_by_id.get(job_id), card,
                                 routine_possible=card in spotted, can_tune=bool((card["tune"] or {}).get("can_try")))
         # Capability facts reach every control, including a newly spotted job
         # with no saved routine. Missing SDK guards must never look executable.
-        candidate = routine_rows.get(name) or {"source_ref": job.get("id"), "status": "spotted", "meta": {}}
+        candidate = routine_rows.get(job_id) or {"source_ref": job.get("id"), "status": "spotted", "meta": {}}
         card["promotion_availability"] = lifecycle.promotion_availability(candidate)
     for card in finished:
         card["promotion_availability"] = {"try_available": False, "available": False,
@@ -474,7 +478,7 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         "saved_usd": saved,
         "saved_api_usd": saved_api or None,
         "api_saving_usd_per_week": api_week or None,
-        "could_save_usd_per_week": could_save_week,
+        "could_save_usd_per_week": could_save_week if lifecycle._replay_available() else None,
         "spotted": spotted,
         "testing": testing,
         "live": live,

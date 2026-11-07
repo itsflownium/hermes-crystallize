@@ -89,6 +89,17 @@ def test_explicit_plan_promotion_changes_only_prompt_and_undo_restores_it(public
     assert job == original
 
 
+def test_default_promotion_uses_available_host_plan_without_changing_model_or_scripts(public_job):
+    job, rid, edits, files, _ = public_job
+    original = deepcopy(job)
+    availability = lifecycle.promotion_availability(rid)
+    assert availability["default_mode"] == "tool" and availability["available"]
+    promoted = lifecycle.promote(rid)
+    assert promoted["meta"]["mode"] == "tool" and not files
+    assert all(flags[0] == "--prompt" for flags in edits)
+    assert {k: v for k, v in job.items() if k != "prompt"} == {k: v for k, v in original.items() if k != "prompt"}
+
+
 def test_live_plan_returns_guidance_without_success_or_nested_execution(public_job, monkeypatch):
     job, rid, edits, files, _ = public_job
     lifecycle.promote(rid, mode="tool")

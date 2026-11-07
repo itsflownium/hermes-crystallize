@@ -170,7 +170,14 @@ before explicit `promote --mode tool`. That mode installs recipe guidance: the
 main agent calls `crystal_run` to obtain a **pending, non-executing host-tool plan**,
 then makes/validates each ordinary tool call under normal host approvals.
 
-No read prefix is automatically replayed. The default pre-run/script and no-AI
+`promote JOB` defaults to this host-tool guidance in the CLI and API. Explicit
+automatic modes still require the guarded capability and fail before job edits
+when it is missing. Analysis and dashboard cards suppress automatic savings
+projections on this SDK; guidance savings need their own normal-run evidence.
+Cards, routine attachments, tuning and run cohorts follow durable job IDs, so
+renaming a job retains its history and reusing its name does not inherit it.
+
+No read prefix is automatically replayed. The optional pre-run/script and no-AI
 modes are unsupported because the public dispatch implementation does not verify
 the full guard pipeline. `leaves_to_ai: true` preserves all remaining task work
 and reasoning. Plans do not constitute results or successful actions.

@@ -913,9 +913,10 @@ def job_prompt(job_id: Optional[str]) -> Optional[str]:
 
 
 def analyze_job(job: str) -> Analysis:
-    from . import history
+    from . import history, lifecycle
 
-    runs = history.load_runs(job, only_usable=True)
+    found = lifecycle.cron_job(job)
+    runs = history.runs_for_job((found or {}).get("id") or job, only_usable=True)
     job_id = runs[-1].job_id if runs else None
     return analyze_runs(runs, job_prompt(job_id or job))
 

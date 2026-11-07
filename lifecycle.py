@@ -1,15 +1,9 @@
-"""A routine's life: Try → test runs → Promote → live (→ automatic Undo on failures).
+"""Learn from scheduled observations and attach reversible host-tool guidance.
 
-  try_job      Save the job's step list as a routine in "testing".
-  test_after   After each normal scheduled run, run the routine's steps too (tool
-               calls only, no AI) and compare their outputs with what the real run
-               got. Three matching runs in a row make it ready to promote.
-  promote      Give the cron job a pre-run script that runs the routine before the
-               AI starts and puts its data in the prompt (or skips the AI when the
-               data hasn't changed). The original prompt is kept for Undo.
-  undo         Put the original prompt back exactly and remove the script.
-  live_result  Called by crystal_run. Two failures in a row undo the routine
-               automatically, so a broken routine never keeps a job broken.
+On the reviewed public SDK, testing observes ordinary host runs and promotion
+defaults to a recipe the main agent executes with its normal tools. Automatic
+shadow replay, pre-run scripts and no-AI modes require verified guarded dispatch
+and remain unavailable. Legacy attachments retain their recovery/Undo support.
 """
 
 from __future__ import annotations
@@ -167,8 +161,8 @@ def promotion_availability(routine: Any) -> dict[str, Any]:
     prerequisites = {"job_present": bool(job), "configuration_current": binding, "read_recipe_safe": safe,
                      "observations_ready": ready, "main_agent_present": bool(job and not job.get("no_agent")),
                      "guarded_dispatch_available": guarded}
-    return {"default_mode": "prerun", "suggested_available_mode": "tool", "ready": ready,
-            "available": bool(eligible and guarded), "automatic_replay_available": guarded,
+    return {"default_mode": "tool", "suggested_available_mode": "tool", "ready": ready,
+            "available": eligible, "automatic_replay_available": guarded,
             "guarded_dispatch_available": guarded,
             "public_dispatch_method_present": bool(support.get("public_dispatch_method_present")),
             "validation_mode": meta.get("validation_mode", "legacy_unspecified"),
@@ -185,6 +179,19 @@ def promotion_availability(routine: Any) -> dict[str, Any]:
                       "no_ai": {"available": bool(eligible and guarded and not actions),
                                 "reason": "The job's actions require its main agent." if actions else ordinary_reason if guarded else reason,
                                 "execution": "guarded_replay"}}}
+
+
+def analysis_projection(analysis: analyze.Analysis) -> dict[str, Any]:
+    """Keep a structural replay estimate separate from a usable/measured saving."""
+    available = _replay_available()
+    return {"status": "hypothetical" if available else "unavailable",
+            "requires": "verified_guarded_automatic_replay",
+            "cost_after_usd": analysis.est_cost_after_usd if available else None,
+            "api_calls_after": analysis.est_api_calls_after if available else None,
+            "savings_verified": False,
+            "reason": ("Unmeasured structural projection from call counts; not a price or quality guarantee."
+                       if available else "Automatic replay is unavailable. Host-tool guidance keeps the main agent running; "
+                       "its savings must be measured separately.")}
 
 
 def _set_job_fields(job_id: str, fields: dict[str, Any]) -> None:
@@ -303,7 +310,9 @@ def configuration(job: dict[str, Any], routine: Optional[dict[str, Any]] = None,
             configured["enabled_toolsets"] = tune.get("previous_toolsets")
     meta = (routine or {}).get("meta") or {}
     script = job.get("script")
-    if routine and script == meta.get("installed_script", f"crystallize/{routine['id']}.py"):
+    routine_id = (routine or {}).get("id")
+    installed_script = meta.get("installed_script") or (f"crystallize/{routine_id}.py" if routine_id else None)
+    if installed_script and script == installed_script:
         script = meta.get("own_script")
     interpreter = job.get("interpreter")
     if meta.get("installed_interpreter") and interpreter == meta["installed_interpreter"]:
@@ -524,7 +533,7 @@ def try_job(job: str) -> dict[str, Any]:
         routine = steplist.build(a)
     except steplist.NotCrystallizable as exc:
         raise LifecycleError(str(exc)) from exc
-    if analyze.regular_actions(history.load_runs(a.job_name or a.job_id, only_usable=True)):
+    if analyze.regular_actions(history.runs_for_job(a.job_id, only_usable=True)):
         routine["leaves_to_ai"] = True  # the best-run path skips action steps, but the job still takes them
     rid = steplist.routine_id(a.job_id)
     _snapshot_campaign(store.get_routine(rid))
@@ -647,7 +656,7 @@ def observe_host_runs(routine: dict[str, Any]) -> Optional[dict[str, Any]]:
     cursor = meta.get("observation_cursor") or {}
     cursor_at = cursor.get("started", since)
     cursor_ids = set(cursor.get("execution_ids_at_started") or [])
-    runs = [run for run in history.load_runs(routine["source_ref"])
+    runs = [run for run in history.runs_for_job(routine["source_ref"])
             if run.scheduled and run.finished and run.outcome in (None, "completed")
             and (run.session_started or run.started_ts) >= max(since, cursor_at)
             and not ((run.session_started or run.started_ts) == cursor_at and run.execution_id in cursor_ids)
@@ -679,7 +688,7 @@ def _rebuild_after_drift(routine: dict[str, Any]) -> Optional[dict[str, Any]]:
     job = _bound_job(routine["source_ref"])
     if not job:
         return None
-    fresh = [r for r in history.load_runs(job["id"], only_usable=True)
+    fresh = [r for r in history.runs_for_job(job["id"], only_usable=True)
              if (r.session_started or r.started_ts) >= revalidation["at"]]
     if len(fresh) < analyze.MIN_RUNS:
         return None
@@ -700,7 +709,7 @@ def _rebuild_after_drift(routine: dict[str, Any]) -> Optional[dict[str, Any]]:
 
 
 def _execution_answer(execution_id: str, job_id: str) -> Optional[str]:
-    run = next((r for r in history.load_runs(job_id) if r.execution_id == execution_id), None)
+    run = next((r for r in history.runs_for_job(job_id) if r.execution_id == execution_id), None)
     if not run or not run.session_id:
         return None
     return history.final_answers([run.session_id]).get(run.session_id)
@@ -729,7 +738,8 @@ def test_after(execution_id: str, job_id: str, dispatch: runner.Dispatch) -> Opt
 
 def test_now(job: str, dispatch: runner.Dispatch) -> dict[str, Any]:
     """Run the routine once right now against the latest recorded run."""
-    a_runs = history.load_runs(job, only_usable=True)
+    found = cron_job(job)
+    a_runs = history.runs_for_job((found or {}).get("id") or job, only_usable=True)
     if not a_runs:
         raise LifecycleError(f"No recorded runs for {job!r}.")
     routine = store.routine_for_job(a_runs[-1].job_id or "")
@@ -764,7 +774,7 @@ def action_prompt(routine_id: str, original: str) -> str:
     )
 
 
-def promote(routine_id: str, mode: str = "prerun") -> dict[str, Any]:
+def promote(routine_id: str, mode: str = "tool") -> dict[str, Any]:
     """Switch the job over to its routine.
 
     "tool" installs recipe guidance for normal main-agent tool calls. Automatic
