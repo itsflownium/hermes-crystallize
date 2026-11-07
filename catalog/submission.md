@@ -1,16 +1,21 @@
 # Crystallize catalog submission draft
 
 Technical state: **exact-pin technical checks passed**.
-This file and the entry in this plugin repository are a preparation bundle. No upstream
-catalog PR, catalog listing, maintainer approval, or marketplace compliance is claimed.
+This file and the entry in this plugin repository are a preparation bundle. They do
+not themselves establish an upstream PR, catalog listing, maintainer approval, or
+marketplace compliance. Independently checked publication/review status is recorded
+separately; only a maintainer-merged upstream catalog entry establishes listing.
 
-Pin: `8f8bad5096b3c0c2041163457a7ea8aeea9db4b4` in https://github.com/itsflownium/hermes-crystallize; version `0.4.1`;
+Pin: `586d2b4708606dc8255437beea374aae4ddc11fe` in https://github.com/itsflownium/hermes-crystallize; version `0.4.1`;
 Hermes floor `>=0.22.7`. The pin is an existing plugin feature commit;
 the later catalog-only bundle commit must not replace it with a self-reference.
 
-Crystallize reduces repeated chat and cron work through explicit per-chat/per-job
-controls, guarded routines and local receipts. Main reasoning is not reduced by this
-validation. Observable contracts and frozen fixtures do not establish semantic equivalence.
+Crystallize targets repeated context and read planning through explicit per-chat/per-job
+controls and local receipts. Main reasoning is not reduced. No live savings percentage
+at unchanged reasoning is established for this public-SDK candidate. The research,
+writing, data, analysis, coding and cron fixtures are offline scope, not proof of
+universal live task/provider coverage or semantic equivalence. Automatic pre-run/no-AI
+routines remain unavailable on the reviewed SDK; their older savings do not transfer.
 
 Disclosures for reviewer and installer:
 
@@ -48,3 +53,9 @@ verify publication, install dependencies, open an upstream PR, or establish admi
 The catalog's canonical rules require a human-reviewed PR adding this entry to
 `NousResearch/hermes-agent/plugin-catalog/`. Only a maintainer merge lists it. An owner or
 major contributor must submit it. Each future SHA change requires another reviewed PR.
+
+## Operator verification — 7 November 2026
+
+The exact feature pin was resolved by a fresh Git clone with credential helpers disabled, and its raw manifest returned HTTP 200 without an Authorization header. Its cloned tree passed 1,253 tests with one optional dispatch-audit skip and the official 16 host checks with zero warnings. No paid provider call was made.
+
+Full host output: [submission-candidate-host-report.json](../docs/evidence/submission-candidate-host-report.json). Exact-pin verification and publication evidence: [submission-candidate-verification.json](../docs/evidence/submission-candidate-verification.json). Listing remains pending upstream maintainer review.

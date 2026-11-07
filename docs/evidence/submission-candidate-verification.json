@@ -1,0 +1,21 @@
+{
+  "source_kind": "hermes_plugins_validate",
+  "pinned_commit": "586d2b4708606dc8255437beea374aae4ddc11fe",
+  "host_source_commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
+  "ok": true,
+  "checks_passed": 16,
+  "errors": [],
+  "warnings": [],
+  "warnings_reviewed": true,
+  "private_import_findings": [],
+  "private_attribute_findings": [],
+  "security_status": "safe",
+  "provider_calls": 0,
+  "public_source_findings": [],
+  "publication_verification": {
+    "git_clone_head": "586d2b4708606dc8255437beea374aae4ddc11fe",
+    "git_credential_helpers_disabled": true,
+    "anonymous_manifest_http_status": 200,
+    "repository": "https://github.com/itsflownium/hermes-crystallize"
+  }
+}
