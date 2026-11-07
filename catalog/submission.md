@@ -59,3 +59,7 @@ major contributor must submit it. Each future SHA change requires another review
 The exact feature pin was resolved by a fresh Git clone with credential helpers disabled, and its raw manifest returned HTTP 200 without an Authorization header. Its cloned tree passed 1,253 tests with one optional dispatch-audit skip and the official 16 host checks with zero warnings. No paid provider call was made.
 
 Full host output: [submission-candidate-host-report.json](../docs/evidence/submission-candidate-host-report.json). Exact-pin verification and publication evidence: [submission-candidate-verification.json](../docs/evidence/submission-candidate-verification.json). Listing remains pending upstream maintainer review.
+
+## Owner hold
+
+This is an internal draft for `itsflownium/hermes-crystallize`. Development and release validation are unfinished. Do not open an upstream Hermes PR. No upstream PR was created; passing source/host checks is not completion, verified live savings, or deployment.

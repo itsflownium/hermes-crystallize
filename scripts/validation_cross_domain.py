@@ -88,18 +88,21 @@ def _error_type(exc: BaseException) -> str:
 def normalize_usage(usage: Any) -> dict[str, Any]:
     """Normalize only public usage fields, preserving unknown/error/zero distinctions."""
     fields = ("input_tokens", "output_tokens", "total_tokens", "cache_read_tokens", "cache_write_tokens")
-    tokens = {k: int(v) if (v := _number(_get(usage, k))) is not None and v.is_integer() else None for k in fields}
+    raw_tokens = {k: int(v) if (v := _number(_get(usage, k))) is not None and v.is_integer() else None for k in fields}
     host_estimate = _number(_get(usage, "cost_usd"))
-    supplied = [v for v in tokens.values() if v is not None]
-    invalid = any(_get(usage, k) is not None and tokens[k] is None for k in fields)
+    invalid = any(_get(usage, k) is not None and raw_tokens[k] is None for k in fields)
     invalid = invalid or (_get(usage, "cost_usd") is not None and host_estimate is None)
-    # The public dataclass defaults all token fields to zero when absent. Those
-    # defaults cannot establish a free call. Keep raw zeros visible as evidence.
-    ambiguous_zero = bool(supplied) and not any(supplied) and host_estimate is None
-    status = "invalid" if invalid else "unknown" if usage is None or not supplied or ambiguous_zero else "reported"
+    # The public helper facade loses presence information for every zero bucket,
+    # including cache counts on otherwise positive usage. Preserve received fields
+    # for audit, but never use those zeroes to certify comparable cache behavior.
+    ambiguous_zero = any(value == 0 for value in raw_tokens.values())
+    tokens = {key: value or None for key, value in raw_tokens.items()}
+    complete_counts = tokens["input_tokens"] is not None and tokens["output_tokens"] is not None
+    status = "invalid" if invalid else "reported" if complete_counts else "unknown"
     if tokens["total_tokens"] is None and tokens["input_tokens"] is not None and tokens["output_tokens"] is not None:
         tokens["total_tokens"] = tokens["input_tokens"] + tokens["output_tokens"]
-    return {"status": status, "tokens": tokens, "ambiguous_default_zero_tokens": ambiguous_zero,
+    return {"status": status, "tokens": tokens, "raw_token_fields": raw_tokens,
+            "ambiguous_default_zero_tokens": ambiguous_zero,
             "host_estimate_usd": host_estimate, "actual_billed_usd": None,
             "cost_status": "unknown" if host_estimate is None else "host_estimate_zero" if host_estimate == 0 else "host_estimate",
             "cost_basis": "host_estimate" if host_estimate is not None else "unknown"}

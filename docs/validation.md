@@ -122,6 +122,12 @@ against reservations where the host has no cost field. Twelve $0.10 calls
 reserve $1.20, plus any earlier attempts. Actual billing stays unknown and no
 verified cost-saving claim is produced. Reconcile provider billing separately.
 
+Reports preserve sanitized `raw_token_fields` received from the public facade.
+Because that facade can default missing counters to zero, normalized zero buckets
+remain unknown, including cache counters on otherwise positive usage. Unknown
+cache state cannot qualify a cost-reduction percentage; incomplete input/output
+counts cannot qualify a comparison even when a host cost estimate is present.
+
 Reports distinguish reported token counts, Hermes `usage.cost_usd` estimates,
 actual billing (`null`, unavailable through this facade), and error/interrupted
 attempts. Missing usage and ambiguous default all-zero tokens remain unknown.

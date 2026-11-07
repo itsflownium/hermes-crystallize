@@ -381,6 +381,8 @@ def generate(repo: Path, sha: str, output: Path, repo_url: str | None = None, *,
                     "security_status": supplied["security_status"], "independently_authenticated_by_generator": False}
     technical_ready = static_ready and verified["ok"] and bool(entry["screenshots"])
     readiness = {"schema_version": 1, "status": "submission_bundle_only", "catalog_ready": False,
+                 "release_ready": False, "owner_submission_approval": None,
+                 "release_ready_meaning": "Technical checks do not establish live effectiveness, installed-build activation or owner approval to submit.",
                  "catalog_ready_meaning": "Human admission/listing is not established by local technical checks.",
                  "pinned_commit": tree.sha, "pinned_manifest_version": manifest["version"],
                  "literal_capabilities_match_manifest": True, "source_analysis": analysis,

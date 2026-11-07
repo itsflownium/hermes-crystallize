@@ -314,8 +314,8 @@
     "requires_env_validation": "Manifest-declared mandatory names only; host load/secret-scope validation remains required."
   },
   "technical_static_ready": true,
-  "technical_ready_for_submission": true,
-  "technical_readiness": "exact-pin technical checks passed",
+  "technical_ready_for_submission": false,
+  "technical_readiness": "Internal draft: candidate pin must be refreshed after pending validation-runner changes; owner submission hold is active.",
   "technical_checks": {
     "literal_capabilities": true,
     "public_api_only": true,
@@ -345,7 +345,8 @@
   "admission": {
     "listed": false,
     "maintainer_merge": "pending",
-    "public_pin_availability": "operator_checked_public_git_and_http"
+    "public_pin_availability": "operator_checked_public_git_and_http",
+    "submission_status": "deferred_by_owner"
   },
   "pinned_features": {
     "delegated_file_handoffs": true,
@@ -360,14 +361,20 @@
     "warnings_suppressed": false,
     "command": "hermes plugins validate /path/to/pinned-checkout --install-deps"
   },
-  "technical_blockers": [],
+  "technical_blockers": [
+    "Refresh the exact candidate pin and its evidence after internal validation-runner work is completed."
+  ],
   "blockers": [
-    "Upstream catalog review PR and maintainer review/merge remain pending."
+    "Fresh, scoped live validation of this implementation remains pending.",
+    "The installed checkout and running gateway have not been verified at this candidate.",
+    "Automatic pre-run/no-AI execution remains unavailable on the reviewed public SDK.",
+    "Owner has deferred upstream submission until work in itsflownium/hermes-crystallize is completed and reviewed."
   ],
   "limitations": [
     "Static literal registration comparison is not a runtime-load or security scan.",
     "The local host catalog policy was used; re-read it at actual submission.",
-    "No live provider, semantic-equivalence or actual-billing proof is manufactured."
+    "No live provider, semantic-equivalence or actual-billing proof is manufactured.",
+    "Technical readiness records exact-pin source/host checks only; release_ready remains false while product validation and activation are incomplete."
   ],
   "publication_verification": {
     "source": "operator_checked_public_git_and_http",
@@ -380,5 +387,13 @@
   "canonical_catalog_policy_review": {
     "commit": "8153953654574f8624dc3652b1df7162ead425a8",
     "date": "2026-11-07"
-  }
+  },
+  "release_ready": false,
+  "release_status": "unfinished_owner_review",
+  "owner_submission_approval": false,
+  "publication_scope": "Public source-pin availability only; no marketplace submission or listing.",
+  "pending_changes_since_pin": [
+    "Conservative SDK usage normalization in the benchmark runner.",
+    "Explicit owner hold and unfinished-release status."
+  ]
 }

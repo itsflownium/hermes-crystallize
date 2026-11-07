@@ -166,6 +166,30 @@ def test_usage_absent_default_zero_and_reported_zero_are_distinct():
     assert zero["host_estimate_usd"] == 0.0 and zero["actual_billed_usd"] is None
 
 
+def test_default_cache_zeroes_do_not_qualify_a_benchmark_savings_percentage():
+    report = run()
+    assert report["comparison"]["both_pass_observable_checks"]
+    assert not report["comparison"]["cost_comparison_eligible"]
+    assert report["comparison"]["host_estimate_reduction_pct"] is None
+    usage = report["calls"][0]["usage"]
+    assert usage["raw_token_fields"]["cache_read_tokens"] == 0
+    assert usage["tokens"]["cache_read_tokens"] is None
+    assert usage["tokens"]["cache_write_tokens"] is None
+
+
+@pytest.mark.parametrize("missing", ["input_tokens", "output_tokens"])
+def test_default_input_or_output_zero_cannot_qualify_a_benchmark(missing):
+    counts = dict(input_tokens=100, output_tokens=50, total_tokens=150,
+                  cache_read_tokens=10, cache_write_tokens=10, cost_usd=0.01)
+    counts[missing] = 0
+    ctx, _ = fake_context(fixtures.FIXTURES[0], usage=SimpleNamespace(**counts))
+    report = run(ctx=ctx)
+    assert report["calls"][0]["usage"]["status"] == "unknown"
+    assert report["cost_summary"]["complete_host_estimate_usd"] == 0.02
+    assert not report["comparison"]["cost_comparison_eligible"]
+    assert report["comparison"]["host_estimate_reduction_pct"] is None
+
+
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), -1, True, "0.01", 10**400])
 def test_invalid_usage_is_not_fabricated_as_zero_or_actual(bad):
     usage = validation.normalize_usage({"input_tokens": 1, "output_tokens": 2, "cost_usd": bad})
