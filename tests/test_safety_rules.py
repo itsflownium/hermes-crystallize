@@ -281,6 +281,6 @@ def test_failed_live_runs_stay_in_spend_totals(monkeypatch):
             _run(3, [], started=300.0, cost=9.0, outcome="running")]
     monkeypatch.setattr(history, "load_runs", lambda name=None, only_usable=False: runs)
     monkeypatch.setattr(overview, "_skipped_runs", lambda meta, name: [])
-    live = overview._live_runs("job", {"promoted_at": 50.0})
+    live = overview._live_runs("j", {"promoted_at": 50.0})
     assert [r.outcome for r in live] == ["completed", "failed"]
     assert overview.period_rows(live, 0.02, live, now=400.0)[0]["spent_usd"] == pytest.approx(0.04)

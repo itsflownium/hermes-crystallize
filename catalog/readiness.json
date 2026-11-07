@@ -362,7 +362,7 @@
     "command": "hermes plugins validate /path/to/pinned-checkout --install-deps"
   },
   "technical_blockers": [
-    "Refresh the exact candidate pin and its evidence after internal validation-runner work is completed."
+    "Refresh the exact candidate pin and its evidence after internal validation-runner and cron identity/guidance work is completed."
   ],
   "blockers": [
     "Fresh, scoped live validation of this implementation remains pending.",
@@ -394,6 +394,8 @@
   "publication_scope": "Public source-pin availability only; no marketplace submission or listing.",
   "pending_changes_since_pin": [
     "Conservative SDK usage normalization in the benchmark runner.",
-    "Explicit owner hold and unfinished-release status."
+    "Explicit owner hold and unfinished-release status.",
+    "Durable cron job-ID cohorts, corrected host-tool promotion defaults and suppressed unavailable automatic savings projections.",
+    "Refreshed offline capabilities/host-plan capture for the cron projection changes."
   ]
 }

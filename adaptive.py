@@ -163,7 +163,7 @@ def _prune_request(request: Any, job_ref: str, *, tuning: Optional[dict[str, Any
     snapshot = lifecycle.configuration_fingerprint(found, store.routine_for_job(found["id"]), tune)
     if not saved or snapshot.get("fingerprint") != saved.get("fingerprint"):
         return None
-    runs = history.load_runs(found["id"])
+    runs = history.runs_for_job(found["id"])
     # Trial observations cannot teach away a tool the unoptimized job used.
     boundary = tune.get("baseline_until", tune.get("first_started_at", tune.get("started_at", 0)))
     baseline = [run for run in runs if (run.session_started or run.started_ts) < boundary]

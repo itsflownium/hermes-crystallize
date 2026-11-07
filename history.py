@@ -714,6 +714,17 @@ def _avg(values: list[Optional[float]]) -> Optional[float]:
     return sum(nums) / len(nums) if nums else None
 
 
+def runs_for_job(job_id: str, only_usable: bool = False) -> list[Run]:
+    """Read an authoritative job ID without also accepting another job's name.
+
+    The interactive history search accepts either names or IDs. Once a caller
+    has a durable ID, its accounting must never inherit a matching display name.
+    """
+    if not isinstance(job_id, str) or not job_id or job_id == "?":
+        return []
+    return [run for run in load_runs(job_id, only_usable=only_usable) if run.job_id == job_id]
+
+
 def job_summaries() -> list[dict[str, Any]]:
     """One line per cron job: how many runs we can learn from and what they cost."""
     # A display name can be reused by an unrelated/recreated job.

@@ -155,7 +155,7 @@ async def try_routine(body: dict) -> dict[str, Any]:
 @router.post("/promote")
 async def promote_routine(body: dict) -> dict[str, Any]:
     def apply():
-        mode = body.get("mode", "prerun")
+        mode = body.get("mode", "tool")
         if mode not in ("prerun", "no_ai", "tool"):
             raise ValueError("Choose a supported execution mode.")
         r = _lifecycle().promote(_identifier(body.get("routine_id"), "routine"), mode=mode)

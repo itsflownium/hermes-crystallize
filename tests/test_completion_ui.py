@@ -41,6 +41,7 @@ CASES = [
     "saved unknown tiers are never presented as no tiers",
     "unguarded dispatch cannot enable autonomous modes",
     "host-tool plans require an explicit mode choice",
+    "unavailable replay never advertises stale projected savings",
     "observation starts only through its explicit control",
     "compatibility explains normal host-tool file plans",
     "unsupported unchanged policies expose only a run-always reset",
@@ -361,6 +362,12 @@ await test('host-tool plans require an explicit mode choice', async () => {
   const calls=[];const view=mount('JobBubble',{item:modeItem,status:'testing',trialRuns:3,ctx:makeContext().ctx,compatibility:unsupported,act:(path,body)=>calls.push({path,body}),exp:{open:{'job-a':true},toggle:()=>{}}});await view.flush();
   const action=all(view).find(node=>node.type && node.type.name==='JobHeader').props.action;assert.equal(text(action),'Use host-tool plan');assert.equal(calls.length,0);action.props.onClick();view.render();
   assert.deepEqual(plain(calls),[{path:'/promote',body:{routine_id:'routine-a',mode:'tool'}}]);assert.ok(text(view.tree).includes('Automatic Promote unavailable'));view.dispose();
+});
+await test('unavailable replay never advertises stale projected savings', async () => {
+  for (const status of ['testing','spotted']) {
+    const view=mount('JobBubble',{item:{...modeItem,mode:null,saving_per_week:250,projection:{status:'unavailable'}},status,trialRuns:3,ctx:makeContext().ctx,compatibility:unsupported,act:()=>{},exp:{open:{'job-a':true},toggle:()=>{}}});await view.flush();
+    const content=text(view.tree);assert.ok(content.includes('Needs measurement'));assert.ok(content.includes('savings require normal-run evidence'));assert.ok(!content.includes('$250'));view.dispose();
+  }
 });
 await test('observation starts only through its explicit control', async () => {
   const calls=[];const view=mount('JobBubble',{item:{...modeItem,ready:false},status:'spotted',trialRuns:3,ctx:makeContext().ctx,compatibility:unsupported,act:(path,body)=>calls.push({path,body}),exp:{open:{'job-a':true},toggle:()=>{}}});await view.flush();assert.equal(calls.length,0);const action=all(view).find(node=>node.type && node.type.name==='JobHeader').props.action;assert.equal(text(action),'Observe next runs');action.props.onClick();view.render();

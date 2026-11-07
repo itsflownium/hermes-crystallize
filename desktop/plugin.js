@@ -1053,6 +1053,7 @@ function LiveOptions({ item, act, compatibility }) {
 
 function JobBubble({ item, status, trialRuns, act, exp, ctx, compatibility }) {
   const tone = status === 'live' ? C.green : status === 'testing' ? C.yellow : C.accent
+  const projectionAvailable = guardedReplay(compatibility) && promotionPolicy(item).automatic_replay_available === true && item.projection && item.projection.status === 'hypothetical'
   let headline, sub, action
   if (status === 'live') {
     const measured = item.after && item.after.runs
@@ -1071,15 +1072,15 @@ function JobBubble({ item, status, trialRuns, act, exp, ctx, compatibility }) {
       : 'Historical comparisons appear after its first live run; qualified totals are in the receipt.'
     action = pill('Undo', () => act('/undo', { routine_id: item.routine_id }), C.muted)
   } else if (status === 'testing') {
-    headline = big(perWeek(item.saving_per_week))
-    sub = `estimated · ${perMonth(item.saving_per_week)}`
+    headline = projectionAvailable ? big(perWeek(item.saving_per_week)) : big('Needs measurement', C.soft)
+    sub = projectionAvailable ? `Unmeasured automatic-replay projection · ${perMonth(item.saving_per_week)}` : 'Host-tool guidance; savings require normal-run evidence.'
     const target = promotionTarget(item, compatibility)
     action = item.ready
       ? target ? pill(target.label, () => act('/promote', { routine_id: item.routine_id, mode: target.mode }), C.accent) : chip('Capability unavailable', C.muted)
       : jsx('span', { style: { fontSize: '0.6875rem', color: C.muted }, children: `${item.matches} of ${item.needed} observations` })
   } else {
-    headline = big(perWeek(item.saving_per_week))
-    sub = `estimated · ${perMonth(item.saving_per_week)}`
+    headline = projectionAvailable ? big(perWeek(item.saving_per_week)) : big('Needs measurement', C.soft)
+    sub = projectionAvailable ? `Unmeasured automatic-replay projection · ${perMonth(item.saving_per_week)}` : 'Host-tool guidance; savings require normal-run evidence.'
     action = promotionPolicy(item).try_available === true
       ? pill('Observe next runs', () => act('/try', { job_id: item.job_id }))
       : chip('Observation unavailable', C.muted)

@@ -71,11 +71,16 @@ _KIND_LABEL = {
 def _print_analysis(job: str, as_json: bool) -> None:
     import json
 
-    from . import analyze
+    from . import analyze, lifecycle
 
     a = analyze.analyze_job(job)
+    projection = lifecycle.analysis_projection(a)
     if as_json:
-        print(json.dumps(a.to_dict(), indent=2, default=str))
+        data = {**a.to_dict(), "projection": projection,
+                "est_api_calls_after": projection["api_calls_after"],
+                "est_cost_after_usd": projection["cost_after_usd"],
+                "agent_free": a.agent_free and projection["status"] != "unavailable"}
+        print(json.dumps(data, indent=2, default=str))
         return
     name = a.job_name or job
     print(f"{name}: {a.runs_used} usable runs. {a.reason}")
@@ -90,17 +95,24 @@ def _print_analysis(job: str, as_json: bool) -> None:
         if p.note:
             print(f"      {p.note}")
     print(f"\nNow:       {_num(a.avg_api_calls)} AI calls, {_money(a.avg_cost_usd)} per run")
-    print(f"Estimated: {_num(a.est_api_calls_after)} AI calls, {_money(a.est_cost_after_usd)} per run "
-          "(rough until test runs measure it)")
-    if a.agent_free:
-        print("Every step is fixed: this job could run with no AI at all.")
+    if projection["status"] == "unavailable":
+        print(projection["reason"])
+        print("After matching observations, use `hermes crystal promote <job> --mode tool` for normal host-tool guidance.")
+    else:
+        print(f"Hypothetical: {_num(projection['api_calls_after'])} AI calls, "
+              f"{_money(projection['cost_after_usd'])} per run. {projection['reason']}")
+        if a.agent_free:
+            print("The read recipe is fixed; no-AI eligibility still requires the job's output and action checks.")
 
 
 def _routine_for(job: str):
-    from . import store
+    from . import lifecycle, store
 
+    found = lifecycle.cron_job(job)
+    if found:
+        return store.routine_for_job(found["id"])
     for r in store.list_routines():
-        if r["source"] == "cron" and job in (r["name"], r["source_ref"], r["id"]):
+        if r["source"] == "cron" and job in (r["source_ref"], r["id"]):
             return store.get_routine(r["id"])
     return None
 
@@ -149,7 +161,7 @@ def _lifecycle_action(sub: str, job: str, args: Any = None) -> None:
                 print(f"No routine for {job!r}. Run `hermes crystal try {job}` first.")
                 return
             no_ai = bool(getattr(args, "no_ai", False))
-            mode = "no_ai" if no_ai else getattr(args, "mode", "prerun")
+            mode = "no_ai" if no_ai else getattr(args, "mode", "tool")
             lifecycle.promote(r["id"], mode=mode)
             if no_ai:
                 print(f"{r['name']} is live with no AI: the routine's output is the job's result.")
@@ -368,8 +380,8 @@ def _setup(subparser: Any) -> None:
         p = subs.add_parser(name, help=text)
         p.add_argument("job", help="Job name or id")
         if name == "promote":
-            p.add_argument("--mode", choices=("prerun", "tool"), default="prerun",
-                           help="tool provides ordinary host-tool guidance; automatic modes require a guarded public SDK")
+            p.add_argument("--mode", choices=("prerun", "tool"), default="tool",
+                           help="Defaults to normal host-tool guidance; prerun requires a verified guarded public SDK")
             p.add_argument("--no-ai", action="store_true",
                            help="Use the routine's output as the job's result, with no AI at all")
     sk = subs.add_parser("skip", help="What a live job does when its data hasn't changed")

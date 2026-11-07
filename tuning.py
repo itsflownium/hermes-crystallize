@@ -161,13 +161,14 @@ def _finished_scheduled(name: str) -> list[history.Run]:
 
 
 def _split(name: str, started_at: float) -> tuple[list[history.Run], list[history.Run]]:
-    runs = _finished_scheduled(name)
+    found = lifecycle.cron_job(name)
+    job_id = (found or {}).get("id") or name
+    runs = [r for r in _finished_scheduled(job_id) if r.job_id == job_id]
     before = [r for r in runs if r.session_started < started_at and r.outcome in (None, "completed")]
     trial = [r for r in runs if r.session_started >= started_at]
     if len(before) < BEFORE_WINDOW:  # older runs from Hermes's own records
-        found = lifecycle.cron_job(name)
         known = {r.session_id for r in runs}
-        older = [r for r in history.ledger_runs((found or {}).get("id"))
+        older = [r for r in history.ledger_runs(job_id)
                  if r.session_id not in known and r.session_started and r.session_started < started_at]
         before = sorted(older + before, key=lambda r: r.session_started)
     return before[-BEFORE_WINDOW:], trial
@@ -228,7 +229,7 @@ def _clear_restore_pending(t: dict[str, Any]) -> None:
 
 def _tool_choices(found: dict[str, Any], name: str) -> tuple[Optional[list[str]], Optional[list[str]]]:
     """Compatibility planner retaining the union of every observed job branch."""
-    runs = [r for r in history.load_runs(name) if r.scheduled and r.steps]
+    runs = [r for r in history.runs_for_job(found["id"]) if r.scheduled and r.steps]
     if not runs:
         return None, None
     used = {s.tool_name for r in runs for s in r.steps}
@@ -651,7 +652,7 @@ def _decide(t: dict[str, Any]) -> None:
 def measured(name: str, t: dict[str, Any]) -> Optional[dict[str, Any]]:
     """What a job's cheaper settings have done so far, from its real runs."""
     since = t.get("first_started_at") or t.get("started_at")
-    before, every = _split(name, since)
+    before, every = _split(t.get("job_id") or name, since)
     runs = [r for r in every if r.outcome in (None, "completed")]
     if not before or not runs or t["status"] not in ("trial", "kept"):
         return None
