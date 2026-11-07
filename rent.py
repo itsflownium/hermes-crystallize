@@ -120,6 +120,7 @@ def report(session_id: Optional[str]) -> dict[str, Any]:
             "tokens": kept, "removed_tokens": gone, "model": main.get("model"), "priced": bool(prices),
             "per_call_usd": kept * reread if prices else None,
             "saving_per_call_usd": gone * reread if prices else None, "auto": auto_state(session_id),
+            "cache_read_share": prices["cache_read"] / prices["input"] if prices and prices["input"] else None,
             "auto_on": bool(store.get_setting(AUTO_SETTING, True))}
 
 

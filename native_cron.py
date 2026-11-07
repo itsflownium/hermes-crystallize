@@ -92,8 +92,10 @@ def status(job_id):
     job = _job(job_id)
     state = store.get_setting(_KEY + job_id) or {}
     runtime_sha = hashlib.sha256(Path(runtime.__file__).read_bytes()).hexdigest()
+    from . import starter_script
+
     return {"ok": True, "job_id": job_id, "config_fingerprint": _fingerprint(job),
-            "state": state, "acknowledgement": ACKNOWLEDGEMENT,
+            "state": state, "acknowledgement": ACKNOWLEDGEMENT, "fit": starter_script.fit(job_id),
             "runtime_sha256": runtime_sha,
             "runtime_review_required": state.get("status") in {"pending", "applied"} and state.get("runtime_sha256") != runtime_sha,
             "available_modes": ["monitor", "verbatim"], "automatic_tool_replay": False,

@@ -1192,6 +1192,7 @@ function RunawayBrake({ ctx, act, refresh }) {
 function HowItWorks({ onHide }) {
   return bubble([
     row('How Crystallize Cron saves', pill('Got it', onHide, C.muted)),
+    small('Saves most on jobs that check often for something that rarely changes, only read, and can stay quiet when nothing changed. It can cost more on a job whose data changes every run, so each job shows how often its data changes.'),
     small('A cron job costs roughly its prompt size times its AI calls, plus reasoning. Crystallize shows where each job\'s money goes and works on all of it.', C.soft),
     small('Trials use supported controls and recorded cost and outcome checks. Your main reasoning setting is preserved. A change stays only when its checks pass and its cost, or its tokens where no price is known, falls beyond normal variation. Otherwise the earlier settings come back.', C.soft),
     small('Repeated jobs can learn a read plan from normal runs. When guarded nested execution is unavailable, the main agent follows the plan through normal Hermes tools. Automatic pre-run and no-AI modes stay unavailable until their host capability is verified.', C.soft)
@@ -1381,6 +1382,7 @@ function NativeCronControl({ ctx, jobId, onChanged = () => {} }) {
     sectionButton('Skip runs when nothing changed', open, () => setOpen(value => !value)),
     ...(open ? [
       small('A small script reads the job\'s data. When the data hasn\'t changed, the AI doesn\'t run. You review the script before it\'s attached. Crystallize can draft it from what this job has already done.', C.soft),
+      data && data.fit ? small(data.fit.message, data.fit.verdict === 'poor' ? C.yellow : data.fit.verdict === 'good' ? C.green : C.soft) : null,
       !attached ? actionButton('Draft a script from this job', () => draft(), pending) : null,
       draftNote ? small(draftNote, C.soft) : null,
       attached ? small(`Attached: ${data.state.mode} · ${data.state.approval_revoked ? 'requirements changed; approval revoked' : data.state.status}`, C.soft) : null,
@@ -2031,6 +2033,10 @@ function ContextRent({ ctx, sessionId, refresh, onTools }) {
   })
   return bubble([
     row('Context Rent', data.per_call_usd != null ? chip(`${money(data.per_call_usd)} a call`, C.yellow) : chip(`${tokensText(data.tokens)} tokens`, C.muted)),
+    small(data.cache_read_share != null && data.cache_read_share < 0.1
+      ? 'Your model\'s cached reads are nearly free, so removing old results rarely pays and savings here will be smaller.'
+      : data.calls < 8 ? 'This chat is still short, so there\'s little to save yet. Savings grow as it goes on.'
+        : 'Long chats like this one save the most, because old results are re-read on every call.', C.soft),
     data.auto && data.auto.removed ? small(`Removed ${data.auto.removed} old result${data.auto.removed === 1 ? '' : 's'} automatically because the numbers showed it would pay. ${data.auto.read_backs ? `The AI read ${data.auto.read_backs} back.` : 'None were needed again.'}${data.auto.off ? ' Stopped for this chat because they kept being needed.' : ''}`, C.soft) : null,
     small(`Every AI call re-reads this chat: about ${tokensText(data.tokens)} tokens right now. The biggest blocks cost the most. Pick a tool result to see what it costs.`, C.soft),
     jsx('div', {
@@ -2124,6 +2130,7 @@ function ChatSession({ ctx, sessionId, focused }) {
         : current.routing && current.routing.cost_basis === 'unknown'
           ? 'Helper cost/payback is unknown for this route. Clean needs no helper call; add an exact-route rate card to estimate paid handoffs.'
           : 'Savings shown here are estimates. Review exact originals whenever a summary or excerpt lacks a needed fact.', C.soft) : null,
+      current ? small('Saves most in long chats that read large files or results early and move on. Short chats save little, and a single run can still cost more if the provider\'s cache misses.', C.soft) : null,
       current && sessionId ? jsx(ChatControls, { key: `controls:${sessionId}`, ctx, sessionId, policy: current.policy || { default_mode: 'clean', focus: '', tools: {} }, observedTools: current.tool_names || observedTools, onSaved: policy => { requests.current.version += 1; setState(old => old && old.session_id === sessionId ? { ...old, policy } : old) } }) : null,
       current && sessionId ? jsx(RereadControls, { key: `reread:${sessionId}`, ctx, sessionId, chatEnabled: current.enabled }) : null,
       current && sessionId ? jsx(ContextRent, { key: `rent:${sessionId}`, ctx, sessionId, refresh: current, onTools: setObservedTools }) : null,

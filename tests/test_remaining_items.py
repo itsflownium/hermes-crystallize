@@ -38,7 +38,21 @@ def test_a_draft_covers_stable_reads_and_can_run(job, monkeypatch, tmp_path):
     assert out["complete"] and out["commands"] == ["echo hello"] and not out["left_out"]
     path = tmp_path / "hermes" / "scripts" / out["source_script"]
     ran = subprocess.run([sys.executable, str(path)], capture_output=True, text=True)
-    assert ran.returncode == 0 and json.loads(ran.stdout) == {"echo hello": "hello\n"}
+    note, data = ran.stdout.split("\n", 1)
+    assert ran.returncode == 0 and note == starter_script.COMPLETE_NOTE and json.loads(data) == {"echo hello": "hello\n"}
+
+
+def test_a_draft_prints_json_data_compactly(job, monkeypatch, tmp_path):
+    _steps(monkeypatch, _step("terminal", {"command": """printf '{\\n  "a": 1.50\\n}'"""}))
+    monkeypatch.setattr(analyze, "observation_safety_error", lambda tool, args: None)
+    out = starter_script.draft("j1")
+    ran = subprocess.run([sys.executable, str(tmp_path / "hermes" / "scripts" / out["source_script"])], capture_output=True, text=True)
+    assert '{"a":1.5}' in ran.stdout and "\n  " not in ran.stdout
+
+
+def test_an_incomplete_draft_doesnt_tell_the_ai_to_skip_its_reads(job, monkeypatch):
+    _steps(monkeypatch, _step("terminal", {"command": "ls"}), _step("web_search", {"query": "x"}, kind="varies"))
+    assert starter_script.COMPLETE_NOTE not in starter_script.draft("j1")["source"]
 
 
 def test_a_failed_read_makes_the_script_fail_so_a_normal_run_happens(job, monkeypatch, tmp_path):
@@ -171,3 +185,12 @@ def test_status_command_mentions_chats():
     from crystallize import _status_text
 
     assert "any chat you turn it on for" in _status_text()
+
+
+@pytest.mark.parametrize("digests,verdict", [
+    (["a", "a", "a", "a"], "good"), (["a", "b", "a", "b"], "poor"), (["a", "b", "b", "c", "d"], "mixed"), (["a"], "unknown"),
+])
+def test_a_job_is_told_whether_skipping_would_help(monkeypatch, digests, verdict):
+    monkeypatch.setattr(history, "runs_for_job", lambda ref, only_usable=False: digests)
+    monkeypatch.setattr(rhythm, "_content_fingerprint", lambda run: run)
+    assert starter_script.fit("j1")["verdict"] == verdict

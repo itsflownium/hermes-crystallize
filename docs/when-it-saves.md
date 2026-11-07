@@ -17,11 +17,11 @@ These come from live paired runs on Nous, with the same model and the same reaso
 
 - **Short chats with small results.** Clean alone saved about 6% overall across 14 pairs, and a few task types were 1 to 3% dearer, which is within noise.
 - **Plain text, logs and code.** Clean only removes wasted JSON formatting and color codes, because spacing can matter elsewhere. These tasks came out about even, except code, which varied too much to call.
-- **Models with near-free cached reads.** Re-reading costs so little that removing results doesn't pay, so Crystallize doesn't remove them. DeepSeek saved about 7%.
+- **Models with near-free cached reads.** Re-reading costs so little that removing results doesn't pay, so Crystallize doesn't remove them. DeepSeek saved about 7%, and one of its three pairs cost 8% more.
 
 ## Ideal conditions for chat
 
-- **The chat runs for many messages.** Working chats of 11 messages saved 23% on `tencent/hy3` and 20% on Kimi. Savings ranged from 5% to 34% per pair.
+- **The chat runs for many messages.** Working chats of 11 messages saved 23% on `tencent/hy3` and 20% on Kimi, and 23-message chats saved 32% on `tencent/hy3`. Savings grow with length. Per pair they ranged from 5% to 37%.
 - **It reads large tool results early and moves on,** such as files, API responses and web pages.
 - **Tools return JSON.** Clean cuts the most there.
 - **Cached reads still cost something on your model.** The further they are from free, the more removal pays.
