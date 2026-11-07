@@ -1,22 +1,48 @@
 {
   "schema_version": 1,
-  "checked_at": "2026-11-07T06:49:22.821681+00:00",
-  "installed_commit": "ebf2ba073f3c0096b588f5a29e097834aad76fb1",
+  "checked_at": "2026-11-07T06:57:42.494729+00:00",
+  "version": "0.5.3",
+  "observed_checkout_commit": "7f1748825707c555ba4ab7d963a1fb8da1ee52ab",
+  "reviewed_feature_pin": "5928049cb15bc28df823692787619c01d9714501",
+  "runtime_sha256": "e26bcc6c9aadc00cc028b382aad03d88aee4a856f51673957e95491e4a2f4f07",
+  "runtime_bytes_match_reviewed_feature_pin": true,
   "installed_worktree_clean": true,
-  "previous_installed_commit": "9dc9e6bfb511a240b93b0a09b43f5d879d6b0dd3",
-  "version": "0.5.2",
-  "profile_plugin_link_resolves_to_installed_checkout": true,
-  "native_runtime_sha256": "74577f36975b953f8bfeab1eaf911973dc66f6312568aaeb778b07b16d1c86e8",
-  "gateway": {
-    "pid": 1415,
-    "start_time": 179403066595,
-    "gateway_state": "running",
-    "restart_requested": false,
-    "updated_at": "2026-11-07T06:49:02.391953+00:00",
-    "code_sha": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19"
-  },
-  "activation_evidence": "Public gateway plugin reload confirmed hooks/commands while idle. Paid snapshot success path was tested on this version; final diagnostic-only source is validated separately.",
-  "per_module_loaded_hash_exposed": false,
-  "provider_credentials_copied": false,
-  "scope": "Installation state after merged 0.5.2 guards and before the 0.5.3 diagnostic-only release"
+  "profile_plugin_link_correct": true,
+  "public_plugin_reload_confirmed": true,
+  "crystallize_activation": [
+    {
+      "name": "crystallize",
+      "key": "crystallize",
+      "activated_now": {
+        "gateway_commands": [
+          "crystallize"
+        ],
+        "gateway_transforms": [
+          "transform_llm_output",
+          "transform_tool_result"
+        ],
+        "hooks": [
+          "on_session_end",
+          "post_api_request",
+          "post_tool_call",
+          "pre_llm_call",
+          "pre_tool_call"
+        ]
+      },
+      "deferred": {
+        "tools": [
+          "crystal_cheap",
+          "crystal_full_result",
+          "crystal_list",
+          "crystal_run"
+        ]
+      }
+    }
+  ],
+  "gateway_restarted_for_final_activation": false,
+  "gateway_pid": 1415,
+  "validation_jobs_removed": true,
+  "model_reasoning_config_file_unchanged": true,
+  "source_wrapper_self_updates": false,
+  "note": "Runtime identity is bound to the reviewed feature pin and byte hash. Later evidence/catalog-only commits do not alter these loaded runtime bytes."
 }
