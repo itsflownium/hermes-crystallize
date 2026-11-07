@@ -49,8 +49,11 @@ to prove semantic correctness of arbitrary model answers.
 This diagnostic-only change is covered by offline source-failure regressions.
 The paid successful monitor path below was exercised on version 0.5.2, whose
 complete-source success path is unchanged. It is not relabelled as a paid rerun
-of 0.5.3. The final pin additionally receives its own host validation and free
-due script-only check. Both validation CLIs refuse existing report paths before
+of 0.5.3. The [exact-pin verification](evidence/release-v053-verification.json) passed all
+16 host checks with no warnings and zero public-source audit findings. Its own
+[scheduled script-only check](evidence/release-v053-native-verbatim.json) passed
+with zero provider calls. Anonymous checks verified the manifest bytes and four
+screenshots at the exact pin. Both validation CLIs refuse existing report paths before
 starting any job or model call.
 
 ## Catch-up correction — version 0.5.2
