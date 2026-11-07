@@ -111,11 +111,21 @@ def test_monitor_output_is_stable_then_failure_forces_exactly_a_new_source_hash(
     assert execute(world).stdout != retry.stdout
 
 
-@pytest.mark.parametrize("status", ["unknown", "cancelled", "missed"])
+@pytest.mark.parametrize("status", ["unknown", "cancelled"])
 def test_uncertain_terminal_attempts_cannot_suppress_a_retry(world, status):
     attach(world)
     original = execute(world).stdout
     ledger(world, "retry", status)
+    assert execute(world).stdout != original
+
+
+def test_missed_schedule_slots_do_not_change_an_unchanged_complete_snapshot(world):
+    attach(world)
+    original = execute(world).stdout
+    ledger(world, "paused-slot", "missed")
+    ledger(world, "late-slot", "missed")
+    assert execute(world).stdout == original
+    ledger(world, "actual-uncertain-attempt", "unknown")
     assert execute(world).stdout != original
 
 

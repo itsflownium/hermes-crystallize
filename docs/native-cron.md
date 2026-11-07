@@ -8,10 +8,16 @@ edited. The initial integration supports local delivery and Python sources.
 
 **Monitor:** the host runs the model on first or changed source output. The main
 model keeps its configured reasoning and ordinary tool pipeline. A failed,
-unknown, cancelled or missed answer changes the next source hash so that failure
+unknown or cancelled answer changes the next source hash so that failure
 cannot make an unchanged source suppress its retry. Missing ledger evidence,
 concurrent attempts, changed configuration or source errors disable the shortcut
 and wake a fresh normal agent run.
+
+A missed schedule slot is distinct from a failed execution. Because eligible
+jobs use complete latest-state snapshots and require no per-run delivery or
+deadline, a paused/late slot alone does not require another model answer when
+the complete input is unchanged. Actual failed/unknown/cancelled attempts still
+force a retry, and unavailable ledger evidence still disables suppression.
 
 **Verbatim:** the approved source's nonempty stdout is the complete answer,
 and the host delivers its text without inference. The reviewed host trims outer
