@@ -1390,7 +1390,7 @@ function NativeCronControl({ ctx, jobId, onChanged = () => {} }) {
       attached && data.runtime_review_required ? small('This source uses an older or unverified runtime. Undo it, then review and attach the source again to use the current fixes.', C.yellow) : null,
       !attached ? field('Python source under this profile’s scripts directory', jsx('input', { value: source, maxLength: 400, placeholder: 'snapshot.py', disabled: pending, style: fieldStyle, onChange: e => edit(() => setSource(e.target.value)) })) : null,
       !attached ? field('Snapshot behavior', jsx('select', { value: mode, disabled: pending, style: fieldStyle, onChange: e => edit(() => setMode(e.target.value)), children: [jsx('option', { value: 'monitor', children: 'Wake the model when data changes' }), jsx('option', { value: 'verbatim', children: 'Use script output, no model' })] })) : null,
-      !attached ? checkField('This source is the complete read-only snapshot; this job has no per-run action, deadline or required repeated delivery', snapshot, value => edit(() => setSnapshot(value)), pending) : null,
+      !attached ? checkField('This script only reads, covers everything this job depends on, and the job has no per-run action or deadline', snapshot, value => edit(() => setSnapshot(value)), pending) : null,
       !attached && mode === 'monitor' ? checkField('If this job sends its answer somewhere, nothing should be sent when the data hasn\'t changed', skippedDelivery, value => edit(() => setSkippedDelivery(value)), pending) : null,
       !attached && mode === 'verbatim' ? checkField('The script output is the complete requested final answer', verbatim, value => edit(() => setVerbatim(value)), pending) : null,
       !attached ? actionButton('Preview source · no execution', () => request('/native-cron-preview', values), pending || !source) : null,
@@ -1526,11 +1526,11 @@ function ReceiptSummary({ receipt }) {
     label('Receipt'),
     small(`${receipt.sample_count || 0} recorded runs · ${receipt.comparison_call_count || 0} comparison calls · ${receipt.helper_call_count || 0} helper calls`, C.soft),
     jsx('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 5 }, children: [
-      jsx(Tile, { title: 'Qualified reduction', value: money(qualified) }),
+      jsx(Tile, { title: 'Proven saving', value: money(qualified) }),
       jsx(Tile, { title: 'Recorded overhead', value: money(costs && costs.overhead_usd) }),
-      jsx(Tile, { title: 'Qualified net', value: money(net), color: net == null ? C.soft : net >= 0 ? C.green : C.yellow })
+      jsx(Tile, { title: 'After costs', value: money(net), color: net == null ? C.soft : net >= 0 ? C.green : C.yellow })
     ] }),
-    small(basis === 'actual' ? 'Uses recorded actual costs with matching comparison settings.' : basis === 'estimated' ? 'Uses cost estimates with matching comparison settings.' : 'Qualified net is unknown until comparable costs and settings are recorded.'),
+    small(basis === 'actual' ? 'Uses recorded actual costs with matching comparison settings.' : basis === 'estimated' ? 'Uses cost estimates with matching comparison settings.' : 'Proven saving after costs is unknown until comparable costs and settings are recorded.'),
     receipt.efficiency_savings_proven !== true ? small('Efficiency savings are not established by the available evidence. A model switch or missing reasoning identity cannot qualify as same-settings efficiency savings.', C.yellow) : null,
     costs && (costs.unproven_settings_comparison_count || costs.excluded_settings_comparison_count) ? small(`${costs.unproven_settings_comparison_count || 0} comparisons lack complete settings evidence · ${costs.excluded_settings_comparison_count || 0} excluded from matching-settings savings.`) : null,
     costs && costs.historical_savings_usd != null && qualified == null ? small(`Historical counterfactual: ${money(costs.historical_savings_usd)} reduction before overhead. This unqualified estimate is separate from the qualified totals.`) : null,

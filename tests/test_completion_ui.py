@@ -302,8 +302,8 @@ await test('auction discovery survives edits while it loads', async () => {
 await test('qualified receipt totals exclude historical counterfactuals', async () => {
   const view = mount('ReceiptSummary',{receipt:{sample_count:4,preferred_basis:'estimated',net_payback_usd:999,historical_savings_usd:1000,qualified_efficiency_savings_usd:null,qualified_net_payback_usd:null,efficiency_savings_proven:false,cost_bases:{estimated:{historical_savings_usd:1000,overhead_usd:1,unproven_settings_comparison_count:4}}}});
   await view.flush(); const tiles=all(view).filter(node=>node.type && node.type.name==='Tile');
-  assert.equal(tiles.find(node=>node.props.title==='Qualified reduction').props.value,'Unknown');
-  assert.equal(tiles.find(node=>node.props.title==='Qualified net').props.value,'Unknown');
+  assert.equal(tiles.find(node=>node.props.title==='Proven saving').props.value,'Unknown');
+  assert.equal(tiles.find(node=>node.props.title==='After costs').props.value,'Unknown');
   assert.ok(text(view.tree).includes('Historical counterfactual: $1000.00')); assert.ok(text(view.tree).includes('Efficiency savings are not established')); view.dispose();
 });
 await test('heatmap keyboard inspection uses one tab stop', async () => {
@@ -375,7 +375,7 @@ await test('unavailable replay never advertises stale projected savings', async 
 await test('native source preview requires review and resets approval on edits', async () => {
   const api=makeContext({'GET /native-cron':()=>({ok:true,state:{},config_fingerprint:'current'}),'POST /native-cron-preview':()=>({ok:true,can_apply:true,preview_sha256:'reviewed',source:{text:'print(42)',sha256:'source-hash'},blockers:[]})});
   const view=mount('NativeCronControl',{ctx:api.ctx,jobId:'job-a'});await view.flush();assert.equal(api.calls.length,0);click(view,'▸ Skip runs when nothing changed');await view.flush();
-  change(view,'Python source under','snapshot.py');change(view,'This source is the complete',true);click(view,'Preview source · no execution');await view.flush();assert.equal(button(view,'Attach reviewed source').props.disabled,true);
+  change(view,'Python source under','snapshot.py');change(view,'This script only reads',true);click(view,'Preview source · no execution');await view.flush();assert.equal(button(view,'Attach reviewed source').props.disabled,true);
   change(view,'I approve attaching',true);change(view,'Python source under','different.py');assert.equal(button(view,'Attach reviewed source'),undefined);assert.equal(api.posts().filter(c=>c.base==='/native-cron').length,0);view.dispose();
 });
 await test('native source runtime updates require explicit source review', async () => {
