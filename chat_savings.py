@@ -779,11 +779,17 @@ def _reported_cost(usage: Any) -> Optional[float]:
 
 
 def _cost_source(usage: Any, cost: Optional[float]) -> str:
-    return "host_estimate" if _reported_cost(usage) is not None else "list_price_estimate" if cost is not None else "unknown"
+    if _reported_cost(usage) is not None:
+        return "host_estimate"
+    if cost is None:
+        return "unknown"
+    if any(_usage_value(usage, key) is None for key in ("cache_read_tokens", "cache_write_tokens")):
+        return "list_price_upper_bound_unknown_cache"
+    return "list_price_estimate"
 
 
 def _usage_cost(usage: Any, picked: dict[str, Optional[str]]) -> tuple[int, Optional[float]]:
-    """Tokens the cheap model used and what they cost at its listed price."""
+    """Helper prompt totals are inclusive; unknown cache shares use an upper bound."""
     if usage is None:
         return 0, None
     inp = _usage_value(usage, "input_tokens")
@@ -795,12 +801,19 @@ def _usage_cost(usage: Any, picked: dict[str, Optional[str]]) -> tuple[int, Opti
     prices = modelinfo.token_prices(picked["model"], picked["provider"])
     if not prices or inp is None or out is None or not tokens or "input" not in prices or "output" not in prices:
         return tokens, None
-    read = min(inp, _usage_value(usage, "cache_read_tokens") or 0)
-    write = min(inp - read, _usage_value(usage, "cache_write_tokens") or 0)
-    uncached = max(0, inp - read - write)
-    return tokens, (uncached * prices["input"] + out * prices["output"]
-                    + read * prices.get("cache_read", prices["input"])
-                    + write * prices.get("cache_write", prices["input"]))
+    read = _usage_value(usage, "cache_read_tokens")
+    write = _usage_value(usage, "cache_write_tokens")
+    known = (read or 0) + (write or 0)
+    if known > inp:
+        return tokens, None
+    read_rate = prices.get("cache_read", prices["input"])
+    write_rate = prices.get("cache_write", prices["input"])
+    # A missing counter does not establish zero cache use. Price the unallocated
+    # remainder at the highest rate it could occupy, retaining known buckets.
+    remainder_rate = max(prices["input"], read_rate if read is None else prices["input"],
+                         write_rate if write is None else prices["input"])
+    return tokens, ((inp - known) * remainder_rate + out * prices["output"]
+                    + (read or 0) * read_rate + (write or 0) * write_rate)
 
 
 def cleanup_session(session_id: str) -> None:
@@ -824,6 +837,9 @@ def summary(session_id: Optional[str]) -> dict[str, Any]:
     prices = modelinfo.token_prices(main.get("model"), main.get("provider"))
     input_rate = prices["input"] if prices else None
     output_rate = prices["output"] if prices else None
+    projection_pricing = {"model": main.get("model"), "provider": main.get("provider"),
+                          "input_usd_per_token": input_rate, "output_usd_per_token": output_rate,
+                          "reprices_with_current_main": True}
 
     def card(row: dict[str, Any]) -> dict[str, Any]:
         tokens = row["chars"] // CHARS_PER_TOKEN
@@ -847,12 +863,14 @@ def summary(session_id: Optional[str]) -> dict[str, Any]:
                 "estimated_helper_read_usd": read_cost, "net_once": net,
                 "estimated_extra_main_read_usd": prefix_cost, "extra_main_calls": prefix["calls"],
                 "unknown_prefix_cost_calls": prefix["unknown_calls"],
-                "cost_basis": "one_read_at_list_price", "savings_are_estimates": True}
+                "cost_basis": "one_read_at_current_main_list_price", "savings_are_estimates": True,
+                "projection_pricing": dict(projection_pricing)}
 
     current = status_for(session_id)
     return {
         "title": _chat_title(session_id),
         **current, "model": picked, "main_model": main.get("model"), "main_provider": main.get("provider"),
+        "projection_pricing": projection_pricing,
         "chat": chat.analyse(session_id) if current["enabled"] else None,
         "chat_spent_usd": overview._chat_spent(session_id),
         "this_chat": next((card(r) for r in rows if r["session_id"] == session_id), None),

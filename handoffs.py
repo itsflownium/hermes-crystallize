@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import re
 import statistics
@@ -20,6 +21,7 @@ _UNSAFE_FIELDS = frozenset({"command", "commands", "cmd", "code", "script", "she
                             "directory", "cwd", "recipient", "recipients", "to", "cc", "bcc"})
 _EXECUTABLE_TOOLS = frozenset({"terminal", "execute_code", "run_command", "shell", "python", "javascript"})
 _accounting_lock = threading.RLock()
+logger = logging.getLogger(__name__)
 
 
 def value(obj: Any, key: str, default: Any = None) -> Any:
@@ -232,18 +234,21 @@ def _write_evidence(result: Any, output: str) -> dict:
 
 
 def credit_output(result_id: str, session_id: str, turn_id: str, chars: int, *, kind: str = "routed_output") -> None:
-    """Credit a delivered original once, even across turns, restarts or save/reuse."""
+    """Best-effort credit, independent of delivery, without duplicate savings."""
     from . import chat_savings as chat
     if not session_id or not chat._ID.fullmatch(result_id):
         return
     key = "handoff_credited:" + session_id
-    with _accounting_lock:
-        seen = store.get_setting(key) or []
-        if not isinstance(seen, list) or result_id in seen or len(seen) >= chat.MAX_TRACKED_RESULTS:
-            return
-        # Mark first: a storage failure may under-credit, but never duplicate savings.
-        store.set_setting(key, [*seen, result_id])
-        store.add_chat_event(session_id, turn_id=turn_id, kind=kind, results=0, output_chars=max(0, chars))
+    try:
+        with _accounting_lock:
+            seen = store.get_setting(key) or []
+            if not isinstance(seen, list) or result_id in seen or len(seen) >= chat.MAX_TRACKED_RESULTS:
+                return
+            # Mark first: a storage failure may under-credit, but never duplicate savings.
+            store.set_setting(key, [*seen, result_id])
+            store.add_chat_event(session_id, turn_id=turn_id, kind=kind, results=0, output_chars=max(0, chars))
+    except Exception:  # noqa: BLE001 — retained text must survive accounting failure
+        logger.debug("crystallize: output credit unavailable; delivering retained text", exc_info=True)
 
 
 def record_overhead(session_id: str, turn_id: str, plan: dict) -> None:
@@ -401,10 +406,12 @@ def execute(ctx: Any, text: str, session_id: str, turn_id: str = "", *, input_fi
 def expand_args(args: Any, session_id: str, turn_id: str = "", tool_name: str = "") -> dict | None:
     """Resolve session-owned text before host policy checks; never paths or code."""
     from . import chat_savings as chat
-    if not session_id or not isinstance(args, dict):
+    if not isinstance(args, dict):
         return None
     if "{{crystal:" not in json.dumps(args, ensure_ascii=False):
         return None
+    if not session_id:
+        raise ValueError("Crystallize needs the owning chat to recover this placeholder; no tool should execute it.")
     changed = False
     credits = {}
 

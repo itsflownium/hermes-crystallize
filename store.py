@@ -520,6 +520,8 @@ _CHAT_TOTALS = """SUM(chars) AS chars, SUM(output_chars) AS output_chars, SUM(ad
     SUM(results) AS results,
     SUM(cheap_tokens) AS cheap_tokens, SUM(COALESCE(cheap_cost, 0)) AS known_cheap_cost,
     SUM(CASE WHEN helper_call = 1 AND cheap_cost IS NULL THEN 1 ELSE 0 END) AS unknown_cost_calls,
+    SUM(CASE WHEN helper_call = 1 AND cost_source = 'list_price_upper_bound_unknown_cache'
+        THEN 1 ELSE 0 END) AS upper_bound_cost_calls,
     SUM(helper_call) AS helper_calls,
     SUM(CASE WHEN helper_call = 1 AND status IN ('failed', 'timeout', 'timeout_finished') THEN 1 ELSE 0 END) AS failed_calls,
     SUM(CASE WHEN helper_call = 1 AND status = 'rejected' THEN 1 ELSE 0 END) AS rejected_calls,
