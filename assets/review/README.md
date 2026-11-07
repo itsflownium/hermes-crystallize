@@ -19,5 +19,13 @@ not live savings evidence. The same plugin UI source is used by Hermes Desktop.
 - `chat-quality-and-onboarding-desktop.png`: lossless Clean guidance, observable
   summary checks, exact-result recovery and unchanged main reasoning.
 
+The native-source review capture was added for version 0.5.0 on the same date.
+It shows the complete reviewed source, hash and separate approval before any
+attachment. The 780 px and 390 px views were checked without horizontal overflow;
+no attachment or provider call was made.
+
+- `native-cron-source-review-desktop.png`: explicit snapshot and final-output
+  declarations, full source review, and the disabled attachment until approval.
+
 The catalog URLs must pin the feature commit containing these files. Fixture
 captures do not establish native Desktop, every platform or live provider coverage.

@@ -1322,6 +1322,76 @@ function JobHeader({ item, open, toggle, tag, action, muted, hide }) {
 }
 
 // Load evidence only when expanded. GET /compare is a read-only preview.
+function NativeCronControl({ ctx, jobId, onChanged = () => {} }) {
+  const [open, setOpen] = useState(false)
+  const [data, setData] = useState(null)
+  const [source, setSource] = useState('')
+  const [mode, setMode] = useState('monitor')
+  const [snapshot, setSnapshot] = useState(false)
+  const [verbatim, setVerbatim] = useState(false)
+  const [preview, setPreview] = useState(null)
+  const [confirmed, setConfirmed] = useState(false)
+  const [undoConfirmed, setUndoConfirmed] = useState(false)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState(null)
+  const [message, setMessage] = useState(null)
+  const scope = useRequestScope(jobId)
+  const running = useRef(false)
+  const edit = update => { update(); scope.current.version += 1; setPreview(null); setConfirmed(false); setMessage(null) }
+  useEffect(() => { setData(null); setPreview(null); setConfirmed(false); setUndoConfirmed(false); setMessage(null); setSource(''); setSnapshot(false); setVerbatim(false) }, [jobId])
+  const load = useCallback(() => {
+    if (!open) return
+    const version = ++scope.current.version
+    ctx.rest(`/native-cron?job_id=${encodeURIComponent(jobId)}`).then(res => {
+      if (scope.current.scope !== jobId || scope.current.version !== version) return
+      if (!res || res.ok === false) setError(errorText(res, 'Could not inspect this source attachment.'))
+      else { setData(res); setError(null) }
+    }).catch(() => { if (scope.current.scope === jobId && scope.current.version === version) setError('Could not inspect this source attachment.') })
+  }, [ctx, jobId, open])
+  useEffect(() => { load(); return () => { scope.current.version += 1 } }, [load])
+  const request = (path, body, mutation = false) => {
+    if (running.current) return
+    running.current = true; setPending(true); setError(null)
+    const version = ++scope.current.version
+    ctx.rest(path, { method: 'POST', body: { job_id: jobId, ...body } }).then(res => {
+      if (scope.current.scope !== jobId || scope.current.version !== version) return
+      if (!res || res.ok === false) setError(errorText(res, 'Could not complete this source action.'))
+      else if (!mutation) { setPreview(res); setConfirmed(false) }
+      else { setData(res); setPreview(null); setConfirmed(false); setUndoConfirmed(false); setMessage(res.message || 'Source fields updated.'); onChanged() }
+    }).catch(() => { if (scope.current.scope === jobId && scope.current.version === version) setError('Could not complete this source action.') })
+      .finally(() => { running.current = false; if (scope.current.scope === jobId) setPending(false) })
+  }
+  const values = { source_script: source, mode, snapshot_only: snapshot, verbatim_output: verbatim }
+  const attached = data && data.state && ['pending', 'applied'].includes(data.state.status)
+  return jsxs('div', { style: panelStyle, children: [
+    sectionButton('Automatic source snapshots', open, () => setOpen(value => !value)),
+    ...(open ? [
+      small('Use an explicitly reviewed Python source for a local latest-state snapshot. Other tasks keep normal Hermes execution and reasoning.', C.soft),
+      attached ? small(`Attached: ${data.state.mode} · ${data.state.approval_revoked ? 'requirements changed; approval revoked' : data.state.status}`, C.soft) : null,
+      !attached ? field('Python source under this profile’s scripts directory', jsx('input', { value: source, maxLength: 400, placeholder: 'snapshot.py', disabled: pending, style: fieldStyle, onChange: e => edit(() => setSource(e.target.value)) })) : null,
+      !attached ? field('Snapshot behavior', jsx('select', { value: mode, disabled: pending, style: fieldStyle, onChange: e => edit(() => setMode(e.target.value)), children: [jsx('option', { value: 'monitor', children: 'Wake the model when data changes' }), jsx('option', { value: 'verbatim', children: 'Use script output, no model' })] })) : null,
+      !attached ? checkField('This source is the complete read-only snapshot; this job has no per-run action, deadline or required repeated delivery', snapshot, value => edit(() => setSnapshot(value)), pending) : null,
+      !attached && mode === 'verbatim' ? checkField('The script output is the complete requested final answer', verbatim, value => edit(() => setVerbatim(value)), pending) : null,
+      !attached ? actionButton('Preview source · no execution', () => request('/native-cron-preview', values), pending || !source) : null,
+      preview ? jsxs('div', { children: [
+        small(preview.behavior || '', C.soft),
+        preview.source ? jsx('pre', { tabIndex: 0, 'aria-label': 'Complete reviewed snapshot source', style: { ...fieldStyle, maxHeight: 240, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }, children: preview.source.text }) : null,
+        preview.source ? jsx('div', { style: { overflowWrap: 'anywhere' }, children: small(`Source SHA256: ${preview.source.sha256}`, C.soft) }) : null,
+        small('The copied source runs with ordinary cron permissions. Imports and external resources are not frozen. Reviewing this preview does not execute the source or call a model.', C.soft),
+        mode === 'verbatim' ? small('Hermes trims outer whitespace and applies its normal secret redaction. This mode does not promise byte-identical delivery.', C.soft) : null,
+        ...(preview.blockers || []).map((text, i) => jsx('div', { key: `native-blocker-${i}`, children: small(text, C.yellow) })),
+        preview.can_apply ? checkField('I approve attaching this reviewed source and its snapshot behavior', confirmed, setConfirmed, pending) : null,
+        preview.can_apply ? actionButton('Attach reviewed source', () => { if (confirmed) request('/native-cron', { ...values, expected_preview_sha256: preview.preview_sha256, confirmed: true }, true) }, pending || !confirmed) : null
+      ] }) : null,
+      attached ? checkField('I approve restoring the previous native source fields', undoConfirmed, setUndoConfirmed, pending) : null,
+      attached ? actionButton('Undo native source', () => { if (undoConfirmed) request('/native-cron-undo', { expected_config_fingerprint: data.config_fingerprint, confirmed: true }, true) }, pending || !undoConfirmed) : null,
+      small('Changed data uses the configured main model and reasoning. Unknown evidence or a failed answer forces a fresh run; no cash-saving percentage is inferred.', C.soft),
+      error ? statusLine(error, C.yellow) : null,
+      message ? statusLine(message, C.green) : null
+    ] : [])
+  ] })
+}
+
 function JobEvidence({ item, ctx, onChanged }) {
   const jobId = item.job_id
   const [open, setOpen] = useState(false)
@@ -1419,6 +1489,7 @@ function JobEvidence({ item, ctx, onChanged }) {
         ] }),
         rawDetails('Full receipt and cost provenance', receipt),
         jsx(RhythmControl, { key: 'rhythm', ctx, jobId, onChanged }),
+        jsx(NativeCronControl, { key: 'native-cron', ctx, jobId, onChanged }),
         jsx(ModelAuction, { key: 'auction', ctx, jobId, onChanged })
       ] : [])
     ]

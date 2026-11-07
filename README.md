@@ -20,8 +20,10 @@ is on hold. All further work is being reviewed in this repository first.
 **Current evidence:** this public-SDK candidate has no verified live savings
 percentage at unchanged reasoning. Research, writing, data, analysis, coding and
 cron coverage comes from offline fixtures; it does not prove every mainstream
-task or provider works live. Automatic zero-AI/pre-run routines are unavailable
-on the reviewed SDK. Its older cron measurements cannot be carried over to this
+task or provider works live. Arbitrary learned-tool replay remains unavailable
+on the reviewed SDK. Explicitly reviewed native Python snapshot sources can use
+the host's monitor or script-only controls, with no nested tool dispatch. Older
+cron measurements cannot be carried over to this
 implementation. See [submission status](docs/submission-status.md) for the
 measurement, marketplace and local activation boundaries.
 
@@ -35,6 +37,7 @@ measurement, marketplace and local activation boundaries.
 | Tool discovery | Opt-in schema deferral with host-supported discovery | Unsupported/required tool paths retain normal schemas |
 | Cron input tuning | Reduces repeated instructions/tool schemas at the same model and reasoning; restores failed trials | Changed settings and uncertain evidence do not become savings claims |
 | Read recipes | Learns complete read plans from traces and returns them to the normal agent | Automatic nested replay/promotion is unavailable without a verified public guard contract |
+| Native cron sources | Runs a reviewed Python snapshot through public host cron controls; unchanged data can avoid inference | Explicit complete-source approval, local delivery, failure retries and configuration checks; [scope and setup](docs/native-cron.md) |
 | Blind review | Presents anonymous A/B answers before model/cost reveal | A preference and structural checks do not establish correctness |
 | Model Auction | Explicit bounded model comparisons on frozen recorded evidence | Different-model selection is not same-model efficiency proof |
 | Rhythm | Explains observed changes and previews an explicit noncritical schedule adjustment | Confirmation, sufficient observations and declared slack are required |
@@ -185,7 +188,9 @@ actual billing. See [Model Auction pricing](docs/model-auction.md) and
 A routine contains only the conservative read subset before the first action.
 The current public dispatch implementation does not verify the complete guard
 pipeline, so automatic nested execution, routine shadow replay and pre-run/no-AI promotion
-are unavailable. Explicit `promote --mode tool` installs normal-agent recipe
+are unavailable for learned tool plans. The separate [native source](docs/native-cron.md)
+workflow uses a user-reviewed standalone script through documented cron controls.
+Explicit `promote --mode tool` installs normal-agent recipe
 guidance after matching normal-run observations. Read recipes return pending guidance for the main agent's ordinary
 tools. Method presence or a user setting does not enable raw dispatch. A read
 recognizer remains a conservative check, not a sandbox.

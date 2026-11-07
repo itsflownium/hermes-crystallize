@@ -6,14 +6,15 @@ admission and activation of an installed copy are separate states.
 **Owner hold:** the work is unfinished. Continue development and review only in
 `itsflownium/hermes-crystallize`; do not open a PR on `NousResearch/hermes-agent`.
 The prepared catalog entry is an internal review artifact. No upstream PR was
-created. PR #12 and its stacked follow-ups remain drafts until the remaining work
-is reviewed. Their individual code/CI results do not complete release validation.
+created. The owner authorized repository merges on 7 November 2026; PRs #12–#14
+are merged. That authorization does not permit an upstream submission, and
+individual code/CI results do not complete release validation.
 
 | Question | Current evidence | What remains |
 | --- | --- | --- |
 | Savings at unchanged reasoning | Main/reasoning settings are preserved in code and offline tests | No live percentage is established for the public-SDK candidate. Measure paired, same-model/same-requested-reasoning tasks before quoting a scoped result |
 | Mainstream tasks and providers | Research, writing, data, analysis, coding and cron fixtures; configurable host routes | Publish the exact live task/provider matrix, failures and quality checks. Fixtures cannot prove universal compatibility |
-| Automatic cron without AI | Explicit normal-host-tool plans, input tuning and observable normal-run evidence | The reviewed public nested dispatcher cannot certify normal guards. Pre-run/no-AI execution stays unavailable; older savings from those modes do not transfer |
+| Automatic cron without AI | Explicit normal-host-tool plans and separate reviewed native Python snapshot sources | Arbitrary learned-tool replay remains unavailable. Native monitor/verbatim sources use public host controls within their declared scope; older routine savings do not transfer |
 | Marketplace | Internal exact-commit bundle, host/security/Desktop validation and public-source audit | Submission is deferred by the owner. `catalog_ready: false` means listing is not established; passing technical checks does not mean the product work is finished |
 | Local installation | A workspace test validates that checkout only | Resolve the installed plugin link, compare its Git revision and separately activate the reviewed candidate. CI does not hot-reload a running gateway |
 

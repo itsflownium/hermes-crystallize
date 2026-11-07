@@ -292,6 +292,9 @@ def _tune(args: Any) -> None:
 
 def _handle(args: Any) -> None:
     sub = getattr(args, "crystal_command", None)
+    if sub == "native-cron":
+        _native_action(args)
+        return
     if sub in ("reread", "blind", "rhythm", "auction", "delegation", "tool-defer", "compatibility", "model-route", "rate-card"):
         _completion_action(sub, args)
         return
@@ -323,6 +326,25 @@ def _read_json(path: str) -> Any:
     if source.stat().st_size > 500_000:
         raise ValueError("The JSON file exceeds 500 KB.")
     return json.loads(source.read_text(encoding="utf-8"))
+
+
+def _native_action(args: Any) -> None:
+    import json
+    from . import native_cron
+    try:
+        if args.undo:
+            result = native_cron.undo(args.job, expected_config_fingerprint=args.fingerprint, confirmed=args.confirm)
+        elif args.source_script:
+            values = {"mode": args.mode, "snapshot_only": args.snapshot_only, "verbatim_output": args.verbatim_output}
+            result = native_cron.apply(args.job, args.source_script, expected_preview_sha256=args.fingerprint,
+                                       confirmed=args.confirm, **values) if args.apply else native_cron.preview(args.job, args.source_script, **values)
+        elif args.apply:
+            raise native_cron.NativeCronError("Choose --source-script and preview the complete source before --apply.")
+        else:
+            result = native_cron.status(args.job)
+        print(json.dumps(result, indent=2))
+    except (ValueError, OSError, native_cron.NativeCronError) as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def _improvement_action(sub: str, args: Any) -> None:
@@ -372,6 +394,17 @@ def _setup(subparser: Any) -> None:
     a = subs.add_parser("analyze", help="Find the steps a job repeats every run")
     a.add_argument("job", help="Job name or id")
     a.add_argument("--json", action="store_true", help="Print the full analysis as JSON")
+    nc = subs.add_parser("native-cron", help="Review and explicitly attach a complete Python snapshot source through native cron")
+    nc.add_argument("job", help="Exact stable job ID")
+    nc.add_argument("--source-script", help="Python file relative to this profile's scripts directory; preview never executes it")
+    nc.add_argument("--mode", choices=("monitor", "verbatim"), default="monitor")
+    nc.add_argument("--snapshot-only", action="store_true", help="Declare the source complete and read-only, with no per-run action or deadline")
+    nc.add_argument("--verbatim-output", action="store_true", help="Declare exact script stdout the complete requested final answer")
+    action = nc.add_mutually_exclusive_group()
+    action.add_argument("--apply", action="store_true")
+    action.add_argument("--undo", action="store_true")
+    nc.add_argument("--fingerprint", default="", help="Preview SHA for Apply; current config fingerprint for Undo")
+    nc.add_argument("--confirm", action="store_true", help="Approve the reviewed source/native-field change")
     for name, text in (("try", "Save a job's steps as a routine and start testing it"),
                        ("test", "Inspect fresh normal host observations; replay needs a verified guarded SDK"),
                        ("promote", "Switch the job over to its routine (needs 3 matching test runs)"),
