@@ -174,6 +174,35 @@ def test_scheduler_bookkeeping_does_not_disable_an_approved_source(world):
     assert execute(world).stdout == "complete snapshot: value 42\n"
 
 
+@pytest.mark.parametrize("mode", ["monitor", "verbatim"])
+def test_created_paused_job_keeps_source_valid_when_resumed(world, mode):
+    world[2].update(state="paused", enabled=False,
+                    paused_reason="Created paused; awaiting operator approval.")
+    world[4]()
+    attach(world, mode)
+    world[2].update(state="scheduled", enabled=True, paused_reason=None)
+    world[4]()
+    result = execute(world)
+    assert result.returncode == 0
+    if mode == "monitor":
+        assert json.loads(result.stdout)["snapshot"] == "complete snapshot: value 42\n"
+        assert execute(world).stdout == result.stdout
+    else:
+        assert result.stdout == "complete snapshot: value 42\n"
+
+
+def test_runtime_updates_require_review_without_rewriting_owned_artifacts(world):
+    current = attach(world)
+    assert current["runtime_review_required"] is False
+    wrapper = world[0] / "scripts" / current["state"]["owned"]["monitor_script"]
+    original = wrapper.read_bytes()
+    state = store.get_setting("native_cron:native-job")
+    state.pop("runtime_sha256")
+    store.set_setting("native_cron:native-job", state)
+    assert native.status("native-job")["runtime_review_required"] is True
+    assert wrapper.read_bytes() == original
+
+
 def test_host_omitting_null_optional_fields_does_not_change_task_semantics(world):
     world[2]["optional_host_field"] = None
     world[4]()

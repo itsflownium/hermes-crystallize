@@ -21,7 +21,7 @@ OUTPUT_LIMIT = 6_000  # native monitor context is capped at 8,000 characters
 _VOLATILE = frozenset({"monitor_state", "next_run_at", "last_run_at", "last_run", "next_run",
     "last_status", "last_error", "last_dispatch", "last_execution_id", "last_delivery", "last_output",
     "run_count", "started_at", "finished_at", "updated_at", "schedule_display", "run_claim",
-    "state", "enabled", "paused_at", "completed_at", "failure_streak", "last_failure", "repeat"})
+    "state", "enabled", "paused_at", "paused_reason", "completed_at", "failure_streak", "last_failure", "repeat"})
 _VOLATILE |= frozenset({"fire_claim", "pending_slot", "last_delivery_error", "canonical_completions"})
 
 
