@@ -119,6 +119,8 @@ def set(job_id: str, spec: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]
     if not isinstance(job_id, str) or not job_id.strip():
         raise ContractError("A stable job ID is required.")
     normalized = validate(spec) if spec is not None else None
+    from . import native_cron
+    native_cron.invalidate(job_id)
     store.set_setting(_KEY + job_id, normalized)
     return normalized
 

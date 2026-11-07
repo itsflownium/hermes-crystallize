@@ -170,6 +170,7 @@ def analyze_sources(sources: dict[str, str]) -> dict[str, Any]:
     audit = sdk_audit_sources(runtime)
     return {"registered": {k: sorted(v) for k, v in registered.items()},
             "public_dispatch_plan_fallback": "dispatch_support.py" in sources,
+            "native_snapshot_sources": all(path in sources for path in ("native_cron.py", "native_cron_runtime.py")),
             "public_api_audit": audit,
             "core_imports_requiring_public_api_review": [f for f in audit["findings"] if "private" in f["kind"]],
             "documented_core_imports": audit.get("public_core_imports", []),
@@ -257,9 +258,11 @@ def build_entry(manifest: dict[str, Any], sha: str, repo_url: str, analysis: dic
         entry["known_issues"].append("Private Hermes imports remain; public SDK migration and compatibility review are required before admission.")
     if analysis.get("public_dispatch_plan_fallback"):
         entry["known_issues"].extend([
-            "Automatic nested tool execution and pre-run/no-AI routines are unavailable on the audited SDK; explicit tool mode returns pending normal-host-tool plans.",
+            "Automatic nested tool execution and pre-run/no-AI replay of learned tool plans are unavailable on the audited SDK; explicit tool mode returns pending normal-host-tool plans.",
             "Configured/declared routes have unverified authentication and availability. User rate cards and public provider quotes are estimates, not billing evidence.",
         ])
+    if analysis.get("native_snapshot_sources"):
+        entry["known_issues"].append("Optional native Python snapshot sources require explicit complete-source approval and local delivery; copied code/imports run with ordinary cron permissions, and host text trimming/redaction still apply.")
     return entry
 
 
@@ -281,6 +284,9 @@ def yaml_entry(entry: dict[str, Any]) -> str:
 
 def submission_text(entry: dict[str, Any], readiness: dict[str, Any]) -> str:
     handoff_disclosure = ""
+    native_disclosure = ("- Explicit native snapshot sources use public cron CLI controls after complete-source review.\n"
+                         "  Copies/wrappers/approval files stay under scripts/crystallize-native/; no nested tool replay.\n"
+                         if readiness["pinned_features"].get("native_snapshot_sources") else "")
     if readiness["pinned_features"]["delegated_file_handoffs"]:
         if readiness["pinned_features"].get("public_dispatch_plan_fallback"):
             handoff_disclosure = ("- Explicit delegated file handoffs return pending ordinary-host read/write plans.\n"
@@ -307,9 +313,10 @@ the later catalog-only bundle commit must not replace it with a self-reference.
 Crystallize targets repeated context and read planning through explicit per-chat/per-job
 controls and local receipts. Main reasoning is not reduced. No live savings percentage
 at unchanged reasoning is established for this public-SDK candidate. The research,
-writing, data, analysis, coding and cron fixtures are offline scope, not proof of
-universal live task/provider coverage or semantic equivalence. Automatic pre-run/no-AI
-routines remain unavailable on the reviewed SDK; their older savings do not transfer.
+writing, data, analysis, coding and cron fixtures have explicitly scoped validation,
+not proof of universal live task/provider coverage or semantic equivalence. Automatic
+pre-run/no-AI replay of learned tools remains unavailable on the reviewed SDK;
+older savings from that path do not transfer.
 
 Disclosures for reviewer and installer:
 
@@ -324,7 +331,7 @@ Disclosures for reviewer and installer:
 - Cron tuning/promotion/undo can run public Hermes CLI children and edit supported selected
   fields. Unsupported toolset/dispatch operations remain with the normal host agent; automatic
   nested reads and promotion are disabled without an available documented guarded seam.
-{handoff_disclosure}- Local plugin data can contain captured tool arguments/results, original results retained
+{handoff_disclosure}{native_disclosure}- Local plugin data can contain captured tool arguments/results, original results retained
   for recovery, cache entries, contracts, answers, receipts and usage diagnostics. Avoid
   sensitive shared cache namespaces. Helper calls have bounded background workers;
   timeout does not establish zero cost and late usage remains part of accounting.
@@ -395,6 +402,7 @@ def generate(repo: Path, sha: str, output: Path, repo_url: str | None = None, *,
                  "admission": {"listed": False, "maintainer_merge": "pending", "public_pin_availability": "not_checked_by_generator"},
                  "pinned_features": {"delegated_file_handoffs": "handoffs.py" in tree.paths,
                                      "public_dispatch_plan_fallback": "dispatch_support.py" in tree.paths,
+                                     "native_snapshot_sources": all(path in tree.paths for path in ("native_cron.py", "native_cron_runtime.py")),
                                      "sdk_gap_document": "docs/sdk-gaps.md" in tree.paths},
                  "publication_verified": False, "upstream_catalog_pr": None, "maintainer_approval": "not_obtained",
                  "hermes_plugins_validate": {"status": "not_run_by_generator", "warnings_suppressed": False,

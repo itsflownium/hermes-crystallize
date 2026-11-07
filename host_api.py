@@ -49,6 +49,10 @@ def report(ctx: Any = None) -> dict[str, Any]:
         "private_core_imports": private,
         "public_api_audit": checks,
         "optional_sdk_limits": [
+            {"id": "native_snapshot_sources", "integration_present": True,
+             "capability_probe": "Explicit native-cron preview checks public CLI help before approval.",
+             "modes": ["monitor", "verbatim"], "nested_tool_replay": False,
+             "scope": "Reviewed complete local Python snapshot sources; local delivery only."},
             {"id": "automatic_nested_tools", "available": dispatch["automatic_nested_tools"],
              "fallback": "The main agent executes returned plans through its ordinary host tools."},
             {"id": "model_inventory", "source": "public declarations and configured identifiers",

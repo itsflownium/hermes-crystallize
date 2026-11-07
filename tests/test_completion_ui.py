@@ -42,6 +42,8 @@ CASES = [
     "unguarded dispatch cannot enable autonomous modes",
     "host-tool plans require an explicit mode choice",
     "unavailable replay never advertises stale projected savings",
+    "native source preview requires review and resets approval on edits",
+    "native source undo requires current configuration and explicit approval",
     "observation starts only through its explicit control",
     "compatibility explains normal host-tool file plans",
     "unsupported unchanged policies expose only a run-always reset",
@@ -92,7 +94,7 @@ const sdk = {Codicon: () => null, ROUTES_AREA: 'routes', SIDEBAR_NAV_AREA: 'nav'
 const sandbox = {...hooks, ...sdk, jsx, jsxs: jsx, Intl, Date, URLSearchParams, console};
 vm.createContext(sandbox);
 const code = source.replace(/^import .* from .*\n/gm, '').replace('export default {', 'const desktopPlugin = {');
-vm.runInContext(code + '\nthis.parts={BlindTasteTest,RhythmHeatmap,RhythmControl,ModelAuction,AuctionResult,RereadControls,DelegationControls,JobEvidence,ReceiptSummary,Hero,RouteEntry,PricingCard,ModelPicker,CompatibilityCard,LiveOptions,JobBubble,ThisChat,promotionTarget,canUseMode};', sandbox);
+vm.runInContext(code + '\nthis.parts={BlindTasteTest,RhythmHeatmap,RhythmControl,ModelAuction,AuctionResult,RereadControls,DelegationControls,NativeCronControl,JobEvidence,ReceiptSummary,Hero,RouteEntry,PricingCard,ModelPicker,CompatibilityCard,LiveOptions,JobBubble,ThisChat,promotionTarget,canUseMode};', sandbox);
 const plain = value => JSON.parse(JSON.stringify(value));
 function mount(name, props) {
   const owner = {slots: [], effects: [], dirty: true, cursor: 0, tree: null, props};
@@ -368,6 +370,17 @@ await test('unavailable replay never advertises stale projected savings', async 
     const view=mount('JobBubble',{item:{...modeItem,mode:null,saving_per_week:250,projection:{status:'unavailable'}},status,trialRuns:3,ctx:makeContext().ctx,compatibility:unsupported,act:()=>{},exp:{open:{'job-a':true},toggle:()=>{}}});await view.flush();
     const content=text(view.tree);assert.ok(content.includes('Needs measurement'));assert.ok(content.includes('savings require normal-run evidence'));assert.ok(!content.includes('$250'));view.dispose();
   }
+});
+await test('native source preview requires review and resets approval on edits', async () => {
+  const api=makeContext({'GET /native-cron':()=>({ok:true,state:{},config_fingerprint:'current'}),'POST /native-cron-preview':()=>({ok:true,can_apply:true,preview_sha256:'reviewed',source:{text:'print(42)',sha256:'source-hash'},blockers:[]})});
+  const view=mount('NativeCronControl',{ctx:api.ctx,jobId:'job-a'});await view.flush();assert.equal(api.calls.length,0);click(view,'▸ Automatic source snapshots');await view.flush();
+  change(view,'Python source under','snapshot.py');change(view,'This source is the complete',true);click(view,'Preview source · no execution');await view.flush();assert.equal(button(view,'Attach reviewed source').props.disabled,true);
+  change(view,'I approve attaching',true);change(view,'Python source under','different.py');assert.equal(button(view,'Attach reviewed source'),undefined);assert.equal(api.posts().filter(c=>c.base==='/native-cron').length,0);view.dispose();
+});
+await test('native source undo requires current configuration and explicit approval', async () => {
+  const api=makeContext({'GET /native-cron':()=>({ok:true,state:{status:'applied',mode:'monitor'},config_fingerprint:'current'}),'POST /native-cron-undo':()=>({ok:true,state:{status:'undone'},message:'Restored.'})});
+  const view=mount('NativeCronControl',{ctx:api.ctx,jobId:'job-a'});click(view,'▸ Automatic source snapshots');await view.flush();assert.equal(button(view,'Undo native source').props.disabled,true);change(view,'I approve restoring',true);click(view,'Undo native source');await view.flush();
+  assert.deepEqual(plain(api.posts()[0].body),{job_id:'job-a',expected_config_fingerprint:'current',confirmed:true});view.dispose();
 });
 await test('observation starts only through its explicit control', async () => {
   const calls=[];const view=mount('JobBubble',{item:{...modeItem,ready:false},status:'spotted',trialRuns:3,ctx:makeContext().ctx,compatibility:unsupported,act:(path,body)=>calls.push({path,body}),exp:{open:{'job-a':true},toggle:()=>{}}});await view.flush();assert.equal(calls.length,0);const action=all(view).find(node=>node.type && node.type.name==='JobHeader').props.action;assert.equal(text(action),'Observe next runs');action.props.onClick();view.render();

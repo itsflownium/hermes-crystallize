@@ -115,7 +115,7 @@ async def _serve(call: Callable[[], dict[str, Any]], *, message: str) -> dict[st
         code = "action_blocked" if type(exc).__name__ in {"ExperimentError", "ComparisonError", "AuctionError", "BlindError"} else "invalid_request"
         return {"ok": False, "code": code, "error": str(exc), "message": str(exc)}
     except Exception as exc:  # noqa: BLE001 — preserve friendly domain errors, hide internals
-        if type(exc).__name__ in {"LifecycleError", "ExperimentError", "ComparisonError", "RhythmError", "AuctionError", "BlindError"}:
+        if type(exc).__name__ in {"LifecycleError", "ExperimentError", "ComparisonError", "RhythmError", "AuctionError", "BlindError", "NativeCronError"}:
             return {"ok": False, "code": "action_blocked", "error": str(exc), "message": str(exc)}
         logger.warning("crystallize: %s: %s", message, exc, exc_info=True)
         return {"ok": False, "code": "internal_error", "error": message, "message": message}
@@ -161,6 +161,36 @@ async def promote_routine(body: dict) -> dict[str, Any]:
         r = _lifecycle().promote(_identifier(body.get("routine_id"), "routine"), mode=mode)
         return {"ok": True, "message": f"{r['name']} is ready for normal host-tool guidance." if mode == "tool" else f"{r['name']} is live."}
     return await _serve(apply, message="Couldn't promote the routine.")
+
+
+@router.get("/native-cron")
+async def native_cron_status(job_id: str) -> dict[str, Any]:
+    return await _serve(lambda: _module("native_cron").status(_identifier(job_id, "job")),
+                        message="Couldn't inspect the native cron source.")
+
+
+@router.post("/native-cron-preview")
+async def native_cron_preview(body: dict) -> dict[str, Any]:
+    return await _serve(lambda: _module("native_cron").preview(_identifier(body.get("job_id"), "job"),
+        body.get("source_script"), mode=_choice(body, "mode", ("monitor", "verbatim")),
+        snapshot_only=_boolean(body, "snapshot_only"), verbatim_output=_boolean(body, "verbatim_output")),
+        message="Couldn't preview the native cron source.")
+
+
+@router.post("/native-cron")
+async def native_cron_apply(body: dict) -> dict[str, Any]:
+    return await _serve(lambda: _module("native_cron").apply(_identifier(body.get("job_id"), "job"),
+        body.get("source_script"), mode=_choice(body, "mode", ("monitor", "verbatim")),
+        snapshot_only=_boolean(body, "snapshot_only"), verbatim_output=_boolean(body, "verbatim_output"),
+        expected_preview_sha256=body.get("expected_preview_sha256"), confirmed=_boolean(body, "confirmed")),
+        message="Couldn't attach the native cron source.")
+
+
+@router.post("/native-cron-undo")
+async def native_cron_undo(body: dict) -> dict[str, Any]:
+    return await _serve(lambda: _module("native_cron").undo(_identifier(body.get("job_id"), "job"),
+        expected_config_fingerprint=body.get("expected_config_fingerprint"), confirmed=_boolean(body, "confirmed")),
+        message="Couldn't restore the native cron source fields.")
 
 
 @router.post("/undo")
