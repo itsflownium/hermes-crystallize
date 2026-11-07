@@ -173,3 +173,11 @@ revision. Reports without a checker revision used the original numeric-only
 checker. Do not rerun paid calls to replace an unfavorable original outcome or
 silently rewrite a failure as a pass. Neither version establishes semantic
 equivalence or actual billing.
+
+## Preserve each run's evidence
+
+Use a fresh `--report` path for every invocation. The CLI claims the path with an
+exclusive create before loading an operator factory or starting a model call; an
+existing file or symlink is refused. Progress updates then belong to that run.
+Keep failed, interrupted and superseded fixtures under separate names; changing a
+prompt contract requires a new fixture version and a separately labelled rerun.

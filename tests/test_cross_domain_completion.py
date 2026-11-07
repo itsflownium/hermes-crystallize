@@ -406,3 +406,29 @@ def test_catalog_disclosures_do_not_claim_unpinned_file_handoffs():
     assert "Explicit delegated file handoffs" not in catalog.submission_text(entry, readiness)
     readiness["pinned_features"]["delegated_file_handoffs"] = True
     assert "Explicit delegated file handoffs" in catalog.submission_text(entry, readiness)
+
+
+def test_cron_v2_declares_boolean_types_and_rejects_string_none():
+    cron = next(f for f in fixtures.FIXTURES if f.domain == "cron")
+    assert cron.id == "cron-delta-source-error-v2"
+    assert "JSON booleans (true or false), never strings" in cron.task
+    assert not fixtures.check_answer(cron, json.dumps({**cron.reference, "action_performed": "none"}))["ok"]
+    assert fixtures.check_answer(cron, json.dumps(cron.reference))["ok"]
+
+
+@pytest.mark.parametrize("symlink", [False, True])
+def test_existing_report_is_preserved_before_a_live_factory_can_run(tmp_path, monkeypatch, symlink):
+    original = tmp_path / "original.json"
+    original.write_text('{"previous_failed_answer": "keep this evidence"}\n')
+    target = tmp_path / "report.json"
+    if symlink:
+        target.symlink_to(original)
+    else:
+        target.write_bytes(original.read_bytes())
+    before = original.read_bytes()
+    monkeypatch.setattr(validation, "execute_live", lambda *a, **kw: pytest.fail("A paid run started before report ownership was established."))
+    with pytest.raises(SystemExit) as error:
+        validation.main(["--run", "--report", str(target)])
+    assert error.value.code == 2
+    assert original.read_bytes() == before
+    assert target.read_bytes() == before

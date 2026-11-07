@@ -14,13 +14,14 @@ across cloud routes. This is a compatibility design, not a claim that every
 provider, model, operating system or task has been tested. Missing prices,
 capabilities, usage and guarded execution stay unknown or fail closed.
 
-**Work in progress:** release validation is unfinished and upstream submission
-is on hold. All further work is being reviewed in this repository first.
+**Submission status:** upstream catalog submission remains on owner hold.
+Development, evidence and PRs are reviewed in this repository first.
 
 **Current evidence:** this public-SDK candidate has no verified live savings
 percentage at unchanged reasoning. Research, writing, data, analysis, coding and
-cron coverage comes from offline fixtures; it does not prove every mainstream
-task or provider works live. Arbitrary learned-tool replay remains unavailable
+cron have current Nous answer-only observations and offline fixtures, with a
+partially retained matrix and a separately versioned cron rerun. They do not
+prove every mainstream task or provider works live. Arbitrary learned-tool replay remains unavailable
 on the reviewed SDK. Explicitly reviewed native Python snapshot sources can use
 the host's monitor or script-only controls, with no nested tool dispatch. Older
 cron measurements cannot be carried over to this
@@ -110,7 +111,7 @@ do not fill missing live results.
 The reproducible harness covers research, writing, data, analysis, coding and
 cron fixtures. It defaults to local checks without model calls. Optional live
 calls use the public facade, fresh answer-only inputs, an explicit provider
-allowlist, temporary HOME, reservations and process deadlines. Synthetic JSON
+allowlist, isolated profile data, reservations and process deadlines. Synthetic JSON
 indentation makes its compression ratio unrepresentative of normal workloads.
 Passing it establishes observable conditions, not whole-loop quality or every
 cloud provider's compatibility.
@@ -119,10 +120,17 @@ cloud provider's compatibility.
 python scripts/validation_cross_domain.py --report work/validation-plan.json
 ```
 
+The [current results](docs/validation-results.md) retain the same-route research
+and cron-v2 pairs, public max-reasoning request observations and all known
+failures. Smaller inputs did not establish a net saving: output/reasoning grew.
+Use a new report filename for each run; existing reports are refused.
+
 The preserved 16-attempt Nous evidence in `docs/evidence/` comes from the prior
 private-dependency build. It retains original failures, interrupted attempts,
-unknown billing and separately labelled offline checker correction. The isolated
-no-agent scheduler smoke proves only that narrow path. These records are not
+unknown billing and separately labelled offline checker correction. The historical isolated
+no-agent scheduler smoke proves only that narrow path. Current results add a
+real reviewed monitor sequence with first/changed answers and an unchanged tick
+without a model request; billing and strict reasoning comparison remain unknown. These records are not
 revalidation of this public-SDK-only revision; no paid rerun was used to replace
 that evidence during migration.
 

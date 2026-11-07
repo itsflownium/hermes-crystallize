@@ -1,0 +1,303 @@
+{
+  "schema_version": 1,
+  "scope": "separate bounded v0.5.2 runtime-fix validation on the same paused local jobs; prior failed controller and answer remain overhead",
+  "started_at": "2026-11-07T06:36:41.505530+00:00",
+  "initial_controller_sha256": "80b8693e46e055228f2d419f57650f23b021c219da2991d8542c48edc697b1f2",
+  "initial_controller_status": false,
+  "initial_controller_error_type": "TimeoutError",
+  "reservation_scope": "same existing US$0.90 cron allocation, not a new allocation",
+  "actual_billed_usd": null,
+  "job_ids": {
+    "baseline": "e3821220b5d8",
+    "candidate": "f4694c0bb6ff"
+  },
+  "steps": [
+    {
+      "phase": "fixed runtime first scheduled snapshot",
+      "completed_at": "2026-11-07T06:38:05.686677+00:00",
+      "records": {
+        "baseline": [
+          {
+            "id": "e812c25d929f4828b2d86fcf9842a624",
+            "job_id": "e3821220b5d8",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:08:28.036632+00:00",
+            "started_at": "2026-11-07T17:08:49.087124+11:00",
+            "finished_at": "2026-11-07T17:09:02.417050+11:00",
+            "delivery_outcome": "suppressed"
+          },
+          {
+            "id": "c630d81c3f744781bff74d505d2fa9e5",
+            "job_id": "e3821220b5d8",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:10:02.401857+00:00",
+            "started_at": "2026-11-07T17:10:49.093567+11:00",
+            "finished_at": "2026-11-07T17:10:56.265672+11:00",
+            "delivery_outcome": "suppressed"
+          }
+        ],
+        "candidate": [
+          {
+            "id": "432331c5ef8d4f2db17cdf6f9f5c8e8b",
+            "job_id": "f4694c0bb6ff",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:08:30.098614+00:00",
+            "started_at": "2026-11-07T17:08:49.087820+11:00",
+            "finished_at": "2026-11-07T17:11:46.526321+11:00",
+            "delivery_outcome": "suppressed"
+          },
+          {
+            "id": "2ea7bcc8194749288f95699d3d05c88d",
+            "job_id": "f4694c0bb6ff",
+            "source": "scheduler",
+            "status": "missed",
+            "scheduled_instant": "2026-11-07T06:12:46.525100+00:00",
+            "started_at": null,
+            "finished_at": "2026-11-07T17:30:51.747297+11:00",
+            "delivery_outcome": null
+          },
+          {
+            "id": "95520b47e1ec401a9441aa2675d9df54",
+            "job_id": "f4694c0bb6ff",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:12:46.525100+00:00",
+            "started_at": "2026-11-07T17:30:51.802487+11:00",
+            "finished_at": "2026-11-07T17:30:59.014227+11:00",
+            "delivery_outcome": "suppressed"
+          },
+          {
+            "id": "f93b8ae94afe4c6fab85d38e41b5e4c5",
+            "job_id": "f4694c0bb6ff",
+            "source": "scheduler",
+            "status": "missed",
+            "scheduled_instant": "2026-11-07T06:31:59.012732+00:00",
+            "started_at": null,
+            "finished_at": "2026-11-07T17:37:51.785313+11:00",
+            "delivery_outcome": null
+          },
+          {
+            "id": "6bbf6244a8cd47faa8fd83c2867ae90f",
+            "job_id": "f4694c0bb6ff",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:31:59.012732+00:00",
+            "started_at": "2026-11-07T17:37:51.826526+11:00",
+            "finished_at": "2026-11-07T17:38:05.107385+11:00",
+            "delivery_outcome": "suppressed"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "unchanged scheduled snapshot",
+      "completed_at": "2026-11-07T06:39:54.711476+00:00",
+      "records": {
+        "baseline": [
+          {
+            "id": "e812c25d929f4828b2d86fcf9842a624",
+            "job_id": "e3821220b5d8",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:08:28.036632+00:00",
+            "started_at": "2026-11-07T17:08:49.087124+11:00",
+            "finished_at": "2026-11-07T17:09:02.417050+11:00",
+            "delivery_outcome": "suppressed"
+          },
+          {
+            "id": "c630d81c3f744781bff74d505d2fa9e5",
+            "job_id": "e3821220b5d8",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:10:02.401857+00:00",
+            "started_at": "2026-11-07T17:10:49.093567+11:00",
+            "finished_at": "2026-11-07T17:10:56.265672+11:00",
+            "delivery_outcome": "suppressed"
+          }
+        ],
+        "candidate": [
+          {
+            "id": "432331c5ef8d4f2db17cdf6f9f5c8e8b",
+            "job_id": "f4694c0bb6ff",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:08:30.098614+00:00",
+            "started_at": "2026-11-07T17:08:49.087820+11:00",
+            "finished_at": "2026-11-07T17:11:46.526321+11:00",
+            "delivery_outcome": "suppressed"
+          },
+          {
+            "id": "2ea7bcc8194749288f95699d3d05c88d",
+            "job_id": "f4694c0bb6ff",
+            "source": "scheduler",
+            "status": "missed",
+            "scheduled_instant": "2026-11-07T06:12:46.525100+00:00",
+            "started_at": null,
+            "finished_at": "2026-11-07T17:30:51.747297+11:00",
+            "delivery_outcome": null
+          },
+          {
+            "id": "95520b47e1ec401a9441aa2675d9df54",
+            "job_id": "f4694c0bb6ff",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:12:46.525100+00:00",
+            "started_at": "2026-11-07T17:30:51.802487+11:00",
+            "finished_at": "2026-11-07T17:30:59.014227+11:00",
+            "delivery_outcome": "suppressed"
+          },
+          {
+            "id": "f93b8ae94afe4c6fab85d38e41b5e4c5",
+            "job_id": "f4694c0bb6ff",
+            "source": "scheduler",
+            "status": "missed",
+            "scheduled_instant": "2026-11-07T06:31:59.012732+00:00",
+            "started_at": null,
+            "finished_at": "2026-11-07T17:37:51.785313+11:00",
+            "delivery_outcome": null
+          },
+          {
+            "id": "6bbf6244a8cd47faa8fd83c2867ae90f",
+            "job_id": "f4694c0bb6ff",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:31:59.012732+00:00",
+            "started_at": "2026-11-07T17:37:51.826526+11:00",
+            "finished_at": "2026-11-07T17:38:05.107385+11:00",
+            "delivery_outcome": "suppressed"
+          },
+          {
+            "id": "c57ca5c47df04c04a34763d5ae232b24",
+            "job_id": "f4694c0bb6ff",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:39:05.106079+00:00",
+            "started_at": "2026-11-07T17:39:51.819988+11:00",
+            "finished_at": "2026-11-07T17:39:52.190370+11:00",
+            "delivery_outcome": "suppressed"
+          }
+        ]
+      }
+    },
+    {
+      "phase": "changed scheduled snapshot",
+      "completed_at": "2026-11-07T06:42:24.158691+00:00",
+      "records": {
+        "baseline": [
+          {
+            "id": "e812c25d929f4828b2d86fcf9842a624",
+            "job_id": "e3821220b5d8",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:08:28.036632+00:00",
+            "started_at": "2026-11-07T17:08:49.087124+11:00",
+            "finished_at": "2026-11-07T17:09:02.417050+11:00",
+            "delivery_outcome": "suppressed"
+          },
+          {
+            "id": "c630d81c3f744781bff74d505d2fa9e5",
+            "job_id": "e3821220b5d8",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:10:02.401857+00:00",
+            "started_at": "2026-11-07T17:10:49.093567+11:00",
+            "finished_at": "2026-11-07T17:10:56.265672+11:00",
+            "delivery_outcome": "suppressed"
+          }
+        ],
+        "candidate": [
+          {
+            "id": "432331c5ef8d4f2db17cdf6f9f5c8e8b",
+            "job_id": "f4694c0bb6ff",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:08:30.098614+00:00",
+            "started_at": "2026-11-07T17:08:49.087820+11:00",
+            "finished_at": "2026-11-07T17:11:46.526321+11:00",
+            "delivery_outcome": "suppressed"
+          },
+          {
+            "id": "2ea7bcc8194749288f95699d3d05c88d",
+            "job_id": "f4694c0bb6ff",
+            "source": "scheduler",
+            "status": "missed",
+            "scheduled_instant": "2026-11-07T06:12:46.525100+00:00",
+            "started_at": null,
+            "finished_at": "2026-11-07T17:30:51.747297+11:00",
+            "delivery_outcome": null
+          },
+          {
+            "id": "95520b47e1ec401a9441aa2675d9df54",
+            "job_id": "f4694c0bb6ff",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:12:46.525100+00:00",
+            "started_at": "2026-11-07T17:30:51.802487+11:00",
+            "finished_at": "2026-11-07T17:30:59.014227+11:00",
+            "delivery_outcome": "suppressed"
+          },
+          {
+            "id": "f93b8ae94afe4c6fab85d38e41b5e4c5",
+            "job_id": "f4694c0bb6ff",
+            "source": "scheduler",
+            "status": "missed",
+            "scheduled_instant": "2026-11-07T06:31:59.012732+00:00",
+            "started_at": null,
+            "finished_at": "2026-11-07T17:37:51.785313+11:00",
+            "delivery_outcome": null
+          },
+          {
+            "id": "6bbf6244a8cd47faa8fd83c2867ae90f",
+            "job_id": "f4694c0bb6ff",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:31:59.012732+00:00",
+            "started_at": "2026-11-07T17:37:51.826526+11:00",
+            "finished_at": "2026-11-07T17:38:05.107385+11:00",
+            "delivery_outcome": "suppressed"
+          },
+          {
+            "id": "c57ca5c47df04c04a34763d5ae232b24",
+            "job_id": "f4694c0bb6ff",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:39:05.106079+00:00",
+            "started_at": "2026-11-07T17:39:51.819988+11:00",
+            "finished_at": "2026-11-07T17:39:52.190370+11:00",
+            "delivery_outcome": "suppressed"
+          },
+          {
+            "id": "06a9767e292045c29070eb115e8218da",
+            "job_id": "f4694c0bb6ff",
+            "source": "builtin",
+            "status": "completed",
+            "scheduled_instant": "2026-11-07T06:40:52.188894+00:00",
+            "started_at": "2026-11-07T17:41:51.996375+11:00",
+            "finished_at": "2026-11-07T17:42:21.113846+11:00",
+            "delivery_outcome": "suppressed"
+          }
+        ]
+      }
+    }
+  ],
+  "plugin_commit": "ebf2ba073f3c0096b588f5a29e097834aad76fb1",
+  "runtime_sha256": "74577f36975b953f8bfeab1eaf911973dc66f6312568aaeb778b07b16d1c86e8",
+  "runtime_fix_allocation_remaining_usd": 0.3,
+  "maximum_total_cron_model_calls": 6,
+  "prior_candidate_execution_ids": [
+    "432331c5ef8d4f2db17cdf6f9f5c8e8b",
+    "95520b47e1ec401a9441aa2675d9df54"
+  ],
+  "completed": false,
+  "error_type": "AssertionError",
+  "error": "Continuation stopped; private exception text omitted",
+  "baseline_paused": true,
+  "candidate_pause_failed": true,
+  "config_unchanged_after": true,
+  "finished_at": "2026-11-07T06:42:30.329720+00:00",
+  "reviewed_source_sha256": "4433da21ae6e6cf12fecebb9b43fcfd2f0998c6f11161097c65a0bad71c7e0ec",
+  "reviewed_runtime_sha256": "74577f36975b953f8bfeab1eaf911973dc66f6312568aaeb778b07b16d1c86e8"
+}

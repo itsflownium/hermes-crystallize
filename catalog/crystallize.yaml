@@ -1,26 +1,28 @@
 # Submission bundle only. Copy into hermes-agent/plugin-catalog/ in a maintainer-reviewed PR.
 name: "crystallize"
 repo: "https://github.com/itsflownium/hermes-crystallize"
-sha: "586d2b4708606dc8255437beea374aae4ddc11fe"
+sha: "5928049cb15bc28df823692787619c01d9714501"
 description: "Reduces repeated Hermes chat and cron work with explicit controls and local receipts."
 maintainer: "itsflownium"
 tier: "community"
 category: "automation"
 requires_hermes: ">=0.22.7"
-version: "0.4.1"
+version: "0.5.3"
 title: "Crystallize"
 readme: true
 known_issues:
   - "No live savings percentage at unchanged reasoning is established for this public-SDK candidate."
   - "Frozen fixture checks do not prove semantic equivalence or universal provider coverage."
-  - "Automatic nested tool execution and pre-run/no-AI routines are unavailable on the audited SDK; explicit tool mode returns pending normal-host-tool plans."
+  - "Automatic nested tool execution and pre-run/no-AI replay of learned tool plans are unavailable on the audited SDK; explicit tool mode returns pending normal-host-tool plans."
   - "Configured/declared routes have unverified authentication and availability. User rate cards and public provider quotes are estimates, not billing evidence."
+  - "Optional native Python snapshot sources require explicit complete-source approval and local delivery; copied code/imports run with ordinary cron permissions, and host text trimming/redaction still apply."
 capabilities:
   provides_tools: ["crystal_cheap", "crystal_full_result", "crystal_list", "crystal_run"]
   provides_hooks: ["on_session_end", "post_api_request", "post_tool_call", "pre_llm_call", "pre_tool_call", "transform_llm_output", "transform_tool_result"]
   provides_middleware: ["llm_request", "tool_execution"]
   requires_env: []
 screenshots:
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/586d2b4708606dc8255437beea374aae4ddc11fe/assets/review/public-capabilities-and-host-plan-desktop.png"
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/586d2b4708606dc8255437beea374aae4ddc11fe/assets/review/public-routes-and-manual-pricing-desktop.png"
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/586d2b4708606dc8255437beea374aae4ddc11fe/assets/review/chat-quality-and-onboarding-desktop.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/public-capabilities-and-host-plan-desktop.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/public-routes-and-manual-pricing-desktop.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/chat-quality-and-onboarding-desktop.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/native-cron-source-review-desktop.png"

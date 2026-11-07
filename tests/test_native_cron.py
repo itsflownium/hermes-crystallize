@@ -9,6 +9,7 @@ import subprocess
 import sys
 
 import pytest
+from scripts import validation_native_cron
 
 from crystallize import cli, contracts, history, lifecycle, native_cron as native, store
 from crystallize.dashboard import plugin_api as api
@@ -137,6 +138,21 @@ def test_missing_ledger_disables_skips_with_fresh_nonces(world):
     assert "unverified_ledger_nonce" in first.stdout
 
 
+def test_source_failure_labels_diagnostics_and_cannot_supply_a_numeric_snapshot_value(world):
+    world[1].write_text('raise RuntimeError("source unavailable")\n')
+    attach(world)
+    result = execute(world)
+    assert result.returncode == 0
+    data = json.loads(result.stdout)
+    diagnostic = data["crystallize_native"]
+    assert diagnostic["snapshot_available"] is False
+    assert diagnostic["kind"] == "diagnostic_only"
+    assert diagnostic["fresh_run_nonce"].startswith("diagnostic-")
+    assert "snapshot" not in data
+    assert "not task data" in data["instruction"]
+    assert "could not be verified" in data["instruction"]
+
+
 def test_profile_config_change_wakes_once_and_can_stabilize_without_reapproval(world):
     attach(world)
     before = execute(world).stdout
@@ -211,6 +227,22 @@ def test_runtime_updates_require_review_without_rewriting_owned_artifacts(world)
     store.set_setting("native_cron:native-job", state)
     assert native.status("native-job")["runtime_review_required"] is True
     assert wrapper.read_bytes() == original
+
+
+@pytest.mark.parametrize("symlink", [False, True])
+def test_scheduled_validation_preserves_existing_evidence_before_creating_jobs(tmp_path, monkeypatch, symlink):
+    original = tmp_path / "original.json"
+    original.write_text('{"previous_failure": true}\n')
+    target = tmp_path / "report.json"
+    if symlink:
+        target.symlink_to(original)
+    else:
+        target.write_bytes(original.read_bytes())
+    monkeypatch.setattr(validation_native_cron, "validate", lambda *a, **kw: pytest.fail("A test job was created before report ownership was established."))
+    with pytest.raises(SystemExit) as error:
+        validation_native_cron.main(["--model", "arbitrary-model", "--report", str(target)])
+    assert error.value.code == 2
+    assert original.read_text() == target.read_text() == '{"previous_failure": true}\n'
 
 
 def test_host_omitting_null_optional_fields_does_not_change_task_semantics(world):

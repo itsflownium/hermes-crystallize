@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "provider_allowlist": [
+    "nous"
+  ],
+  "requested_reasoning": "max",
+  "actual_billed_usd": null,
+  "reservations_are_not_actual_spend_or_provider_enforced_caps": true,
+  "original_authorization_usd": 2.0,
+  "original_reserved_usd": 2.0,
+  "additional_authorization_usd": 3.0,
+  "additional_reserved_usd": 3.0,
+  "total_reserved_across_authorizations_usd": 5.0,
+  "additional_breakdown": [
+    {
+      "run": "current six-domain frozen matrix",
+      "model_calls": 12,
+      "reserved_usd": 1.8,
+      "full_raw_report_retained": false
+    },
+    {
+      "run": "typed cron v2 pair",
+      "model_calls": 2,
+      "reserved_usd": 0.3
+    },
+    {
+      "run": "live scheduled cron including superseded and incorrect answers",
+      "model_calls": 6,
+      "reserve_per_call_usd": 0.15,
+      "reserved_usd": 0.9
+    }
+  ],
+  "zero_model_call_checks": [
+    "initial import preflight failure",
+    "continuation provider-field preflight failure",
+    "report-path ownership regressions",
+    "public plugin reloads",
+    "native script-only checks"
+  ],
+  "remaining_additional_reservation_usd": 0,
+  "no_further_paid_calls_authorized_by_remaining_budget": true,
+  "limitations": [
+    "Physical transport retries and actual invoice charges are not exposed by these public records. Per-call reservations include a conservative retry envelope.",
+    "A missed schedule receipt is not an inference call. All admitted completed model sessions and superseded attempts are retained."
+  ]
+}

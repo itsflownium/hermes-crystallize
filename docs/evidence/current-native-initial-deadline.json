@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "started_at": "2026-11-07T06:07:04.259717+00:00",
+  "scope": "Initial v0.5.0 live controller result, preserved after its deadline; execution later completed with an incorrect fallback answer",
+  "authorization_id": "user-approved-additional-usd3-2026-11-07",
+  "provider_allowlist": [
+    "nous"
+  ],
+  "main_model": "deepseek/deepseek-v4.1-flash",
+  "requested_reasoning": "max",
+  "fresh_reserved_before_usd": 2.1,
+  "reservation_for_this_run_usd": 0.9,
+  "maximum_fresh_reserved_usd": 3.0,
+  "reservation_is_not_a_provider_billing_cap": true,
+  "actual_billed_usd": null,
+  "existing_jobs_modified": false,
+  "new_test_jobs": {
+    "baseline": {
+      "id": "e3821220b5d8",
+      "name": "crystal-live-3b597e8fd210-baseline",
+      "paused_after_test": true
+    },
+    "candidate": {
+      "id": "f4694c0bb6ff",
+      "name": "crystal-live-3b597e8fd210-candidate",
+      "paused_after_test": true
+    }
+  },
+  "rounds": [],
+  "plugin_commit": "708f67ef11cfaf65881e1076135f709c62f23a91",
+  "runtime_sha256": "639a6f16b6bc6cc358f6bc428f83227ec35f6f69208bbd8a77b59181b6e28184",
+  "config_sha256_before": "ffae589703685358ddae9777621d4c67581754592d575e6355dd59645ac7239e",
+  "gateway_before": {
+    "pid": 1415,
+    "start_time": 179403066595,
+    "gateway_state": "running",
+    "code_sha": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
+    "updated_at": "2026-11-07T06:06:50.266659+00:00"
+  },
+  "source_preview_blockers": [],
+  "reviewed_source_sha256": "4433da21ae6e6cf12fecebb9b43fcfd2f0998c6f11161097c65a0bad71c7e0ec",
+  "completed": false,
+  "error_type": "TimeoutError",
+  "error": "Live native validation stopped; private exception text omitted.",
+  "config_unchanged_after": true,
+  "config_sha256_after": "ffae589703685358ddae9777621d4c67581754592d575e6355dd59645ac7239e",
+  "post_deadline_candidate_answer": {
+    "value": 1794031729447397000,
+    "source": "crystallize_native",
+    "actions_performed": false
+  },
+  "expected_candidate_answer": {
+    "value": 42,
+    "source": "validation-fixture",
+    "actions_performed": false
+  },
+  "post_deadline_candidate_observable_quality_passed": false,
+  "post_deadline_outcome_source": "Exact final assistant text from the durably admitted candidate session; controller status is not rewritten",
+  "candidate_reported_output_tokens": 18043,
+  "candidate_reported_reasoning_tokens": 18011
+}

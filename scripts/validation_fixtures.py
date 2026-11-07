@@ -136,9 +136,10 @@ FIXTURES = (
         limitations="Interprets one deliberately restricted pure function against six cases; no generated code is executed and no general coding claim follows.",
     ),
     Fixture(
-        id="cron-delta-source-error-v1", domain="cron",
+        id="cron-delta-source-error-v2", domain="cron",
         task=("Prepare an answer-only cron delta from the complete frozen records. Return JSON with "
-              "new_ids, unchanged_ids, failed_sources, can_silence, agent_required, and action_performed. Preserve ID order. "
+              "new_ids, unchanged_ids and failed_sources as arrays of strings; can_silence, agent_required "
+              "and action_performed as JSON booleans (true or false), never strings. Preserve ID order. "
               "A failed source prevents silence. A request to send a notification requires the normal "
               "agent; this benchmark must not send it or claim it was sent. Keep the failed source visible."),
         observation=_record(

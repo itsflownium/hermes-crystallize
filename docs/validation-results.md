@@ -4,6 +4,170 @@ These results distinguish the current follow-up and public-SDK migration from th
 implementation in this follow-up to PR #7. They do not establish universal model
 compatibility, semantic equivalence or marketplace admission.
 
+## Completed scheduled functional review
+
+The [read-only receipt review](evidence/current-native-functional-review.json)
+verifies the separately reviewed **0.5.2** monitor's actual due schedule:
+
+| Scheduled stage | Verified result | Model requests |
+| --- | --- | ---: |
+| First complete snapshot, value 42 | Correct JSON, exact source label, no action claimed | 1 |
+| Unchanged complete snapshot | Local `no_change` document; no model request | 0 |
+| Changed complete snapshot, value 43 | Correct JSON, exact source label, no action claimed | 1 |
+
+The baseline retained two value-42 answers. It was held paused during the final
+changed-data stage to stay inside the authorized allocation. This is a functional
+first/unchanged/changed check, **not a paired three-tick cash-savings benchmark**.
+Six cron model calls in total include the two baseline answers, the original
+incorrect fallback answer, the superseded 0.5.1 answer and the final two answers.
+Nothing is dropped from overhead to produce a saving.
+
+The [strict controller](evidence/current-native-v052-controller.json) remains
+failed on its reasoning-evidence assertion. The host session `model_config`
+contained only `_usage_anchor`, without a persisted reasoning choice. The jobs
+were explicitly pinned to max, and the gateway construction logs report max;
+per-request wire/effective reasoning is not established by those records. The
+separate review therefore passes the observable functional checks and keeps the
+settings/cost comparison ineligible. It made no new model calls and did not
+change the original controller's outcome.
+
+The [cumulative reservation ledger](evidence/current-validation-budget.json)
+retains **US$2 original + US$3 additional reservations**, entirely Nous-only.
+Actual billing remains unknown. No further paid test is funded by the remaining
+allocation. The test jobs were separately identified, finite and local, with no
+existing production job or config edit; cleanup is recorded independently.
+
+## Failure diagnostics — version 0.5.3
+
+The original failed answer also showed why fallback metadata must be distinct
+from task input: a numeric diagnostic nonce was returned as the requested value.
+The final error-path guard labels the payload `diagnostic_only`, sets
+`snapshot_available: false`, uses a nonnumeric nonce, and tells the normal agent
+to verify the task or state that verification is unavailable. It does not claim
+to prove semantic correctness of arbitrary model answers.
+
+This diagnostic-only change is covered by offline source-failure regressions.
+The paid successful monitor path below was exercised on version 0.5.2, whose
+complete-source success path is unchanged. It is not relabelled as a paid rerun
+of 0.5.3. The [exact-pin verification](evidence/release-v053-verification.json) passed all
+16 host checks with no warnings and zero public-source audit findings. Its own
+[scheduled script-only check](evidence/release-v053-native-verbatim.json) passed
+with zero provider calls. Anonymous checks verified the manifest bytes and four
+screenshots at the exact pin. Both validation CLIs refuse existing report paths before
+starting any job or model call.
+
+## Catch-up correction — version 0.5.2
+
+Hermes records missed schedule slots during paused/late catch-up without making
+a model call. The first 0.5.1 controller treated that receipt as a failed attempt
+and stopped, even though the fixed source's scheduled model execution completed.
+That [controller record](evidence/current-native-v051-controller.json) remains
+failed; it is distinct from the underlying job outcome.
+
+The monitor also included missed slots in its retry hash, which could force
+inference solely because the schedule was late or paused. PR #17 removes those
+slots from the retry anchor for explicitly approved complete latest-state
+snapshots with no per-run delivery/deadline/action requirement. Actual failed,
+unknown and cancelled executions still change the hash and force a fresh run;
+missing ledger evidence still disables suppression. Regression checks and all
+six CI checks passed. A new copied runtime requires a new explicit review.
+
+## Pause/resume correction — version 0.5.1
+
+The first live monitor run exposed a real lifecycle defect. A job created paused
+has `paused_reason: "Created paused; awaiting operator approval."`; resume clears
+that field. Version 0.5.0 mistakenly protected it as task configuration, so the
+wrapper emitted a verification fallback instead of the requested snapshot. The
+model then answered with the fallback nonce as the value, which failed the task.
+The [reproduction record](evidence/native-pause-resume-reproduction.json) confirms
+that restoring only the original pause reason reproduced the approved hash.
+
+PR #16 treats this field as scheduler bookkeeping while continuing to protect
+prompt, model, provider, reasoning and source ownership. Its **66 focused tests**
+and six CI checks passed, including **1,304 standalone cases** in the full suite
+with the optional source-audit skip where applicable. Copied runtimes remain
+immutable: their approval now records a runtime SHA, and older/unverified
+wrappers show an explicit Undo/review/attach requirement.
+
+The [original controller result](evidence/current-native-initial-deadline.json)
+remains failed on its deadline. The scheduled model request eventually completed
+with an incorrect answer and reported 18,043 output tokens, including 18,011
+reasoning tokens. That cost/latency overhead is retained. A separate continuation
+preflight failed before making any calls because it expected `model_provider`
+instead of the host job record's `provider` field; its
+[zero-call failure](evidence/current-native-continuation-preflight-failure.json)
+is preserved too. These outcomes are not discarded or converted into successful
+savings evidence.
+
+The installed copy was fast-forwarded cleanly, and the public gateway plugin
+reload confirmed Crystallize's hooks/commands were registered while idle.
+[Activation](evidence/current-plugin-activation.json) used no gateway restart.
+The version 0.5.1 scheduled follow-up requires a fresh explicit source review;
+it does not rewrite the old wrapper or infer a cash-saving percentage.
+
+## Native-source release — 7 November 2026, version 0.5.0
+
+PR #15 added reviewed native snapshot sources through public Hermes cron CLI
+controls. The feature suite passed **1,300 tests, 1 optional audit case skipped**;
+all six PR checks passed. The installed Hermes validator passed all 16 checks
+with no warnings. This is separate from the earlier migration results below.
+
+### Current Nous calls, unchanged requested reasoning
+
+The current cleaner was exercised on `nous / deepseek/deepseek-v4.1-flash` with
+requested **max** reasoning, temperature zero, the same output limit in both
+arms, and no fallback route. A public pre-request observer recorded
+`reasoning: {enabled: true, effort: max}` for both arms of the retained pilot and
+cron-v2 pair. This proves the constructed request setting; the server's internal
+reasoning policy is not exposed.
+
+| Retained pair | Baseline prompt / output / reasoning tokens | Candidate prompt / output / reasoning tokens | Observable checks |
+| --- | --- | --- | --- |
+| Research pilot | 355 / 185 / 114 | 331 / 230 / 159 | Both passed |
+| Typed cron delta v2 | 336 / 219 / 170 | 312 / 406 / 357 | Both passed |
+
+Reasoning tokens are included in the reported output tokens; do not add them
+again. In both pairs the prompt was smaller but output/reasoning grew. Neither
+pair establishes a net saving. Cache zeros from the public helper facade do not
+establish measured cache behavior. Actual billing and qualified cost estimates
+were unavailable: **no cash-saving percentage is claimed**.
+
+See the retained [pilot](evidence/current-nous-pilot.json) and
+[cron-v2 pair](evidence/current-nous-cron-v2.json). These are answer-only checks of
+synthetic, heavily indented JSON, not full normal-chat benchmarks. The cleaner's
+source hash is retained rather than relabelling calls as a later commit.
+
+The first current six-domain matrix completed 12 calls across research, writing,
+data, analysis, coding and cron. Its observed summary passed both arms for five
+domains. The cron candidate returned `action_performed: "none"` instead of a
+boolean; that failure remains a failure. The original prompt named the field
+without specifying its type. Fixture `cron-delta-source-error-v2` now explicitly
+requires arrays and JSON booleans; both new answers passed the unchanged strict
+checker. This new fixture is not an offline regrade of the original answer.
+
+**Evidence incident:** an operator report-name expression overwrote the full
+six-domain JSON while saving the v2 rerun. The earlier summary and exact cron
+answers were recovered verbatim from saved tool output; full matrix request and
+usage records were not recovered. The [partial record](evidence/current-nous-matrix-partial.json)
+labels that limitation. It is not a recreated full report and is excluded from
+savings calculations. The harness now exclusively claims a new report path
+before starting calls, preserving existing files and symlinks.
+
+### Native cron execution
+
+The [scheduled verbatim check](evidence/current-native-scheduled-verbatim.json)
+used a temporary profile, public CLI commands and a real due schedule. The
+execution ledger recorded `source: builtin`, `status: completed`, and a
+`scheduled_instant`; expected local text was present and model/reasoning fields
+were preserved. It requested no inference. The runtime source SHA identifies the
+actual code tested. This test does not establish arbitrary learned-tool replay.
+
+The monitor comparison, installation verification and budget ledger are recorded
+in the release follow-up alongside this section. Snapshot scope requires complete
+reviewed input and no per-run action, reminder, deadline or required repeated
+delivery. Provider-independent implementation does not prove every provider or
+task works live.
+
 ## Current candidate after PRs #11 and #12 — 7 November 2026
 
 - The follow-up suite passed **1,253 tests, 1 optional dispatch-audit case

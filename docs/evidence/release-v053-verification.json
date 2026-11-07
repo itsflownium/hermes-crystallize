@@ -1,0 +1,47 @@
+{
+  "source_kind": "hermes_plugins_validate",
+  "pinned_commit": "5928049cb15bc28df823692787619c01d9714501",
+  "host_source_commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
+  "host_worktree_clean": true,
+  "ok": true,
+  "checks_passed": 16,
+  "errors": [],
+  "warnings": [],
+  "warnings_reviewed": true,
+  "private_import_findings": [],
+  "private_attribute_findings": [],
+  "security_status": "safe",
+  "provider_calls": 0,
+  "public_source_findings": [],
+  "native_script_only_scheduled_check_passed": true,
+  "native_runtime_sha256": "e26bcc6c9aadc00cc028b382aad03d88aee4a856f51673957e95491e4a2f4f07",
+  "publication_verification": {
+    "repository": "https://github.com/itsflownium/hermes-crystallize",
+    "pinned_commit": "5928049cb15bc28df823692787619c01d9714501",
+    "anonymous_manifest_http_status": 200,
+    "anonymous_access_verified": true,
+    "authorization_header_sent": false,
+    "curl_user_configuration_disabled": true,
+    "tls_verification_enabled": true,
+    "manifest_sha256": "4b3d1bb28ecbe5c21d33afc142f5fe4065f6c317afccc9a961d3b3fa499306ab",
+    "manifest_matches_git_pin": true,
+    "screenshots": [
+      {
+        "path": "assets/review/public-capabilities-and-host-plan-desktop.png",
+        "anonymous_http_status": 200
+      },
+      {
+        "path": "assets/review/public-routes-and-manual-pricing-desktop.png",
+        "anonymous_http_status": 200
+      },
+      {
+        "path": "assets/review/chat-quality-and-onboarding-desktop.png",
+        "anonymous_http_status": 200
+      },
+      {
+        "path": "assets/review/native-cron-source-review-desktop.png",
+        "anonymous_http_status": 200
+      }
+    ]
+  }
+}

@@ -77,7 +77,11 @@ Verbatim text output does not depend on the global model selection. Scheduler cl
 failure stamps and completion IDs are bookkeeping and do not invalidate a source.
 Changing an outcome contract revokes the existing approval before saving it.
 Monitor mode falls back to a fresh normal run; verbatim mode produces a visible
-error and requires review/Undo. No source self-updates or pulls new code.
+error and requires review/Undo. No source self-updates or pulls new code. Failure output is explicitly labelled
+as diagnostic-only with no verified snapshot. Its nonce is nonnumeric; the
+normal agent is instructed to verify fresh data or report that verification is
+unavailable, rather than treating diagnostics as task values. This guidance does
+not establish semantic correctness for arbitrary model answers.
 
 Undo restores only the fields this attachment owns and preserves newer external
 edits. Timeouts retain pending recovery. Copied sources, wrappers and approval

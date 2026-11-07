@@ -2,9 +2,12 @@
   "schema_version": 1,
   "status": "submission_bundle_only",
   "catalog_ready": false,
+  "release_ready": false,
+  "owner_submission_approval": null,
+  "release_ready_meaning": "Technical checks do not establish live effectiveness, installed-build activation or owner approval to submit.",
   "catalog_ready_meaning": "Human admission/listing is not established by local technical checks.",
-  "pinned_commit": "586d2b4708606dc8255437beea374aae4ddc11fe",
-  "pinned_manifest_version": "0.4.1",
+  "pinned_commit": "5928049cb15bc28df823692787619c01d9714501",
+  "pinned_manifest_version": "0.5.3",
   "literal_capabilities_match_manifest": true,
   "source_analysis": {
     "registered": {
@@ -29,6 +32,7 @@
       ]
     },
     "public_dispatch_plan_fallback": true,
+    "native_snapshot_sources": true,
     "public_api_audit": {
       "ok": true,
       "findings": [],
@@ -314,8 +318,8 @@
     "requires_env_validation": "Manifest-declared mandatory names only; host load/secret-scope validation remains required."
   },
   "technical_static_ready": true,
-  "technical_ready_for_submission": false,
-  "technical_readiness": "Internal draft: candidate pin must be refreshed after pending validation-runner changes; owner submission hold is active.",
+  "technical_ready_for_submission": true,
+  "technical_readiness": "exact-pin technical checks passed",
   "technical_checks": {
     "literal_capabilities": true,
     "public_api_only": true,
@@ -325,7 +329,7 @@
     "host_validation": {
       "status": "operator_supplied_exact_pin_host_validation",
       "ok": true,
-      "sha256": "46e50ec9c18cda75f3f39aab2addbee6b9a57f2dc5e053960da85c1d971be776",
+      "sha256": "93ccd1297c5fb2854d149814d8bff47c31b715f15394aca532b5249dcff5b2e9",
       "checks_passed": 16,
       "host_source_commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
       "warnings": [],
@@ -336,24 +340,25 @@
   "ui_evidence": {
     "status": "offline_fixture_captures",
     "screenshots": [
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/586d2b4708606dc8255437beea374aae4ddc11fe/assets/review/public-capabilities-and-host-plan-desktop.png",
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/586d2b4708606dc8255437beea374aae4ddc11fe/assets/review/public-routes-and-manual-pricing-desktop.png",
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/586d2b4708606dc8255437beea374aae4ddc11fe/assets/review/chat-quality-and-onboarding-desktop.png"
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/public-capabilities-and-host-plan-desktop.png",
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/public-routes-and-manual-pricing-desktop.png",
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/chat-quality-and-onboarding-desktop.png",
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/5928049cb15bc28df823692787619c01d9714501/assets/review/native-cron-source-review-desktop.png"
     ],
     "live_proof": false
   },
   "admission": {
     "listed": false,
-    "maintainer_merge": "pending",
-    "public_pin_availability": "operator_checked_public_git_and_http",
-    "submission_status": "deferred_by_owner"
+    "maintainer_merge": "not_submitted_owner_hold",
+    "public_pin_availability": "verified_anonymously_by_operator"
   },
   "pinned_features": {
     "delegated_file_handoffs": true,
     "public_dispatch_plan_fallback": true,
+    "native_snapshot_sources": true,
     "sdk_gap_document": true
   },
-  "publication_verified": true,
+  "publication_verified": false,
   "upstream_catalog_pr": null,
   "maintainer_approval": "not_obtained",
   "hermes_plugins_validate": {
@@ -361,41 +366,45 @@
     "warnings_suppressed": false,
     "command": "hermes plugins validate /path/to/pinned-checkout --install-deps"
   },
-  "technical_blockers": [
-    "Refresh the exact candidate pin and its evidence after internal validation-runner and cron identity/guidance work is completed."
-  ],
+  "technical_blockers": [],
   "blockers": [
-    "Fresh, scoped live validation of this implementation remains pending.",
-    "The installed checkout and running gateway have not been verified at this candidate.",
-    "Automatic pre-run/no-AI execution remains unavailable on the reviewed public SDK.",
-    "Owner has deferred upstream submission until work in itsflownium/hermes-crystallize is completed and reviewed."
+    "Public clone/pin availability and owner-or-major-contributor submission.",
+    "Upstream hermes-agent catalog PR and maintainer review/merge."
   ],
   "limitations": [
     "Static literal registration comparison is not a runtime-load or security scan.",
     "The local host catalog policy was used; re-read it at actual submission.",
-    "No live provider, semantic-equivalence or actual-billing proof is manufactured.",
-    "Technical readiness records exact-pin source/host checks only; release_ready remains false while product validation and activation are incomplete."
+    "No live provider, semantic-equivalence or actual-billing proof is manufactured."
   ],
+  "owner_requested_hold": true,
   "publication_verification": {
-    "source": "operator_checked_public_git_and_http",
-    "pin": "586d2b4708606dc8255437beea374aae4ddc11fe",
-    "git_clone_head": "586d2b4708606dc8255437beea374aae4ddc11fe",
-    "git_credential_helpers_disabled": true,
+    "repository": "https://github.com/itsflownium/hermes-crystallize",
+    "pinned_commit": "5928049cb15bc28df823692787619c01d9714501",
     "anonymous_manifest_http_status": 200,
-    "repository": "https://github.com/itsflownium/hermes-crystallize"
+    "anonymous_access_verified": true,
+    "authorization_header_sent": false,
+    "curl_user_configuration_disabled": true,
+    "tls_verification_enabled": true,
+    "manifest_sha256": "4b3d1bb28ecbe5c21d33afc142f5fe4065f6c317afccc9a961d3b3fa499306ab",
+    "manifest_matches_git_pin": true,
+    "screenshots": [
+      {
+        "path": "assets/review/public-capabilities-and-host-plan-desktop.png",
+        "anonymous_http_status": 200
+      },
+      {
+        "path": "assets/review/public-routes-and-manual-pricing-desktop.png",
+        "anonymous_http_status": 200
+      },
+      {
+        "path": "assets/review/chat-quality-and-onboarding-desktop.png",
+        "anonymous_http_status": 200
+      },
+      {
+        "path": "assets/review/native-cron-source-review-desktop.png",
+        "anonymous_http_status": 200
+      }
+    ]
   },
-  "canonical_catalog_policy_review": {
-    "commit": "8153953654574f8624dc3652b1df7162ead425a8",
-    "date": "2026-11-07"
-  },
-  "release_ready": false,
-  "release_status": "unfinished_owner_review",
-  "owner_submission_approval": false,
-  "publication_scope": "Public source-pin availability only; no marketplace submission or listing.",
-  "pending_changes_since_pin": [
-    "Conservative SDK usage normalization in the benchmark runner.",
-    "Explicit owner hold and unfinished-release status.",
-    "Durable cron job-ID cohorts, corrected host-tool promotion defaults and suppressed unavailable automatic savings projections.",
-    "Refreshed offline capabilities/host-plan capture for the cron projection changes."
-  ]
+  "owner_scope": "All PRs remain in itsflownium/hermes-crystallize; upstream catalog submission is not authorized."
 }

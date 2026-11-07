@@ -1,0 +1,19 @@
+{
+  "scope": "isolated public-CLI scheduled native-verbatim check",
+  "paid_provider_calls_requested": 0,
+  "gateway_restarted": false,
+  "production_jobs_modified": false,
+  "native_runtime_sha256": "639a6f16b6bc6cc358f6bc428f83227ec35f6f69208bbd8a77b59181b6e28184",
+  "executions": [
+    {
+      "id": "2b1d65512c4447e4aa854d1fee8f9df2",
+      "job_id": "6b1a0988f896",
+      "source": "builtin",
+      "status": "completed",
+      "scheduled_instant": "2026-11-07T05:34:16.140018+00:00"
+    }
+  ],
+  "model_and_reasoning_preserved": true,
+  "expected_text_in_local_output": true,
+  "passed": true
+}

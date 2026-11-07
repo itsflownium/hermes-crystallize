@@ -76,15 +76,21 @@ def validate(command, model, *, cwd=None):
     return result
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--hermes-command", default='["hermes"]', help="JSON argv; never evaluated as shell code")
     parser.add_argument("--hermes-cwd", help="Optional source checkout cwd for a Python -m command")
     parser.add_argument("--model", required=True, help="Exact route for the isolated job; no inference is requested")
     parser.add_argument("--report", type=Path, required=True)
-    args = parser.parse_args()
-    report = validate(json.loads(args.hermes_command), args.model, cwd=args.hermes_cwd)
+    args = parser.parse_args(argv)
     args.report.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(args.report, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        parser.error("The report already exists. Choose a new report path; prior evidence was preserved.")
+    with os.fdopen(descriptor, "w") as stream:
+        json.dump({"execution": "preparing", "paid_provider_calls_requested": 0}, stream)
+    report = validate(json.loads(args.hermes_command), args.model, cwd=args.hermes_cwd)
     args.report.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
     return 0 if report["passed"] else 1

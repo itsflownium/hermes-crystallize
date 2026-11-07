@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "old_plugin_commit": "708f67ef11cfaf65881e1076135f709c62f23a91",
+  "old_runtime_sha256": "639a6f16b6bc6cc358f6bc428f83227ec35f6f69208bbd8a77b59181b6e28184",
+  "fixed_feature_commit": "7d4346769b2aae9dced23b6c83e0ad4944522433",
+  "observed_current_configuration_matches_original_protected_hash": false,
+  "restoring_only_initial_paused_reason_matches_original_protected_hash": true,
+  "initial_paused_reason": "Created paused; awaiting operator approval.",
+  "resumed_paused_reason": null,
+  "root_cause": "The copied runtime treated the host pause reason as protected task input. Resume cleared it and forced configuration_changed fallback without a verified snapshot.",
+  "regression_checks": [
+    "monitor source survives created-paused to resumed",
+    "verbatim source survives created-paused to resumed",
+    "runtime upgrade requires fresh source review and does not rewrite copied code"
+  ]
+}

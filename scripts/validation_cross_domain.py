@@ -514,12 +514,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-task-seconds", type=float, default=MAX_TASK_SECONDS)
     parser.add_argument("--call-timeout", type=float, default=90.0)
     parser.add_argument("--max-tokens", type=int, default=1024)
-    parser.add_argument("--report", help="Write a local JSON report; contains fixture answers, never credentials/config dumps.")
+    parser.add_argument("--report", help="Create a NEW local JSON report; existing reports are never overwritten.")
     parser.add_argument("--_worker-config", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args._worker_config:
         return _worker(Path(args._worker_config))
     try:
+        if args.report:
+            target = Path(args.report)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # Claim the path before importing an operator factory or starting
+            # calls. O_EXCL also rejects symlinks and concurrent runs targeting
+            # the same report. Later progress writes belong to this run only.
+            try:
+                descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            except FileExistsError as exc:
+                raise ValidationError("The report already exists. Choose a new report path; prior evidence was preserved.") from exc
+            with os.fdopen(descriptor, "w") as stream:
+                json.dump({"schema_version": 1, "execution": "preparing", "live_calls": 0}, stream)
         fixtures = select(args.fixture)
         cleaner = load_cleaner()
         report = execute_live(args, fixtures, cleaner) if args.run else local_report(fixtures, cleaner)

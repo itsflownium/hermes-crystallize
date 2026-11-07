@@ -1,21 +1,27 @@
 # Crystallize catalog submission draft
 
 Technical state: **exact-pin technical checks passed**.
+
+**Owner hold:** this is an internal bundle. All PRs stay in
+`itsflownium/hermes-crystallize`; no upstream catalog PR is authorized or open.
+Anonymous HTTPS checks verified the exact manifest bytes and four screenshots;
+listing remains unestablished.
 This file and the entry in this plugin repository are a preparation bundle. They do
 not themselves establish an upstream PR, catalog listing, maintainer approval, or
 marketplace compliance. Independently checked publication/review status is recorded
 separately; only a maintainer-merged upstream catalog entry establishes listing.
 
-Pin: `586d2b4708606dc8255437beea374aae4ddc11fe` in https://github.com/itsflownium/hermes-crystallize; version `0.4.1`;
+Pin: `5928049cb15bc28df823692787619c01d9714501` in https://github.com/itsflownium/hermes-crystallize; version `0.5.3`;
 Hermes floor `>=0.22.7`. The pin is an existing plugin feature commit;
 the later catalog-only bundle commit must not replace it with a self-reference.
 
 Crystallize targets repeated context and read planning through explicit per-chat/per-job
 controls and local receipts. Main reasoning is not reduced. No live savings percentage
 at unchanged reasoning is established for this public-SDK candidate. The research,
-writing, data, analysis, coding and cron fixtures are offline scope, not proof of
-universal live task/provider coverage or semantic equivalence. Automatic pre-run/no-AI
-routines remain unavailable on the reviewed SDK; their older savings do not transfer.
+writing, data, analysis, coding and cron fixtures have explicitly scoped validation,
+not proof of universal live task/provider coverage or semantic equivalence. Automatic
+pre-run/no-AI replay of learned tools remains unavailable on the reviewed SDK;
+older savings from that path do not transfer.
 
 Disclosures for reviewer and installer:
 
@@ -32,6 +38,8 @@ Disclosures for reviewer and installer:
   nested reads and promotion are disabled without an available documented guarded seam.
 - Explicit delegated file handoffs return pending ordinary-host read/write plans.
   No raw registry/private adapter performs those operations.
+- Explicit native snapshot sources use public cron CLI controls after complete-source review.
+  Copies/wrappers/approval files stay under scripts/crystallize-native/; no nested tool replay.
 - Local plugin data can contain captured tool arguments/results, original results retained
   for recovery, cache entries, contracts, answers, receipts and usage diagnostics. Avoid
   sensitive shared cache namespaces. Helper calls have bounded background workers;
@@ -53,13 +61,3 @@ verify publication, install dependencies, open an upstream PR, or establish admi
 The catalog's canonical rules require a human-reviewed PR adding this entry to
 `NousResearch/hermes-agent/plugin-catalog/`. Only a maintainer merge lists it. An owner or
 major contributor must submit it. Each future SHA change requires another reviewed PR.
-
-## Operator verification — 7 November 2026
-
-The exact feature pin was resolved by a fresh Git clone with credential helpers disabled, and its raw manifest returned HTTP 200 without an Authorization header. Its cloned tree passed 1,253 tests with one optional dispatch-audit skip and the official 16 host checks with zero warnings. No paid provider call was made.
-
-Full host output: [submission-candidate-host-report.json](../docs/evidence/submission-candidate-host-report.json). Exact-pin verification and publication evidence: [submission-candidate-verification.json](../docs/evidence/submission-candidate-verification.json). Listing remains pending upstream maintainer review.
-
-## Owner hold
-
-This is an internal draft for `itsflownium/hermes-crystallize`. Development and release validation are unfinished. Do not open an upstream Hermes PR. No upstream PR was created; passing source/host checks is not completion, verified live savings, or deployment.

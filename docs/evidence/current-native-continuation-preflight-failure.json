@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "scope": "continuation of the SAME finite local scheduled jobs after the initial controller deadline",
+  "started_at": "2026-11-07T06:21:34.316757+00:00",
+  "initial_controller_sha256": "80b8693e46e055228f2d419f57650f23b021c219da2991d8542c48edc697b1f2",
+  "initial_controller_status": false,
+  "initial_controller_error_type": "TimeoutError",
+  "reservation_scope": "same existing US$0.90 cron allocation, not a new allocation",
+  "actual_billed_usd": null,
+  "job_ids": {
+    "baseline": "e3821220b5d8",
+    "candidate": "f4694c0bb6ff"
+  },
+  "steps": [],
+  "plugin_commit": "708f67ef11cfaf65881e1076135f709c62f23a91",
+  "runtime_sha256": "639a6f16b6bc6cc358f6bc428f83227ec35f6f69208bbd8a77b59181b6e28184",
+  "completed": false,
+  "error_type": "KeyError",
+  "error": "Continuation stopped; private exception text omitted",
+  "baseline_paused": true,
+  "candidate_paused": true,
+  "config_unchanged_after": true,
+  "finished_at": "2026-11-07T06:21:38.475796+00:00",
+  "additional_model_calls_started": 0
+}
