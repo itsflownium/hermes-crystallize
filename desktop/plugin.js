@@ -2177,6 +2177,12 @@ const NOTES = [
     ['Jobs on lower-cost settings', 'How much of your scheduled work uses them. A saving only counts between runs with the same model, provider and reasoning.'],
     ['Runaway Brake', 'Off until you turn it on. Each job gets a token limit from its own recent runs: at least 3 times a normal run and 1.5 times its largest. A run past that limit is told to stop using tools and answer with what it has, and to say it stopped early. Jobs that send or change things are never stopped, and jobs with fewer than 5 finished runs have no limit yet.']
   ]],
+  ['When it saves most', [
+    ['Best for chat', 'Long chats that read large tool results early and move on, especially JSON. Short chats with small results save little.'],
+    ['Best for cron', 'Jobs that check often for something that rarely changes, only read, and can stay quiet when nothing changed. An unchanged check makes no AI call.'],
+    ['Where it can cost more', 'Removing a result by hand when the AI still needs it, and attaching a script to a job whose data changes on every run. A single run can also cost more when the provider\'s cache misses, so judge by several runs.'],
+    ['Models with cheap cached reads', 'When re-reading is nearly free, removing old results doesn\'t pay, so Crystallize leaves them and savings are smaller.']
+  ]],
   ['How Chat saves', [
     ['Cleaned results', 'Uses safe cleanup without an AI call when Clean is selected. Exact leaves a result unchanged; Summary permits a helper call. File contents and failed results stay exact.'],
     ['Routing', 'Your main model decides when to send routine work to your cheap model and takes the output straight back, such as summarizing or extracting data. It keeps decisions, anything that sends or changes something, and the final answer.'],
