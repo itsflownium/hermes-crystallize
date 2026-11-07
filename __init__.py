@@ -1,4 +1,4 @@
-"""Crystallize: turn Hermes's repeated work into proven, cheap step lists."""
+"""Crystallize: turn Hermes's repeated work into repeatable step lists."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def _status_text() -> str:
     stats = store.trace_stats()
     lines = [
-        f"Crystallize is recording cron jobs. {stats['tool_calls']} tool calls recorded so far."
+        f"Crystallize records cron jobs, and any chat you turn it on for. {stats['tool_calls']} tool calls recorded so far."
     ]
     if stats["cron_jobs"]:
         lines.append("Scheduled cron runs recorded:")

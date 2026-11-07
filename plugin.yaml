@@ -3,10 +3,10 @@ version: 0.5.3
 manifest_version: 2
 api_version: 1
 description: >-
-  Helps normal chats and cron jobs spend less on repeated context and tool work.
-  Preserves reasoning settings, keeps recoverable originals, and shows quality
-  checks, uncertainty and comparable-settings receipts across cloud providers.
-  Supports explicitly reviewed native Python snapshot sources for local cron jobs.
+  Works to lower the cost of repeated context and tool work in Hermes chats and cron
+  jobs, without lowering reasoning. Keeps originals recoverable, shows quality checks
+  and only counts savings between runs with matching settings. Can skip cron runs when
+  a reviewed snapshot script shows nothing changed.
 author: itsflownium
 license: MIT
 homepage: https://github.com/itsflownium/hermes-crystallize

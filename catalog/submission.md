@@ -29,6 +29,8 @@ Disclosures for reviewer and installer:
   in `cron/executions.db`, job definitions in `cron/jobs.json`, and public host configuration,
   explicit route configuration and user pricing cards. These reads use current profile scope;
   they are not telemetry. Public provider profiles may supply price quotes.
+- Price lookup makes plain HTTPS GET requests to public model lists (the route's own `/models` and `models.dev`),
+  sending no credentials or chat data. It can be turned off.
 - Helper/compare features can make paid network requests through public `ctx.llm` to
   the user-selected host route. Route choices are configured/declared, not credential-store probes.
   Explicit validation makes only fresh answer-generation calls; it does not replay tools,

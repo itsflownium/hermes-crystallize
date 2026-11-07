@@ -374,18 +374,18 @@ await test('unavailable replay never advertises stale projected savings', async 
 });
 await test('native source preview requires review and resets approval on edits', async () => {
   const api=makeContext({'GET /native-cron':()=>({ok:true,state:{},config_fingerprint:'current'}),'POST /native-cron-preview':()=>({ok:true,can_apply:true,preview_sha256:'reviewed',source:{text:'print(42)',sha256:'source-hash'},blockers:[]})});
-  const view=mount('NativeCronControl',{ctx:api.ctx,jobId:'job-a'});await view.flush();assert.equal(api.calls.length,0);click(view,'▸ Automatic source snapshots');await view.flush();
+  const view=mount('NativeCronControl',{ctx:api.ctx,jobId:'job-a'});await view.flush();assert.equal(api.calls.length,0);click(view,'▸ Skip runs when nothing changed');await view.flush();
   change(view,'Python source under','snapshot.py');change(view,'This source is the complete',true);click(view,'Preview source · no execution');await view.flush();assert.equal(button(view,'Attach reviewed source').props.disabled,true);
   change(view,'I approve attaching',true);change(view,'Python source under','different.py');assert.equal(button(view,'Attach reviewed source'),undefined);assert.equal(api.posts().filter(c=>c.base==='/native-cron').length,0);view.dispose();
 });
 await test('native source runtime updates require explicit source review', async () => {
   const api=makeContext({'GET /native-cron':()=>({ok:true,state:{status:'applied',mode:'monitor'},runtime_review_required:true,config_fingerprint:'current'})});
-  const view=mount('NativeCronControl',{ctx:api.ctx,jobId:'job-a'});click(view,'▸ Automatic source snapshots');await view.flush();
+  const view=mount('NativeCronControl',{ctx:api.ctx,jobId:'job-a'});click(view,'▸ Skip runs when nothing changed');await view.flush();
   assert.ok(text(view.tree).includes('older or unverified runtime'));assert.equal(api.posts().length,0);assert.equal(button(view,'Undo native source').props.disabled,true);view.dispose();
 });
 await test('native source undo requires current configuration and explicit approval', async () => {
   const api=makeContext({'GET /native-cron':()=>({ok:true,state:{status:'applied',mode:'monitor'},config_fingerprint:'current'}),'POST /native-cron-undo':()=>({ok:true,state:{status:'undone'},message:'Restored.'})});
-  const view=mount('NativeCronControl',{ctx:api.ctx,jobId:'job-a'});click(view,'▸ Automatic source snapshots');await view.flush();assert.equal(button(view,'Undo native source').props.disabled,true);change(view,'I approve restoring',true);click(view,'Undo native source');await view.flush();
+  const view=mount('NativeCronControl',{ctx:api.ctx,jobId:'job-a'});click(view,'▸ Skip runs when nothing changed');await view.flush();assert.equal(button(view,'Undo native source').props.disabled,true);change(view,'I approve restoring',true);click(view,'Undo native source');await view.flush();
   assert.deepEqual(plain(api.posts()[0].body),{job_id:'job-a',expected_config_fingerprint:'current',confirmed:true});view.dispose();
 });
 await test('observation starts only through its explicit control', async () => {
@@ -428,7 +428,7 @@ await test('helper cache upper bounds remain distinct from unknown costs', async
 });
 await test('reasoning stays fixed and desktop imports remain public', async () => {
   assert.equal(source.includes('/reasoning-setting'),false); assert.equal(source.includes('Reasoning: also try lower'),false);
-  assert.ok(source.includes('Trials keep your main model’s reasoning setting'));
+  assert.ok(source.includes('thinking less never shows as a saving'));
   const imports = [...source.matchAll(/^import .* from '([^']+)'/gm)].map(match => match[1]);
   assert.deepEqual(imports,['@hermes/plugin-sdk','react','react/jsx-runtime']);
   for (const forbidden of ['dangerouslySetInnerHTML','querySelector','MutationObserver','createElement(','innerHTML']) assert.equal(source.includes(forbidden),false,forbidden);

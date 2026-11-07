@@ -2,31 +2,51 @@
   <img src="assets/crystallize-logo.svg" alt="Crystallize" width="380">
 </p>
 
-**Reduce repeated context in Hermes chats and cron jobs while preserving your main model and reasoning settings.**
+**Spend less on repeated work in Hermes chats and cron jobs, without making your model think less.**
 
-Crystallize targets repeated context, duplicated file text, unnecessary tool
-schemas and stable read steps. It keeps originals recoverable, records helper
-overhead and shows when evidence is incomplete. It does not reduce the main
-model's reasoning or reuse an earlier reasoning transcript as a shortcut.
+Most of what an AI agent pays for is re-reading: every call re-sends the chat, and a scheduled job
+does the same work on every run. Crystallize finds that repetition and removes it. Your model and
+reasoning stay exactly as you set them, so a lower bill never comes from a weaker answer.
 
-The architecture uses Hermes's host-owned model facade and provider declarations
-across cloud routes. This is a compatibility design, not a claim that every
-provider, model, operating system or task has been tested. Missing prices,
-capabilities, usage and guarded execution stay unknown or fail closed.
+## What it does for you
 
-**Submission status:** upstream catalog submission remains on owner hold.
-Development, evidence and PRs are reviewed in this repository first.
+- **Skip cron runs when nothing changed.** A small script reads the job's data, and the AI only runs
+  when that data changes. Crystallize can draft the script from what the job has already done, and
+  you review it before it's attached.
+- **See what a chat keeps paying to re-read.** Context Rent shows what each old tool result costs on
+  every call, and lets you remove it. The AI can still read the original.
+- **Tidy tool results before the AI reads them.** Clean removes wasted formatting with no AI call.
+- **Test lower-cost settings on a cron job safely.** A trial only stays if its checks pass and it used
+  less, beyond normal variation. Otherwise your earlier settings come back.
+- **Stop runaway cron runs.** Runaway Brake stops a run far past that job's own normal use.
+- **Compare models and schedules on your own evidence**, with Blind Taste Test, Model Auction and Rhythm.
 
-**Current evidence:** this public-SDK candidate has no verified live savings
-percentage at unchanged reasoning. Research, writing, data, analysis, coding and
-cron have current Nous answer-only observations and offline fixtures, with a
-partially retained matrix and a separately versioned cron rerun. They do not
-prove every mainstream task or provider works live. Arbitrary learned-tool replay remains unavailable
-on the reviewed SDK. Explicitly reviewed native Python snapshot sources can use
-the host's monitor or script-only controls, with no nested tool dispatch. Older
-cron measurements cannot be carried over to this
-implementation. See [submission status](docs/submission-status.md) for the
-measurement, marketplace and local activation boundaries.
+## Quick start
+
+```bash
+hermes plugins install itsflownium/hermes-crystallize
+hermes plugins enable crystallize
+```
+
+Open the Crystallize panel in Hermes Desktop (**Capabilities → Plugins**), or use the commands below.
+
+```text
+/crystallize chat on                          # start working on this chat
+hermes crystal tune my-job                    # trial lower-cost settings on a cron job
+hermes crystal native-cron JOB_ID --draft     # draft a script that skips unchanged runs
+hermes crystal rent SESSION_ID                # what this chat keeps paying to re-read
+hermes crystal brake on                       # stop runaway cron runs
+```
+
+## What to expect
+
+Savings depend on the work. They're largest when a job often has nothing new, or a chat holds large
+tool results it no longer needs. A short task with no large results has little to remove.
+
+A saving only counts between runs with the same model, provider and reasoning, taken from what each
+request actually sent. Prices come from public model lists or your own rate card, so they're
+estimates, not your bill. See [what has been measured](docs/validation-results.md) for live results
+and their limits.
 
 ## Chat and Cron
 
@@ -78,13 +98,15 @@ exact controls and limitations.
 
 Crystallize separates actual cost evidence, host/list-price estimates, included
 subscription usage and unknown values. An API equivalent is not a subscription's
-cash cost. Token counts and character estimates are labelled separately. Helper
-requests, retrievals, unsuccessful attempts, comparisons and cache-rewrite
-overhead belong in net payback; a smaller visible message alone proves no saving.
+cash cost. Token counts and character estimates are labelled separately. Chat net
+subtracts helper requests, unsuccessful attempts, the main model typing hand-off input, read-backs
+of originals and the routing note. It does not yet include tool schemas or the one-time cache
+rewrite after removing a result, which Context Rent shows separately as a payback count. A smaller
+visible message alone proves no saving.
 
 Chat's one-read net is a **current-price projection**, including for earlier
-turns. It applies the current main model's listed rates to recorded character
-estimates, then subtracts recorded helper costs and estimated extra-call overhead.
+turns. It applies the current main model's listed rates to recorded token
+estimates, which follow words and symbols and calibrate from that model's real usage, then subtracts recorded helper costs and estimated extra-call overhead.
 The panel and API identify that route and its input/output rates. Changing the
 main model or rate card reprices the projection; it does not change the recorded
 events or establish historical billing. Missing helper cache counts use the
@@ -134,22 +156,11 @@ without a model request; billing and strict reasoning comparison remain unknown.
 revalidation of this public-SDK-only revision; no paid rerun was used to replace
 that evidence during migration.
 
-## Install and use
+## Commands
 
-Install from the published repository; this installs its default revision.
-Catalog-name listing is not established. The manifest load floor is Hermes
-`>=0.22.7`; optional capabilities remain gated and this does not promise every
-feature on every host. Validate the exact pin and retain unsupported-feature
-notices on the version in use.
-
-```bash
-hermes plugins install itsflownium/hermes-crystallize
-hermes plugins enable crystallize
-```
-
-In Hermes Desktop, enable Crystallize under **Capabilities → Plugins**. The
-panel has Cron and Chat sections. Command surfaces also work outside Desktop.
-Desktop uses the plugin SDK; a complete OS/provider test matrix is not claimed.
+The manifest load floor is Hermes `>=0.22.7`; optional capabilities stay gated and this doesn't
+promise every feature on every host. In Hermes Desktop the panel has Cron and Chat sections, and
+command surfaces also work outside Desktop.
 
 ```text
 /crystallize chat on                         # enable this existing chat
@@ -162,7 +173,8 @@ hermes crystal try morning-brief              # save/test a candidate routine
 hermes crystal show morning-brief
 hermes crystal promote morning-brief --mode tool  # explicit normal-host-tool plan after evidence
 hermes crystal undo morning-brief
-hermes crystal compatibility                  # SDK gaps; no provider probes
+hermes crystal compatibility                  # what this install supports; no provider probes
+hermes crystal prices --provider p --model m  # the list price Crystallize found for a route
 ```
 
 Use `hermes crystal <command> --help` for re-read controls, anonymous comparison
@@ -185,7 +197,13 @@ hermes crystal rate-card
 hermes crystal rate-card --file exact-route-rates.json --confirm
 ```
 
-Rate cards are explicit user estimates with declared currency/units and exact
+Crystallize looks up list prices for your exact provider and model from the route's own public
+model list, then from a public catalog ([models.dev](https://models.dev)). It uses a plain request
+with no credentials or chat data, caches for a day, and can be turned off with
+`hermes crystal prices --lookup off`. With no known price, a paid helper stays off unless you allow
+it with `hermes crystal prices --allow-unpriced-helper on`.
+
+Rate cards are explicit user estimates and always win over a list price. They use declared currency/units and exact
 provider/model/endpoint identity. Public provider total quotes remain separate;
 unknown cache rates, request fees and tiers are not inferred. Cards never prove
 actual billing. See [Model Auction pricing](docs/model-auction.md) and
@@ -225,6 +243,8 @@ Schedule changes remain explicit choices.
   completeness checks.
   Receipt export redacts common credential forms; arbitrary sensitive content
   is not guaranteed to be removed.
+- Price lookup makes plain HTTPS GET requests to public model lists (the route's own `/models` and
+  `models.dev`), sending no credentials or chat data. Turn it off with `hermes crystal prices --lookup off`.
 - Helper/comparison features send supplied data through a host-owned model
   route on the relevant opt-in/explicit action. Public provider quote logic may
   consult host-owned metadata; explicit rate cards remain estimates. There is no independent credential
@@ -240,9 +260,8 @@ Schedule changes remain explicit choices.
   tool policy checks. Shared namespaces need matching authorization/freshness.
   Credential-bearing arguments are not cached.
 - Private Hermes pricing/inventory/dispatch/cron-update dependencies have been
-  removed. Public provider total quotes and explicitly supplied exact-route user
-  cards preserve unknown prices; no rates are inferred from totals or another
-  provider. [Public boundaries](docs/sdk-gaps.md) explain unsupported features and
+  removed. Prices come from provider quotes, public list prices for the exact route and explicit
+  user cards. No rates are inferred from totals or another provider. [Public boundaries](docs/sdk-gaps.md) explain unsupported features and
   the independently audited, hash-pinned public API contract.
 - No self-updater, token-refresh implementation, credential store or runtime
   patch of Hermes core is introduced. The [catalog bundle](catalog/README.md)

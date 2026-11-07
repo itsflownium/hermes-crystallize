@@ -1,5 +1,7 @@
 # Offline Desktop review captures
 
+These captures predate the 0.5.3 wording changes, so some labels differ from the current panel.
+
 These are actual React/Chromium UI captures with an offline simulated backend.
 The captures were refreshed from the version 0.4.1 candidate containing the
 PR #11 and PR #12 fixes on 7 November 2026.
