@@ -765,9 +765,17 @@ def shrink(ctx: Any, session_id: str, tool: str, result: Any, turn_id: str = "")
     from . import chat_policy
 
     policy = chat_policy.policy_for(session_id, tool)
-    if policy["mode"] == "exact" or _is_error(result) or tool in {"read_file", "read_image", "read_pdf", "read_document"}:
+    if policy["mode"] == "exact" or tool in {"read_file", "read_image", "read_pdf", "read_document"}:
         return None
     cleaned = prerun.clean_result(tool, result)
+    if _is_error(result):
+        # Data can mention a failure. Compacting loses nothing, and clean_result leaves a failed
+        # command exact, so this is all a result like that gets: no summary and no repeat note.
+        if cleaned is None or len(cleaned) >= len(result):
+            return None
+        store.add_chat_event(session_id, turn_id=turn_id, kind="clean", chars=len(result) - len(cleaned),
+                             tokens_removed=_tokens_removed(result, cleaned, session_id))
+        return cleaned
     current = cleaned if cleaned is not None else result
     repeat = _repeat_note(session_id, tool, current, result, turn_id)
     if repeat is not None:

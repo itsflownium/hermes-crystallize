@@ -79,6 +79,8 @@ def usage(session):
     return dict(row) if row else {}
 
 
+LATER_TURNS = ("Name one thing that would make that clearer.", "Give one more short example of the same idea.",
+               "Summarise this whole chat in one sentence.")
 COUNTERS = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "reasoning_tokens", "api_call_count")
 
 
@@ -88,7 +90,7 @@ def list_cost(delta, rates):
 
 
 def run_arm(args, task, on, folder, rates):
-    from crystallize import request_settings, reread, store
+    from crystallize import rent, request_settings, reread, store
 
     nonce = os.urandom(4).hex()
     path = None
@@ -98,12 +100,23 @@ def run_arm(args, task, on, folder, rates):
     session, _, code = ask(args, f"Reply with the single word READY. Reference {nonce}.")
     if not session:
         return {"on": on, "ok": False, "why": f"no session (exit {code})"}
-    if on:
+    if on and args.mode == "clean":
         store.set_chat_enabled(session, True)
         reread.configure(session, enabled=True, results=True)
     start = usage(session)
     _, answer, code1 = ask(args, task["ask"].format(path=path), session)
+    removed = None
+    if args.mode == "rent":
+        # Only what happens after the removal is measured, on both sides.
+        start = usage(session)
+        items = rent.report(session)["items"]
+        if on and items:
+            removed = items[0]["tokens"]
+            rent.evict(session, items[0]["id"])
     _, follow, code2 = ask(args, task["follow"], session)
+    for later in LATER_TURNS if args.mode == "rent" else ():
+        _, _, later_code = ask(args, later, session)
+        code2 = code2 or later_code
     end = usage(session)
     delta = {key: (end.get(key) or 0) - (start.get(key) or 0) for key in COUNTERS}
     delta["prompt_tokens"] = delta["input_tokens"] + delta["cache_read_tokens"] + delta["cache_write_tokens"]
@@ -116,7 +129,7 @@ def run_arm(args, task, on, folder, rates):
             "host_estimated_delta_usd": (end.get("estimated_cost_usd") or 0) - (start.get("estimated_cost_usd") or 0),
             "recorded": {"model": end.get("model"), "provider": end.get("billing_provider"), "sent": (request_settings.for_run("chat:" + session) or {}).get("fingerprint")},
             "requested_on_the_wire": request_settings.for_run("chat:" + session),
-            "tool_chars_removed": (events[0].get("chars") if events else 0) or 0, "answer_chars": len(answer), "follow_chars": len(follow)}
+            "tool_chars_removed": (events[0].get("chars") if events else 0) or 0, "rent_tokens_removed": removed, "answer_chars": len(answer), "follow_chars": len(follow)}
 
 
 def _settings(recorded):
@@ -152,6 +165,8 @@ def main():
     parser.add_argument("--model", required=True)
     parser.add_argument("--provider", required=True)
     parser.add_argument("--reasoning", default="medium")
+    parser.add_argument("--mode", choices=("clean", "rent"), default="clean",
+                        help="clean: Crystallize Chat on from the start. rent: remove the largest result, then measure later turns")
     parser.add_argument("--pairs", type=int, default=1, help="Pairs per task type")
     parser.add_argument("--task", action="append")
     parser.add_argument("--minutes", type=float, default=15)
@@ -195,7 +210,7 @@ def main():
                 pairs.append({"domain": domain, "repeat": repeat, "order": ["on" if o else "off" for o in order], "valid": valid, **arms})
                 report_path.write_text(json.dumps({"partial": True, "pairs": pairs}, indent=1))
                 print(domain, repeat, "valid" if valid else "invalid", flush=True)
-    result = {"schema": 1, "model": args.model, "provider": args.provider, "requested_reasoning": args.reasoning, "seed": seed,
+    result = {"schema": 1, "mode": args.mode, "model": args.model, "provider": args.provider, "requested_reasoning": args.reasoning, "seed": seed,
               "frozen_list_rates_per_token": rates, "stopped": stopped, "by_task": summarise(pairs), "pairs": pairs,
               "limits": ["Costs are list prices applied to recorded usage, not bills.", "Fixtures are synthetic; JSON is pretty-printed like API output.",
                          "One provider and model. It does not extend to other routes.", "The checks cover named facts, not overall answer quality."]}

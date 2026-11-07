@@ -230,8 +230,10 @@ def test_a_run_that_changes_reasoning_midway_establishes_no_setting():
 def test_a_recorded_request_makes_a_cron_run_comparable():
     request_settings.record("e1", {"reasoning_effort": "high"})
     run = history.Run(execution_id="e1", job_id="j", job_name="j", session_id="s", scheduled=True, started_ts=1, model="m")
-    history._apply_session(run, {"billing_provider": "p", "model": "m", "model_config": None})
+    history._apply_session(run, {"billing_provider": "p", "model": "m", "model_config": None,
+                                 "identity_attribution_complete": False, "identity_except_reasoning": True})
     assert history.comparison_identity(run)[:3] == ("m", "p", "high")
+    assert run.attribution_evidence["reasoning_per_request_verified"]
 
 
 def test_the_request_hook_records_settings_without_changing_the_request():
@@ -378,3 +380,17 @@ def test_clean_leaves_a_failed_result_exact():
     from crystallize import prerun
 
     assert prerun.clean_result("terminal", json.dumps({"output": "x" * 5000, "error": "boom"})) is None
+
+
+def test_data_that_mentions_a_failure_is_still_compacted(monkeypatch):
+    store.set_chat_enabled("s", True)
+    monkeypatch.setattr(cs, "_main_model", lambda sid: {"model": "m", "provider": "p"})
+    inner = json.dumps([{"id": i, "status": "failed" if i == 3 else "ok"} for i in range(200)], indent=2)
+    out = cs.shrink(SimpleNamespace(), "s", "terminal", _terminal(inner))
+    assert json.loads(json.loads(out)["output"]) == json.loads(inner) and len(out) < len(inner)
+
+
+def test_a_failed_command_is_never_touched(monkeypatch):
+    store.set_chat_enabled("s", True)
+    result = json.dumps({"output": json.dumps({"a": list(range(900))}, indent=2), "exit_code": 1})
+    assert cs.shrink(SimpleNamespace(), "s", "terminal", result) is None

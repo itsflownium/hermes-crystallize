@@ -90,10 +90,10 @@ def main() -> None:
             base = {j: len(_finished(history, j)) for j in (normal, attached)}
             for tick in range(1, args.after_ticks + 1):
                 if tick == args.after_ticks - 1:
-                    _write(data, "failed")
+                    _write(data, "failed")  # the last tick is there to see the attached job wake
                     result["events"].append({"changed_data_at": time.time(), "tick": tick})
+                # Only the normal job paces this: an unchanged attached job has no run to wait for.
                 _wait(history, normal, base[normal] + tick, deadline)
-                _wait(history, attached, base[attached] + tick, deadline)
                 report.with_suffix(".partial").write_text(json.dumps({"tick": tick}))
             result["attached_at"] = attached_at
             for name, job_id in (("normal", normal), ("attached", attached)):

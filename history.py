@@ -404,6 +404,7 @@ def _session_info(conn: sqlite3.Connection, chain: list[dict[str, Any]], uncerta
             info[key] = None
         info["cost_status"] = "unknown"
     info.update({"session_ids": ids, "usage_totals_complete": complete,
+                 "identity_except_reasoning": bool(complete and info.get("model") and info.get("billing_provider") and not auxiliary),
                  "identity_attribution_complete": bool(complete and info.get("model") and info.get("billing_provider") and effort and not auxiliary),
                  "started_at": chain[0].get("started_at"), "ended_at": chain[-1].get("ended_at"),
                  "attribution_evidence": {"session_ids": ids, "chain_verified": not uncertainty,
@@ -517,6 +518,11 @@ def _apply_session(run: Run, info: Optional[dict[str, Any]]) -> None:
     run.attribution_evidence = info.get("attribution_evidence") or {}
     run.usage_totals_complete = bool(info.get("usage_totals_complete", True))
     run.identity_attribution_complete = info.get("identity_attribution_complete")
+    if sent:
+        # The request is better evidence of reasoning than the session's saved settings.
+        if info.get("identity_except_reasoning") and sent["effort"] != request_settings.MIXED:
+            run.identity_attribution_complete = True
+        run.attribution_evidence = {**run.attribution_evidence, "reasoning_source": "sent_request", "reasoning_per_request_verified": sent["effort"] != request_settings.MIXED}
     actual, estimated = info.get("actual_cost_usd"), info.get("estimated_cost_usd")
     run.cost_usd = actual if actual is not None else estimated
     run.cost_provenance = "actual" if actual is not None else "estimated" if estimated is not None else "unknown"
