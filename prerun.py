@@ -57,6 +57,55 @@ def _json_text(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
 
 
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+
+
+class _HasFloat(ValueError):
+    """A float could change when rewritten, so the outer JSON is left as it was."""
+
+
+def _refuse_float(text: str) -> None:
+    raise _HasFloat(text)
+
+
+def _clean_text(text: str) -> str:
+    """Tools usually wrap their output in JSON, so the wasted formatting is in a string.
+    JSON inside gets compacted. Other text only loses color codes, because its
+    spacing can matter."""
+    stripped = text.strip()
+    if stripped[:1] in ("{", "["):
+        try:
+            json.loads(stripped)
+        except ValueError:
+            pass
+        else:
+            return _compact_json(stripped)
+    return _ANSI.sub("", text)
+
+
+def _clean_values(value: Any) -> Any:
+    if isinstance(value, str):
+        return _clean_text(value)
+    if isinstance(value, list):
+        return [_clean_values(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _clean_values(item) for key, item in value.items()}
+    return value
+
+
+def _clean_wrapped(text: str) -> Optional[str]:
+    """Clean the strings inside a tool's JSON result, or None if it can't be done exactly."""
+    try:
+        data = json.loads(text, parse_float=_refuse_float, parse_constant=_refuse_float)
+    except (ValueError, RecursionError):
+        return None
+    if not isinstance(data, (dict, list)):
+        return None
+    if isinstance(data, dict) and data.get("exit_code") not in (None, 0):
+        return None  # a failed command's exact output may matter
+    return json.dumps(_clean_values(data), ensure_ascii=False, separators=(",", ":"))
+
+
 def _compact_json(text: str) -> str:
     """Remove only JSON's insignificant whitespace, preserving numeric tokens too."""
     inside, escaped, out = False, False, []
@@ -288,7 +337,7 @@ def clean_result(tool: str, result: Any) -> Optional[str]:
         else:
             if isinstance(data, dict) and data.get("error"):
                 return None  # the exact error may matter
-            cleaned = _compact_json(result)
+            cleaned = _clean_wrapped(result) or _compact_json(result)
     except Exception:  # noqa: BLE001 — never break a run over a saving
         return None
     return cleaned if len(cleaned) <= len(result) * (1 - MIN_CLEAN_GAIN) else None

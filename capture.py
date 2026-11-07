@@ -180,6 +180,8 @@ def make_llm_request(ctx: Any) -> Callable[..., Any]:
             run = ctx.current_cron_execution()
             if run is not None:
                 request_settings.record(getattr(run, "execution_id", None), request)
+            elif store.get_setting(request_settings.RECORD_CHATS, False):  # on only during a paired test
+                request_settings.record("chat:" + session_id, request)
             if run is not None or store.chat_enabled(session_id):
                 estimate.note_request(session_id, request)
         except Exception:  # noqa: BLE001

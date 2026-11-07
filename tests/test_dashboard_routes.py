@@ -41,14 +41,14 @@ def test_rent_routes_report_remove_and_restore(monkeypatch):
     monkeypatch.setattr(rent.chat_savings, "_keep_full", lambda text, sid: "0123456789abcdef")
     monkeypatch.setattr(rent.chat_savings, "_main_model", lambda sid: {"model": "m", "provider": "p"})
     assert _call(api.chat_rent, "s1")["items"][0]["id"] == "c1"
-    assert _call(api.chat_evict, {"session_id": "s1", "call_id": "c1"})["ok"]
+    assert _call(api.chat_evict, {"session_id": "s1", "id": "c1"})["ok"]
     assert store.evictions("s1") == {"c1": "0123456789abcdef"}
-    assert _call(api.chat_restore, {"session_id": "s1", "call_id": "c1"})["ok"]
+    assert _call(api.chat_restore, {"session_id": "s1", "id": "c1"})["ok"]
     assert store.evictions("s1") == {}
 
 
 def test_rent_route_refuses_a_bad_session():
-    assert _call(api.chat_evict, {"session_id": "../x y", "call_id": "c1"})["ok"] is False
+    assert _call(api.chat_evict, {"session_id": "../x y", "id": "c1"})["ok"] is False
 
 
 def test_clearing_an_auction_needs_confirmation():

@@ -88,7 +88,7 @@ def list_cost(delta, rates):
 
 
 def run_arm(args, task, on, folder, rates):
-    from crystallize import reread, store
+    from crystallize import request_settings, reread, store
 
     nonce = os.urandom(4).hex()
     path = None
@@ -114,8 +114,19 @@ def run_arm(args, task, on, folder, rates):
             "list_cost_usd": list_cost(delta, rates) if rates else None,
             "list_cost_without_reasoning_usd": list_cost({**delta, "output_tokens": max(0, delta["output_tokens"] - delta["reasoning_tokens"])}, rates) if rates else None,
             "host_estimated_delta_usd": (end.get("estimated_cost_usd") or 0) - (start.get("estimated_cost_usd") or 0),
-            "recorded": {"model": end.get("model"), "provider": end.get("billing_provider"), "model_config": end.get("model_config")},
+            "recorded": {"model": end.get("model"), "provider": end.get("billing_provider"), "sent": (request_settings.for_run("chat:" + session) or {}).get("fingerprint")},
+            "requested_on_the_wire": request_settings.for_run("chat:" + session),
             "tool_chars_removed": (events[0].get("chars") if events else 0) or 0, "answer_chars": len(answer), "follow_chars": len(follow)}
+
+
+def _settings(recorded):
+    """What must match. The session's config also holds usage counters that differ every run."""
+    recorded = recorded or {}
+    try:
+        config = json.loads(recorded.get("model_config") or "{}")
+    except ValueError:
+        config = {}
+    return recorded.get("model"), recorded.get("provider"), recorded.get("sent") or json.dumps(config.get("reasoning_config"), sort_keys=True)
 
 
 def summarise(pairs):
@@ -156,8 +167,9 @@ def main():
     if not args.run:
         print(json.dumps({"planned_sessions": 2 * args.pairs * len(chosen), "tasks": chosen}))
         return
-    from crystallize import price_discovery
+    from crystallize import price_discovery, request_settings, store
 
+    store.set_setting(request_settings.RECORD_CHATS, True)
     price_discovery.refresh(args.provider)
     rates = price_discovery.rates(args.model, args.provider)
     seed = args.seed if args.seed is not None else int(time.time())
@@ -178,7 +190,7 @@ def main():
                         arms["on" if on else "off"] = run_arm(args, tasks[domain], on, Path(folder), rates)
                     except subprocess.TimeoutExpired:
                         arms["on" if on else "off"] = {"on": on, "ok": False, "why": "timeout"}
-                settings = [arms[k].get("recorded") for k in ("off", "on")]
+                settings = [_settings(arms[k].get("recorded")) for k in ("off", "on")]
                 valid = all(arms[k].get("ok") for k in ("off", "on")) and settings[0] == settings[1]
                 pairs.append({"domain": domain, "repeat": repeat, "order": ["on" if o else "off" for o in order], "valid": valid, **arms})
                 report_path.write_text(json.dumps({"partial": True, "pairs": pairs}, indent=1))
@@ -187,6 +199,7 @@ def main():
               "frozen_list_rates_per_token": rates, "stopped": stopped, "by_task": summarise(pairs), "pairs": pairs,
               "limits": ["Costs are list prices applied to recorded usage, not bills.", "Fixtures are synthetic; JSON is pretty-printed like API output.",
                          "One provider and model. It does not extend to other routes.", "The checks cover named facts, not overall answer quality."]}
+    store.set_setting(request_settings.RECORD_CHATS, False)
     report_path.write_text(json.dumps(result, indent=1))
     print(json.dumps(result["by_task"], indent=1))
 

@@ -343,3 +343,38 @@ def test_a_helper_inherits_the_main_reasoning(monkeypatch):
     monkeypatch.setattr(cs.subprocess, "run", lambda cmd, **k: sent.append(cmd) or SimpleNamespace(returncode=0, stderr="", stdout=""))
     cs.set_model("p", "m")
     assert json.loads(sent[0][-1])["reasoning_effort"] == "high"
+
+
+def _terminal(output):
+    return json.dumps({"output": output, "exit_code": 0, "error": None})
+
+
+def test_clean_compacts_json_inside_a_terminal_result():
+    from crystallize import prerun
+
+    inner = json.dumps({"items": [{"id": i, "name": "a  b"} for i in range(40)]}, indent=2).replace('"name"', '"score": 1.50,\n  "name"')
+    cleaned = prerun.clean_result("terminal", _terminal(inner))
+    assert cleaned and len(cleaned) < len(_terminal(inner)) * 0.8
+    assert json.loads(json.loads(cleaned)["output"]) == json.loads(inner)
+    assert "1.50" in json.loads(cleaned)["output"] and "a  b" in cleaned
+
+
+def test_clean_keeps_line_breaks_and_indentation_in_plain_text():
+    from crystallize import prerun
+
+    code = "\n".join(f"def f{i}():   \n    return {i}\033[0m" for i in range(200))
+    cleaned = prerun.clean_result("terminal", _terminal(code))
+    output = json.loads(cleaned)["output"]
+    assert "\n    return 5\n" in output and "\033" not in output and "():   \n" in output
+
+
+def test_clean_leaves_a_result_alone_when_a_float_could_change():
+    from crystallize import prerun
+
+    assert prerun._clean_wrapped('{"output": "x", "score": 1.50}') is None
+
+
+def test_clean_leaves_a_failed_result_exact():
+    from crystallize import prerun
+
+    assert prerun.clean_result("terminal", json.dumps({"output": "x" * 5000, "error": "boom"})) is None

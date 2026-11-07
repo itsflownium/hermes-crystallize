@@ -13,6 +13,7 @@ from typing import Any, Optional
 UNSET = "unset"     # the request named no reasoning, so the provider chose; still comparable
 MIXED = "mixed"     # calls in one run differed, so the run doesn't establish one setting
 
+RECORD_CHATS = "record_chat_request_settings"
 _REASONING_FIELDS = ("reasoning_effort", "reasoning", "thinking", "thinking_config", "thinkingConfig", "effort")
 _OTHER_FIELDS = ("temperature", "top_p", "service_tier", "verbosity", "seed")
 _NESTED = ("extra_body", "generationConfig", "generation_config", "output_config",
