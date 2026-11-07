@@ -30,7 +30,7 @@ Turn it on after your first message with `/crystallize chat on`. It needs a know
 
 ## Ideal conditions for cron
 
-- **The data is often unchanged.** With a script attached, an unchanged check made no AI call. One job that changed once in 4 checks cost 43% less, and one that didn't change in its first check after attaching cost about 80% less.
+- **The data is often unchanged.** With a script attached, an unchanged check made no AI call. One job that changed once in 4 checks cost 43% less, and one whose data stayed the same across its checks cost about 80% less.
 - **It checks often for something that rarely changes,** such as a status page, a queue or a report feed.
 - **It only reads,** with no skills or actions on its runs. Crystallize won't attach a script to a job with either.
 - **Silence is fine when nothing changed.** An unchanged check sends nothing, and a job that delivers somewhere needs you to confirm this.
