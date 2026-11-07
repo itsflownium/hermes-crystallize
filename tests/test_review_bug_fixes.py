@@ -12,6 +12,11 @@ from crystallize import (auction, brake, capture, chat_savings as cs, estimate, 
                          lineage, overview, receipts, rent, request_settings, store, tuning)
 
 
+@pytest.fixture(autouse=True)
+def originals_folder(monkeypatch, tmp_path):
+    monkeypatch.setattr(cs, "_full_dir", lambda: tmp_path / "originals")
+
+
 def _compress(home, parent="old", child="new"):
     """A state database where `child` continues `parent` after context compression."""
     conn = sqlite3.connect(home / "state.db")
