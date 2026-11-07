@@ -5,8 +5,8 @@ marketplace admission and activation are recorded separately.
 
 **Owner hold on upstream submission:** all development, PRs and merges stay in
 `itsflownium/hermes-crystallize`. No PR on `NousResearch/hermes-agent` was created.
-PRs #12–#17 are merged; this follow-up publishes the remaining evidence and an
-updated internal catalog pin. A prepared bundle is not a catalog listing.
+PRs #12–#18 are merged; the final record publishes v0.5.3 activation and CI
+evidence. The internal catalog pin includes the reviewed fixes. A prepared bundle is not a catalog listing.
 
 | Question | Current evidence | Boundary |
 | --- | --- | --- |
@@ -14,7 +14,7 @@ updated internal catalog pin. A prepared bundle is not a catalog listing.
 | Mainstream tasks and providers | Current six-domain answer-only matrix summary, exact cron failure and separate typed rerun; offline generality tests | The full current matrix JSON was overwritten by an operator report-path error. The recovered partial record is labelled; fixtures and one Nous route do not prove universal coverage |
 | Automatic cron | Three due monitor ticks verified first/unchanged/changed behavior with two model requests; due script-only execution verified | Arbitrary learned-tool replay remains unavailable. Snapshot sources require complete reviewed input, local delivery, and no per-run actions/deadlines/repeated delivery |
 | Lifecycle quality | Pause/resume and missed-slot guards fixed; diagnostic-only error output clarified; old copied runtimes require fresh explicit review | Initial wrong fallback answer, controller deadline and zero-call preflight failure remain in the evidence |
-| Local installation | Clean installed checkout updated; fresh gateway after machine recovery, then public plugin reload while idle | A source update alone is not activation. Copied source wrappers are immutable and are reviewed separately |
+| Local installation | v0.5.3 clean installed checkout, exact reviewed runtime checksum, and confirmed public plugin reload while idle | A source update alone is not activation. Copied source wrappers are immutable and are reviewed separately |
 | Marketplace | Refreshed exact-pin bundle with host/source/security checks | `catalog_ready: false` and no upstream PR, as requested. Only upstream maintainer admission would establish listing |
 
 See [current and historical results](validation-results.md), including token

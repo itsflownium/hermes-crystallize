@@ -4,6 +4,20 @@ These results distinguish the current follow-up and public-SDK migration from th
 implementation in this follow-up to PR #7. They do not establish universal model
 compatibility, semantic equivalence or marketplace admission.
 
+## Final activation and CI record
+
+PR #18's Python 3.13 CI job passed **1,309 tests with 2 optional source-backed
+cases skipped**. Separate helper SDK conversion checks passed on both reviewed
+host snapshots; all six required PR checks were green. Exact-pin host validation
+passed 16/16 checks with no warnings.
+
+The [installed-build record](evidence/current-installed-build.json) confirms
+v0.5.3, a clean fast-forward checkout, the reviewed feature's exact runtime bytes,
+a successful public plugin reload while idle, removed validation jobs, and an
+unchanged model/reasoning config file. The observed checkout commit is retained
+as an as-of observation; subsequent evidence/catalog-only commits do not change
+the runtime checksum or require another gateway restart.
+
 ## Completed scheduled functional review
 
 The [read-only receipt review](evidence/current-native-functional-review.json)
@@ -84,8 +98,8 @@ that restoring only the original pause reason reproduced the approved hash.
 
 PR #16 treats this field as scheduler bookkeeping while continuing to protect
 prompt, model, provider, reasoning and source ownership. Its **66 focused tests**
-and six CI checks passed, including **1,304 standalone cases** in the full suite
-with the optional source-audit skip where applicable. Copied runtimes remain
+and six CI checks passed, including the full suite and both pinned host admission
+checks. Copied runtimes remain
 immutable: their approval now records a runtime SHA, and older/unverified
 wrappers show an explicit Undo/review/attach requirement.
 
