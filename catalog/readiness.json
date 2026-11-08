@@ -6,7 +6,7 @@
   "owner_submission_approval": null,
   "release_ready_meaning": "Technical checks do not establish live effectiveness, installed-build activation or owner approval to submit.",
   "catalog_ready_meaning": "Human admission/listing is not established by local technical checks.",
-  "pinned_commit": "349c2fc2ce8b42c8ff0d0e0d2dc1a4ca972f6613",
+  "pinned_commit": "c6890c46564148a22a410d7df5b61f84823f567c",
   "pinned_manifest_version": "0.6.0",
   "literal_capabilities_match_manifest": true,
   "source_analysis": {
@@ -39,7 +39,7 @@
       "public_core_imports": [
         {
           "file": "chat_savings.py",
-          "line": 335,
+          "line": 334,
           "module": "plugins.plugin_storage",
           "name": "plugin_data_dir",
           "public": true
@@ -116,21 +116,21 @@
         },
         {
           "file": "modelinfo.py",
-          "line": 176,
+          "line": 172,
           "module": "tools.registry",
           "name": "discover_builtin_tools",
           "public": true
         },
         {
           "file": "modelinfo.py",
-          "line": 176,
+          "line": 172,
           "module": "tools.registry",
           "name": "registry",
           "public": true
         },
         {
           "file": "modelinfo.py",
-          "line": 212,
+          "line": 208,
           "module": "providers",
           "name": "list_providers",
           "public": true
@@ -190,7 +190,7 @@
     "documented_core_imports": [
       {
         "file": "chat_savings.py",
-        "line": 335,
+        "line": 334,
         "module": "plugins.plugin_storage",
         "name": "plugin_data_dir",
         "public": true
@@ -267,21 +267,21 @@
       },
       {
         "file": "modelinfo.py",
-        "line": 176,
+        "line": 172,
         "module": "tools.registry",
         "name": "discover_builtin_tools",
         "public": true
       },
       {
         "file": "modelinfo.py",
-        "line": 176,
+        "line": 172,
         "module": "tools.registry",
         "name": "registry",
         "public": true
       },
       {
         "file": "modelinfo.py",
-        "line": 212,
+        "line": 208,
         "module": "providers",
         "name": "list_providers",
         "public": true
@@ -343,7 +343,7 @@
     "host_validation": {
       "status": "operator_supplied_exact_pin_host_validation",
       "ok": true,
-      "sha256": "2f27f78af7ca62536d0aaf440fa1856f40cd262ff969ccafc433a24b6c2d1c8d",
+      "sha256": "dce519e86f2f5f6bb5b0ac3c150d04fa1d671d950ef07417382511c691b5e3ac",
       "checks_passed": 16,
       "host_source_commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
       "warnings": [],
@@ -354,8 +354,8 @@
   "ui_evidence": {
     "status": "offline_fixture_captures",
     "screenshots": [
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/349c2fc2ce8b42c8ff0d0e0d2dc1a4ca972f6613/assets/review/panel-cron-and-chat.png",
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/349c2fc2ce8b42c8ff0d0e0d2dc1a4ca972f6613/assets/review/panel-job-details.png"
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/c6890c46564148a22a410d7df5b61f84823f567c/assets/review/panel-cron-and-chat.png",
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/c6890c46564148a22a410d7df5b61f84823f567c/assets/review/panel-job-details.png"
     ],
     "live_proof": false
   },
