@@ -215,7 +215,8 @@ def delete_rate_card(provider: str, model: str, base_url: Optional[str] = None) 
 
 
 def exact_rate_card(model: str, provider: str, base_url: Optional[str] = None, *,
-                    config: Optional[dict[str, Any]] = None) -> Optional[dict[str, Any]]:
+                    config: Optional[dict[str, Any]] = None, discovered: bool = True) -> Optional[dict[str, Any]]:
+    """Your own card for this route, otherwise its public list price if one was found."""
     try:
         key = _route(provider, model, base_url)
     except PricingError:
@@ -225,7 +226,27 @@ def exact_rate_card(model: str, provider: str, base_url: Optional[str] = None, *
             if card["expires_at"] is not None and card["expires_at"] <= time.time():
                 return None
             return dict(card)
-    return None
+    return _discovered_card(model, provider, base_url) if discovered else None
+
+
+def _discovered_card(model: str, provider: str, base_url: Optional[str]) -> Optional[dict[str, Any]]:
+    from . import price_discovery
+
+    try:
+        found = price_discovery.rates(model, provider, endpoint(base_url))
+    except Exception:  # noqa: BLE001 — a price list is optional evidence
+        return None
+    if not found:
+        return None
+    card = {"schema_version": 1, "provider": provider, "model": model, "base_url": endpoint(base_url), "currency": "USD",
+            "unit": "per_token", **{key + "_above": None for key in _BUCKETS}, "tier_threshold_tokens": None,
+            "tiers_known": True, "pricing_version": None, "source_url": None, "source": "public_price_list",
+            "provenance": "public_list_price", "origin": "discovered", "user_authorized": False, "verified": False,
+            "expires_at": None, "updated_at": None}
+    card.update({key: found[key] for key in _BUCKETS})
+    card["request_cost"] = found.get("request_cost", 0.0)
+    card["cache_rates_assumed"] = bool(found.get("cache_rates_assumed"))
+    return card
 
 
 @dataclass(frozen=True)
@@ -304,12 +325,27 @@ def _card_quote(card: dict[str, Any], usage: Usage) -> Optional[dict[str, Any]]:
 
 def quote_cost(model: str, provider: str, usage: Usage, base_url: Optional[str] = None, *,
                config: Optional[dict[str, Any]] = None, profile: Any = _UNRESOLVED_PROFILE) -> Optional[dict[str, Any]]:
-    """Exact-route total estimate; never infer a rate card from a provider quote."""
+    """Exact-route total estimate; never infer a rate card from a provider quote.
+
+    Your own card comes first, then the provider's own quote, then a public list price."""
+    quote = _card_or_provider_quote(model, provider, usage, base_url, config=config, profile=profile)
+    if quote is not None:
+        return quote
     try:
         _route(provider, model, base_url)
     except PricingError:
         return None
-    card = exact_rate_card(model, provider, base_url, config=config)
+    card = _discovered_card(model, provider, base_url)
+    return _card_quote(card, usage) if card else None
+
+
+def _card_or_provider_quote(model: str, provider: str, usage: Usage, base_url: Optional[str] = None, *,
+                            config: Optional[dict[str, Any]] = None, profile: Any = _UNRESOLVED_PROFILE) -> Optional[dict[str, Any]]:
+    try:
+        _route(provider, model, base_url)
+    except PricingError:
+        return None
+    card = exact_rate_card(model, provider, base_url, config=config, discovered=False)
     if card is not None:
         return _card_quote(card, usage)
     try:
