@@ -14,6 +14,10 @@ These come from live paired runs on Nous, with the same model and the same reaso
 | **Hand-offs to a helper model on small tasks** | Not live-tested. The main model has to type the work out for the helper, at its own output price | Crystallize estimates this first and refuses a hand-off that won't pay. A helper with no known price stays off |
 | **Trying things out** | Trials, Blind Taste Test and Model Auction make real model runs | Worth it once for a job you'll keep running. They're always your choice, except a trial's normal scheduled runs |
 
+## What it no longer costs
+
+Crystallize's own tools used to be sent on every AI call in every chat, about 3,300 characters, even where it was off. They're now left out unless Crystallize Chat is on in that chat, so having it installed costs nothing where you don't use it.
+
 ## Where it saves little
 
 - **Short chats with small results.** Clean alone saved about 6% overall across 14 pairs, and a few task types were 1 to 3% dearer, which is within noise.

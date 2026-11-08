@@ -27,6 +27,9 @@ Things that came out badly or unclear, which are kept in `docs/evidence/`:
 - **A `tune` trial ran 27% cheaper in typical runs** ($0.00164 against $0.00224), but hadn't reached its keep-or-revert decision when the 15-minute test ended. That decision is not live-verified.
 - **Re-read on its own shows no clear saving** beyond what Clean gives: median cost ratios of 0.77, 1.00 and 1.07 across 3 task types, at 3 pairs each.
 
+- **Crystallize's own tools used to cost every chat.** Its 4 tool definitions, about 3,300 characters, were sent on every AI call in every chat, even with Crystallize off. They're now left out unless Crystallize Chat is on in that chat, and where they're sent they count against its savings. This was found after the runs above, so those runs included them in both arms.
+- **A hand-off test couldn't run.** The Nous account ran out of credits (HTTP 402), so hand-offs remain untested live.
+
 Not measured live: other providers, hand-offs, Blind Taste Test, Model Auction, Rhythm, Runaway Brake on this version, context compression, and how a real user's work compares with these fixtures.
 
 Reproduce with `scripts/validation_whole_loop.py`, `scripts/validation_cron_pair.py` and `scripts/validation_cron_tune.py`.
