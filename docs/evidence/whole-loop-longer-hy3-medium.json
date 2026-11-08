@@ -1,0 +1,179 @@
+{
+ "schema": 1,
+ "mode": "long",
+ "reread": false,
+ "model": "tencent/hy3",
+ "provider": "nous",
+ "requested_reasoning": "medium",
+ "seed": 1794044692,
+ "frozen_list_rates_per_token": {
+  "input": 1.32e-07,
+  "output": 5.28e-07,
+  "cache_read": 3.3e-08,
+  "cache_write": 1.32e-07,
+  "request_cost": 0.0,
+  "cache_rates_assumed": true
+ },
+ "stopped": null,
+ "by_task": {
+  "working chat": {
+   "valid_pairs": 2,
+   "invalid_pairs": 0,
+   "median_cost_ratio_on_vs_off": 0.6851501775255999,
+   "median_cost_ratio_excluding_reasoning_output": 0.6513133430865883,
+   "median_prompt_token_ratio": 0.5589965933653196,
+   "checks_passed_off": 2,
+   "checks_passed_on": 2
+  }
+ },
+ "pairs": [
+  {
+   "domain": "working chat",
+   "repeat": 0,
+   "order": [
+    "on",
+    "off"
+   ],
+   "valid": true,
+   "on": {
+    "on": true,
+    "ok": true,
+    "session": "local-ee3025ce0c075408e99fa347702a386287c83cd257f05764938321c4b7073ad0",
+    "delta": {
+     "input_tokens": 34106,
+     "output_tokens": 4068,
+     "cache_read_tokens": 300736,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 2646,
+     "api_call_count": 29,
+     "prompt_tokens": 334842
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.016574184,
+    "list_cost_without_reasoning_usd": 0.015177096,
+    "host_estimated_delta_usd": 0.016574184000000002,
+    "recorded": {
+     "model": "tencent/hy3",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"medium\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "medium",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"medium\",\"enabled\":true}}}"
+    },
+    "auto_rent": {
+     "removed": 4,
+     "read_backs": 0,
+     "off": false
+    },
+    "answer_chars": 142
+   },
+   "off": {
+    "on": false,
+    "ok": true,
+    "session": "local-2c0cf4c6afe234bd0b924c376f2f42d7016072b68706db08d5da2bb77f6e5303",
+    "delta": {
+     "input_tokens": 21111,
+     "output_tokens": 3050,
+     "cache_read_tokens": 546176,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 2035,
+     "api_call_count": 27,
+     "prompt_tokens": 567287
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.022420859999999997,
+    "list_cost_without_reasoning_usd": 0.021346379999999998,
+    "host_estimated_delta_usd": 0.02242086,
+    "recorded": {
+     "model": "tencent/hy3",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"medium\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "medium",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"medium\",\"enabled\":true}}}"
+    },
+    "auto_rent": null,
+    "answer_chars": 107
+   }
+  },
+  {
+   "domain": "working chat",
+   "repeat": 1,
+   "order": [
+    "off",
+    "on"
+   ],
+   "valid": true,
+   "off": {
+    "on": false,
+    "ok": true,
+    "session": "local-a2abc41fc13172078e7928ddaa9bc47c2fd071af816b284082592097a0ad4fd3",
+    "delta": {
+     "input_tokens": 28045,
+     "output_tokens": 2128,
+     "cache_read_tokens": 537728,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 1067,
+     "api_call_count": 27,
+     "prompt_tokens": 565773
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.022570547999999996,
+    "list_cost_without_reasoning_usd": 0.022007172,
+    "host_estimated_delta_usd": 0.022570548000000003,
+    "recorded": {
+     "model": "tencent/hy3",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"medium\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "medium",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"medium\",\"enabled\":true}}}"
+    },
+    "auto_rent": null,
+    "answer_chars": 99
+   },
+   "on": {
+    "on": true,
+    "ok": true,
+    "session": "local-6093fe5a3762924f279746df1bd202538f21a10a1e03642f9e192d851423363e",
+    "delta": {
+     "input_tokens": 25558,
+     "output_tokens": 3523,
+     "cache_read_tokens": 273024,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 2317,
+     "api_call_count": 28,
+     "prompt_tokens": 298582
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.014243592,
+    "list_cost_without_reasoning_usd": 0.013020215999999998,
+    "host_estimated_delta_usd": 0.014243592000000001,
+    "recorded": {
+     "model": "tencent/hy3",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"medium\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "medium",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"medium\",\"enabled\":true}}}"
+    },
+    "auto_rent": {
+     "removed": 5,
+     "read_backs": 0,
+     "off": false
+    },
+    "answer_chars": 41
+   }
+  }
+ ],
+ "limits": [
+  "Costs are list prices applied to recorded usage, not bills.",
+  "Fixtures are synthetic; JSON is pretty-printed like API output.",
+  "One provider and model. It does not extend to other routes.",
+  "The checks cover named facts, not overall answer quality."
+ ]
+}

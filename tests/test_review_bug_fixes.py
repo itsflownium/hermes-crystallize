@@ -230,8 +230,10 @@ def test_a_run_that_changes_reasoning_midway_establishes_no_setting():
 def test_a_recorded_request_makes_a_cron_run_comparable():
     request_settings.record("e1", {"reasoning_effort": "high"})
     run = history.Run(execution_id="e1", job_id="j", job_name="j", session_id="s", scheduled=True, started_ts=1, model="m")
-    history._apply_session(run, {"billing_provider": "p", "model": "m", "model_config": None})
+    history._apply_session(run, {"billing_provider": "p", "model": "m", "model_config": None,
+                                 "identity_attribution_complete": False, "identity_except_reasoning": True})
     assert history.comparison_identity(run)[:3] == ("m", "p", "high")
+    assert run.attribution_evidence["reasoning_per_request_verified"]
 
 
 def test_the_request_hook_records_settings_without_changing_the_request():
@@ -343,3 +345,128 @@ def test_a_helper_inherits_the_main_reasoning(monkeypatch):
     monkeypatch.setattr(cs.subprocess, "run", lambda cmd, **k: sent.append(cmd) or SimpleNamespace(returncode=0, stderr="", stdout=""))
     cs.set_model("p", "m")
     assert json.loads(sent[0][-1])["reasoning_effort"] == "high"
+
+
+def _terminal(output):
+    return json.dumps({"output": output, "exit_code": 0, "error": None})
+
+
+def test_clean_compacts_json_inside_a_terminal_result():
+    from crystallize import prerun
+
+    inner = json.dumps({"items": [{"id": i, "name": "a  b"} for i in range(40)]}, indent=2).replace('"name"', '"score": 1.50,\n  "name"')
+    cleaned = prerun.clean_result("terminal", _terminal(inner))
+    assert cleaned and len(cleaned) < len(_terminal(inner)) * 0.8
+    assert json.loads(json.loads(cleaned)["output"]) == json.loads(inner)
+    assert "1.50" in json.loads(cleaned)["output"] and "a  b" in cleaned
+
+
+def test_clean_keeps_line_breaks_and_indentation_in_plain_text():
+    from crystallize import prerun
+
+    code = "\n".join(f"def f{i}():   \n    return {i}\033[0m" for i in range(200))
+    cleaned = prerun.clean_result("terminal", _terminal(code))
+    output = json.loads(cleaned)["output"]
+    assert "\n    return 5\n" in output and "\033" not in output and "():   \n" in output
+
+
+def test_clean_leaves_a_result_alone_when_a_float_could_change():
+    from crystallize import prerun
+
+    assert prerun._clean_wrapped('{"output": "x", "score": 1.50}') is None
+
+
+def test_clean_leaves_a_failed_result_exact():
+    from crystallize import prerun
+
+    assert prerun.clean_result("terminal", json.dumps({"output": "x" * 5000, "error": "boom"})) is None
+
+
+def test_data_that_mentions_a_failure_is_still_compacted(monkeypatch):
+    store.set_chat_enabled("s", True)
+    monkeypatch.setattr(cs, "_main_model", lambda sid: {"model": "m", "provider": "p"})
+    inner = json.dumps([{"id": i, "status": "failed" if i == 3 else "ok"} for i in range(200)], indent=2)
+    out = cs.shrink(SimpleNamespace(), "s", "terminal", _terminal(inner))
+    assert json.loads(json.loads(out)["output"]) == json.loads(inner) and len(out) < len(inner)
+
+
+def test_a_failed_command_is_never_touched(monkeypatch):
+    store.set_chat_enabled("s", True)
+    result = json.dumps({"output": json.dumps({"a": list(range(900))}, indent=2), "exit_code": 1})
+    assert cs.shrink(SimpleNamespace(), "s", "terminal", result) is None
+
+
+def _requests_with_own_tools():
+    def openai(name):
+        return {"type": "function", "function": {"name": name, "parameters": {}}}
+    return [
+        {"messages": [], "tools": [openai("terminal"), openai("crystal_cheap"), openai("crystal_full_result")]},
+        {"input": [], "tools": [{"type": "function", "name": "crystal_list"}, {"type": "function", "name": "web_search"}]},
+        {"messages": [], "tools": [{"name": "crystal_run", "input_schema": {}}, {"name": "read_file", "input_schema": {}}]},
+        {"messages": [], "toolConfig": {"tools": [{"toolSpec": {"name": "crystal_cheap"}}, {"toolSpec": {"name": "terminal"}}]}},
+    ]
+
+
+@pytest.mark.parametrize("request_body", _requests_with_own_tools())
+def test_crystallize_tools_are_left_out_where_chat_is_off(request_body):
+    out = capture.make_llm_request(SimpleNamespace(current_cron_execution=lambda: None))(request=request_body, session_id="off")["request"]
+    names = {capture._tool_name(t) for t in out.get("tools") or out.get("toolConfig", {}).get("tools", [])}
+    assert names and not names & capture.OWN_TOOLS
+
+
+def test_crystallize_tools_stay_where_chat_is_on():
+    store.set_chat_enabled("on", True)
+    body = _requests_with_own_tools()[0]
+    assert capture.make_llm_request(SimpleNamespace(current_cron_execution=lambda: None))(request=body, session_id="on") is None
+
+
+def test_a_request_with_only_crystallize_tools_drops_the_tool_choice_too():
+    body = {"messages": [], "tools": [{"name": "crystal_list"}], "tool_choice": "auto"}
+    out = capture.drop_own_tools(body)
+    assert "tools" not in out and "tool_choice" not in out and body["tools"]
+
+
+def test_own_tools_are_charged_to_a_chat_with_crystallize_on():
+    store.set_chat_enabled("on", True)
+    hook = capture.make_post_api_request(SimpleNamespace(current_cron_execution=lambda: None))
+    hook(session_id="on", usage={"prompt_tokens": 10})
+    assert store.list_chat_savings("on")[0]["added_input_chars"] == capture._own_tool_chars() > 2000
+
+
+
+def test_a_trial_that_used_more_tokens_says_so(monkeypatch):
+    monkeypatch.setattr(history, "comparable_runs", lambda a, b: True)
+    monkeypatch.setattr(tuning.adaptive, "savings_evidence", lambda a, b: {"ok": False})
+    run = lambda tokens, output: SimpleNamespace(cost_usd=None, api_cost_usd=None, total_tokens=tokens, output_tokens=output,
+                                                 outcome="completed", session_id="s", steps=[], reasoning_tokens=None)
+    out = tuning.evaluate([run(100, 10), run(100, 10)], [run(120, 20), run(120, 20)], {"s": "answer"})
+    assert "fewer tokens" not in out["why"] and "cheaper" in out["why"]
+
+
+
+def test_hand_offs_stop_in_a_chat_where_an_answer_was_retyped(monkeypatch):
+    store.set_chat_enabled("s", True)
+    store.add_chat_event("s", turn_id="t1", kind="routed", status="accepted", helper_call=True, cheap_cost=0.004)
+    assert handoffs.unreused("s") == 1 and handoffs.unreused("s", "t1") == 0
+    monkeypatch.setattr(cs, "chosen_model", lambda: {"model": "m", "provider": "p"})
+    monkeypatch.setattr(cs, "_is_cheaper", lambda *a: True)
+    monkeypatch.setattr(cs, "_routing_pays", lambda *a: True)
+    assert cs.routing_context(session_id="s") is None
+    answer = json.loads(handoffs.execute(SimpleNamespace(), "Translate this.", "s", "t2"))
+    assert "retyped" not in answer["error"] and "wasn't reused" in answer["error"]
+
+
+def test_hand_offs_continue_when_answers_are_reused(monkeypatch):
+    store.set_chat_enabled("s", True)
+    store.add_chat_event("s", turn_id="t1", kind="routed", status="accepted", helper_call=True, cheap_cost=0.004)
+    store.add_chat_event("s", turn_id="t1", kind="routed_output", results=0, output_chars=5000)
+    assert handoffs.unreused("s") == 0
+
+
+
+def test_hand_offs_are_off_until_turned_on(monkeypatch):
+    store.set_setting(cs.HANDOFF_SETTING, False)
+    store.set_chat_enabled("s", True)
+    monkeypatch.setattr(cs, "chosen_model", lambda: {"model": "m", "provider": "p"})
+    assert cs.routing_context(session_id="s") is None
+    assert "off" in json.loads(handoffs.execute(SimpleNamespace(), "Translate this.", "s", "t"))["error"]

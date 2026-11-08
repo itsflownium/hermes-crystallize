@@ -1,0 +1,92 @@
+{
+ "schema": 1,
+ "model": "gpt-5.6-luna",
+ "provider": "openai-codex",
+ "requested_reasoning": "medium",
+ "trial": {
+  "started": "trial"
+ },
+ "status": "reverted",
+ "result": {
+  "ok": false,
+  "why": "it used fewer tokens overall, but its output went up",
+  "kind": "saving",
+  "metric": "tokens",
+  "before": 36132.0,
+  "after": 39434.0,
+  "reasoning_before": 39.5,
+  "reasoning_after": 62.5
+ },
+ "runs": [
+  {
+   "started": 1794104526.721347,
+   "in_trial": false,
+   "outcome": "completed",
+   "cost_usd": 0.0,
+   "input_tokens": 22307,
+   "cache_read_tokens": 13696,
+   "output_tokens": 106,
+   "reasoning": "medium",
+   "comparable": true
+  },
+  {
+   "started": 1794104646.138488,
+   "in_trial": false,
+   "outcome": "completed",
+   "cost_usd": 0.0,
+   "input_tokens": 22317,
+   "cache_read_tokens": 13696,
+   "output_tokens": 116,
+   "reasoning": "medium",
+   "comparable": true
+  },
+  {
+   "started": 1794104766.4841988,
+   "in_trial": false,
+   "outcome": "completed",
+   "cost_usd": 0.0,
+   "input_tokens": 22320,
+   "cache_read_tokens": 13696,
+   "output_tokens": 119,
+   "reasoning": "medium",
+   "comparable": true
+  },
+  {
+   "started": 1794104886.144526,
+   "in_trial": false,
+   "outcome": "completed",
+   "cost_usd": 0.0,
+   "input_tokens": 22318,
+   "cache_read_tokens": 13696,
+   "output_tokens": 154,
+   "reasoning": "medium",
+   "comparable": true
+  },
+  {
+   "started": 1794105006.863352,
+   "in_trial": true,
+   "outcome": "completed",
+   "cost_usd": 0.0,
+   "input_tokens": 4091,
+   "cache_read_tokens": 27520,
+   "output_tokens": 128,
+   "reasoning": "medium",
+   "comparable": true
+  },
+  {
+   "started": 1794105126.1059399,
+   "in_trial": true,
+   "outcome": "completed",
+   "cost_usd": 0.0,
+   "input_tokens": 18639,
+   "cache_read_tokens": 28288,
+   "output_tokens": 202,
+   "reasoning": "medium",
+   "comparable": true
+  }
+ ],
+ "limits": [
+  "One job, one model and a small sample.",
+  "Costs are recorded host estimates, not bills."
+ ]
+}

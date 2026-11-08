@@ -295,7 +295,7 @@ def _handle(args: Any) -> None:
     if sub == "native-cron":
         _native_action(args)
         return
-    if sub in ("reread", "blind", "rhythm", "auction", "auction-reconcile", "delegation", "tool-defer", "compatibility", "model-route", "rate-card"):
+    if sub in ("reread", "blind", "rhythm", "auction", "auction-reconcile", "brake", "rent", "prices", "delegation", "tool-defer", "compatibility", "model-route", "rate-card"):
         _completion_action(sub, args)
         return
     if sub in ("contract", "compare", "receipt", "recipe", "cache", "chat-policy"):
@@ -330,12 +330,15 @@ def _read_json(path: str) -> Any:
 
 def _native_action(args: Any) -> None:
     import json
-    from . import native_cron
+    from . import native_cron, starter_script
     try:
-        if args.undo:
+        if args.draft:
+            result = starter_script.draft(args.job)
+        elif args.undo:
             result = native_cron.undo(args.job, expected_config_fingerprint=args.fingerprint, confirmed=args.confirm)
         elif args.source_script:
-            values = {"mode": args.mode, "snapshot_only": args.snapshot_only, "verbatim_output": args.verbatim_output}
+            values = {"mode": args.mode, "snapshot_only": args.snapshot_only, "verbatim_output": args.verbatim_output,
+                      "skipped_delivery_ok": args.skipped_delivery_ok}
             result = native_cron.apply(args.job, args.source_script, expected_preview_sha256=args.fingerprint,
                                        confirmed=args.confirm, **values) if args.apply else native_cron.preview(args.job, args.source_script, **values)
         elif args.apply:
@@ -400,6 +403,8 @@ def _setup(subparser: Any) -> None:
     nc.add_argument("--mode", choices=("monitor", "verbatim"), default="monitor")
     nc.add_argument("--snapshot-only", action="store_true", help="Declare the source complete and read-only, with no per-run action or deadline")
     nc.add_argument("--verbatim-output", action="store_true", help="Declare exact script stdout the complete requested final answer")
+    nc.add_argument("--skipped-delivery-ok", action="store_true", help="Declare that nothing should be sent when the data hasn't changed")
+    nc.add_argument("--draft", action="store_true", help="Draft a starter script from this job's repeated reads; it isn't run or attached")
     action = nc.add_mutually_exclusive_group()
     action.add_argument("--apply", action="store_true")
     action.add_argument("--undo", action="store_true")
@@ -417,11 +422,11 @@ def _setup(subparser: Any) -> None:
                            help="Defaults to normal host-tool guidance; prerun requires a verified guarded public SDK")
             p.add_argument("--no-ai", action="store_true",
                            help="Use the routine's output as the job's result, with no AI at all")
-    sk = subs.add_parser("skip", help="What a live job does when its data hasn't changed")
+    sk = subs.add_parser("skip", help="What a live job does when its data hasn't changed (only on hosts with guarded replay)")
     sk.add_argument("job", help="Job name or id")
     sk.add_argument("state", choices=("auto", "repeat", "quiet", "off"),
                     help="repeat the last answer, stay quiet, off = run the AI, auto = choose for me")
-    md = subs.add_parser("mode", help="Choose ordinary host-tool guidance or an available guarded automatic mode")
+    md = subs.add_parser("mode", help="Choose how a job runs (automatic modes need a host with guarded replay)")
     md.add_argument("job", help="Job name or id")
     md.add_argument("mode", choices=("ai", "no-ai", "tool"))
     tn = subs.add_parser("tune", help="Reduce repeated input and unused read schemas while preserving reasoning")
@@ -500,7 +505,21 @@ def _setup(subparser: Any) -> None:
     td.add_argument("--tools", nargs="+")
     td.add_argument("--fingerprint", default="")
     td.add_argument("--confirm", action="store_true")
-    subs.add_parser("compatibility", help="Report public SDK support and remaining marketplace blockers")
+    subs.add_parser("compatibility", help="Report which Hermes features this install supports")
+    bk = subs.add_parser("brake", help="Show or change Runaway Brake, which stops a cron run far past its normal use")
+    bk.add_argument("state", nargs="?", choices=("on", "off"))
+    rn = subs.add_parser("rent", help="See what a chat keeps paying to re-read, and remove or restore a result")
+    rn.add_argument("session_id")
+    rent_action = rn.add_mutually_exclusive_group()
+    rent_action.add_argument("--remove", metavar="ID", help="Stop sending this tool result to the AI")
+    rent_action.add_argument("--restore", metavar="ID", help="Send this tool result again")
+    rn.add_argument("--auto", choices=("on", "off"), help="Whether old results are removed automatically when it would pay")
+    pc = subs.add_parser("prices", help="Check a route's price, or turn public price lookup on or off")
+    pc.add_argument("--provider")
+    pc.add_argument("--model")
+    pc.add_argument("--lookup", choices=("on", "off"), help="Whether to look up list prices from public model lists")
+    pc.add_argument("--allow-unpriced-helper", choices=("on", "off"), help="Whether a helper with no known price may spend")
+    pc.add_argument("--handoffs", choices=("on", "off"), help="Whether the main model may hand work to the helper (off by default)")
     mr = subs.add_parser("model-route", help="Declare an exact model route; this does not sign in or select a helper")
     mr.add_argument("--provider")
     mr.add_argument("--model")
@@ -548,6 +567,32 @@ def _completion_action(sub: str, args: Any) -> None:
             result = tool_discovery.configure(args.tools, confirmed=args.confirm, expected_config_fingerprint=args.fingerprint) if args.tools else tool_discovery.preview(args.session_id)
         elif sub == "compatibility":
             result = host_api.report()
+        elif sub == "auction-reconcile":
+            result = auction.reconcile(confirmed=args.confirm)
+        elif sub == "brake":
+            from . import brake
+            result = brake.set_enabled(args.state == "on") if args.state else brake.summary(lifecycle.all_cron_jobs())
+        elif sub == "rent":
+            from . import rent, store
+            if args.auto:
+                store.set_setting(rent.AUTO_SETTING, args.auto == "on")
+            result = (rent.evict(args.session_id, args.remove) if args.remove else
+                      rent.restore(args.session_id, args.restore) if args.restore else rent.report(args.session_id))
+        elif sub == "prices":
+            from . import chat_savings, modelinfo, price_discovery, store
+            if args.lookup:
+                store.set_setting(price_discovery.SETTING, args.lookup == "on")
+            if args.allow_unpriced_helper:
+                store.set_setting(chat_savings.UNPRICED_SETTING, args.allow_unpriced_helper == "on")
+            if args.handoffs:
+                store.set_setting(chat_savings.HANDOFF_SETTING, args.handoffs == "on")
+            result = {"lookup": price_discovery.enabled(), "allow_unpriced_helper": chat_savings._unpriced_allowed(),
+                      "handoffs": chat_savings.handoffs_allowed()}
+            if bool(args.provider) != bool(args.model):
+                raise ValueError("Give both --provider and --model.")
+            if args.provider:
+                price_discovery.refresh(args.provider) if price_discovery.enabled() else None
+                result["card"] = modelinfo.exact_token_prices(args.model, args.provider)
         else:
             job = lifecycle.cron_job(args.job)
             if not job:

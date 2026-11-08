@@ -6,7 +6,7 @@ import statistics
 import time
 from typing import Any, Optional
 
-from . import analyze, chat, history, lifecycle, prerun, store, tuning
+from . import analyze, chat, history, lifecycle, prerun, starter_script, store, tuning
 
 WEEK_S = 7 * 24 * 3600
 
@@ -347,6 +347,8 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
             "projection": projection,
             "agent_free": a.agent_free,
             "reason": a.reason,
+            "skip_fit": starter_script.fit(job_id, runs),
+            "skip_result": starter_script.since_attached(job_id, store.get_setting("native_cron:" + job_id) or {}),
         }
 
         routine = routines.get(job_id)

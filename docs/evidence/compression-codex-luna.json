@@ -1,0 +1,18 @@
+{
+ "schema": 1,
+ "model": "gpt-5.6-luna",
+ "provider": "openai-codex",
+ "compress_output": "\ud83d\udddc\ufe0f Compressed: 14 \u2192 12 messages\nApprox request size: ~22,035 \u2192 ~10,394 tokens",
+ "parent": "local-5fed14c1f53ba8e3cf3b56ed586c400b91da8283a0c619a5f0bbe4264301f67e",
+ "new_sessions": [],
+ "compressed_in_place": true,
+ "checks": {
+  "removed_before_compression": true,
+  "compressed": true,
+  "chat_still_on": true,
+  "still_removed": true,
+  "original_readable": true,
+  "ai_read_it_back": true
+ },
+ "read_back_answer": "PAPAYA"
+}

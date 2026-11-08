@@ -1,0 +1,103 @@
+{
+ "schema": 1,
+ "model": "tencent/hy3",
+ "provider": "nous",
+ "requested_reasoning": "medium",
+ "trial": {
+  "started": "trial"
+ },
+ "status": "trial",
+ "result": {
+  "ok": null,
+  "why": null,
+  "kind": null,
+  "metric": null,
+  "before": null,
+  "after": null,
+  "reasoning_before": null,
+  "reasoning_after": null
+ },
+ "runs": [
+  {
+   "started": 1794045417.2195258,
+   "in_trial": false,
+   "outcome": "completed",
+   "cost_usd": 0.002238192,
+   "input_tokens": 9024,
+   "cache_read_tokens": 29888,
+   "output_tokens": 115,
+   "reasoning": "medium",
+   "comparable": true
+  },
+  {
+   "started": 1794045537.119715,
+   "in_trial": false,
+   "outcome": "completed",
+   "cost_usd": 0.002243604,
+   "input_tokens": 8973,
+   "cache_read_tokens": 29952,
+   "output_tokens": 134,
+   "reasoning": "medium",
+   "comparable": true
+  },
+  {
+   "started": 1794045659.96222,
+   "in_trial": true,
+   "outcome": "completed",
+   "cost_usd": 0.0016632,
+   "input_tokens": 4344,
+   "cache_read_tokens": 30016,
+   "output_tokens": 188,
+   "reasoning": "medium",
+   "comparable": true
+  },
+  {
+   "started": 1794045779.339164,
+   "in_trial": true,
+   "outcome": "completed",
+   "cost_usd": 0.0029963999999999998,
+   "input_tokens": 18104,
+   "cache_read_tokens": 16256,
+   "output_tokens": 133,
+   "reasoning": "medium",
+   "comparable": true
+  },
+  {
+   "started": 1794045902.9462368,
+   "in_trial": true,
+   "outcome": "completed",
+   "cost_usd": 0.00163746,
+   "input_tokens": 4281,
+   "cache_read_tokens": 30080,
+   "output_tokens": 151,
+   "reasoning": "medium",
+   "comparable": true
+  },
+  {
+   "started": 1794046019.150945,
+   "in_trial": true,
+   "outcome": "completed",
+   "cost_usd": 0.001625316,
+   "input_tokens": 4281,
+   "cache_read_tokens": 30080,
+   "output_tokens": 128,
+   "reasoning": "medium",
+   "comparable": true
+  },
+  {
+   "started": 1794046138.23839,
+   "in_trial": true,
+   "outcome": "completed",
+   "cost_usd": 0.001631652,
+   "input_tokens": 4345,
+   "cache_read_tokens": 30016,
+   "output_tokens": 128,
+   "reasoning": "medium",
+   "comparable": true
+  }
+ ],
+ "limits": [
+  "One job, one model and a small sample.",
+  "Costs are recorded host estimates, not bills."
+ ]
+}

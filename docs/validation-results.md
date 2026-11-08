@@ -4,6 +4,45 @@ These results distinguish the current follow-up and public-SDK migration from th
 implementation in this follow-up to PR #7. They do not establish universal model
 compatibility, semantic equivalence or marketplace admission.
 
+## Live savings at unchanged reasoning (version 0.6.0)
+
+Paired runs through the real Hermes gateway: the same task, model and provider on both sides, with the reasoning read from each request as sent. A pair is marked invalid if those differ or a message fails. Costs are list prices applied to recorded usage, not bills: from Nous's public model list, and for Codex, which is subscription-based, from OpenAI's public price for the same model. Order is randomised per pair, and every attempt is kept. Fixtures are synthetic and samples are small. Two providers: Nous and OpenAI Codex.
+
+| Test | Model and reasoning | Pairs | Off | On | Saving | Checks passed, off / on |
+| --- | --- | --- | --- | --- | --- | --- |
+| Working chat, 11 messages | `tencent/hy3`, medium | 3 | $0.0374 | $0.0286 | 23% | 3 / 3 |
+| Same, repeated on the final code | `tencent/hy3`, medium | 3 | $0.0379 | $0.0293 | 23% | 3 / 3 |
+| Working chat, 23 messages | `tencent/hy3`, medium | 2 | $0.0450 | $0.0308 | 32% | 2 / 2 |
+| Working chat, 11 messages | `moonshotai/kimi-k3`, high | 2 | $0.1824 | $0.1462 | 20% | 2 / 2 |
+| Working chat, 11 messages | `deepseek/deepseek-v4.1-flash`, high | 3 | $0.0139 | $0.0129 | 7% | 3 / 3 |
+| Short tasks in 7 domains, Clean only | `tencent/hy3`, medium | 14 | $0.0203 | $0.0191 | 6% | 14 / 14 |
+| Cron, drafted script, 4 checks with one change | `tencent/hy3`, medium | 1 | $0.0065 | $0.0026 | 60% | not checked |
+| Working chat, 11 messages, Codex | `gpt-5.6-terra`, medium | 2 | $0.2309 | $0.2008 | 13% | 2 / 2 |
+| Working chat, 11 messages, Codex | `gpt-5.6-luna`, medium | 2 valid of 3 | $0.0217 | $0.0176 | 19% | 2 / 2 |
+| Cron, drafted script, 4 checks with one change, Codex | `gpt-5.6-luna`, medium | 5 | $0.0473 | $0.0303 | 36% (pairs: 49%, 21%, 49%, 50%, 8% more) | not checked |
+| Hand-off to a cheaper helper, Codex | `gpt-5.6-luna` to `gpt-6-luna` | 3 | $0.0357 | $0.0440 | **23% more** | 3 / 3 |
+| Same, after returning a preview instead | `gpt-5.6-luna` to `gpt-6-luna` | 3 | $0.0379 | $0.0446 | **18% more** | 3 / 3 |
+
+Things that came out badly or unclear, which are kept in `docs/evidence/`:
+
+- **Removing a result by hand in a short chat cost more** when the AI needed it: 1.22, 1.74 and 1.61 times the cost for analysis, coding and research, and 0.67 times for logs. One research check failed. This is why automatic removal counts the chance of a read-back.
+- **One DeepSeek pair cost 8% more.** Removal doesn't pay on near-free cached reads, so only Clean ran there.
+- **A script that printed the data cost 21% more** in one cron pair, despite skipping half its checks. Scripts now print only a fingerprint. An earlier pair with that script saved 43%, so the variation is wide.
+- **The first chat pilot is not a fair measure of Clean.** It ran before Clean's fix for data mentioning a failure.
+- **A `tune` trial ran 27% cheaper in typical runs** on Nous ($0.00164 against $0.00224), but hadn't reached its decision when the 15-minute test ended. On Codex a trial did reach its decision: it reverted and restored the job's settings, because its 2 trial runs didn't show a saving beyond normal variation.
+- **Hand-offs cost more in both live tests.** The main model often wrote the helper's answer out itself anyway, even when it only got a preview. Hand-offs are now off by default, and they stop in a chat if an answer is retyped.
+- **One Codex cron pair cost 8% more.** In that run the normal job hit the provider's cache on 3 of its 4 runs, and the attached job's 2 woken runs missed it. A fast test schedule favours the normal job's cache, so this is the worst case rather than the typical one.
+- **Context compression, live on Codex:** after `/compress` took a chat from about 22,000 to 10,000 tokens, Crystallize was still on, the removed result stayed removed, and the AI read the original back. This Hermes compresses a manual `/compress` in place; automatic compression into a new session is covered by offline tests. In one run the compression summary dropped the note naming the removed result, so the AI needed the result id from the panel to read it back.
+- **Codex's cached reads cost a tenth of normal input,** so automatic removal didn't trigger there, and the Codex chat savings come from Clean alone.
+- **Re-read on its own shows no clear saving** beyond what Clean gives: median cost ratios of 0.77, 1.00 and 1.07 across 3 task types, at 3 pairs each.
+
+- **Crystallize's own tools used to cost every chat.** Its 4 tool definitions, about 3,300 characters, were sent on every AI call in every chat, even with Crystallize off. They're now left out unless Crystallize Chat is on in that chat, and where they're sent they count against its savings. This was found after the runs above, so those runs included them in both arms.
+- **A hand-off test couldn't run.** The Nous account ran out of credits (HTTP 402), so hand-offs remain untested live.
+
+Not measured live: providers other than Nous and Codex, Blind Taste Test, Model Auction, Rhythm, Runaway Brake on this version, automatic compression into a new session, and how a real user's work compares with these fixtures.
+
+Reproduce with `scripts/validation_whole_loop.py`, `scripts/validation_cron_pair.py`, `scripts/validation_cron_tune.py` and `scripts/validation_compression.py`.
+
 ## Final activation and CI record
 
 PR #18's Python 3.13 CI job passed **1,309 tests with 2 optional source-backed

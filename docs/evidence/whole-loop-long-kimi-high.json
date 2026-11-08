@@ -1,0 +1,179 @@
+{
+ "schema": 1,
+ "mode": "long",
+ "reread": false,
+ "model": "moonshotai/kimi-k3",
+ "provider": "nous",
+ "requested_reasoning": "high",
+ "seed": 1794044701,
+ "frozen_list_rates_per_token": {
+  "input": 9.9e-07,
+  "output": 8.99e-06,
+  "cache_read": 2e-07,
+  "cache_write": 9.9e-07,
+  "request_cost": 0.0,
+  "cache_rates_assumed": true
+ },
+ "stopped": null,
+ "by_task": {
+  "working chat": {
+   "valid_pairs": 2,
+   "invalid_pairs": 0,
+   "median_cost_ratio_on_vs_off": 0.8147382595989463,
+   "median_cost_ratio_excluding_reasoning_output": 0.7485649867304084,
+   "median_prompt_token_ratio": 0.6077015081954689,
+   "checks_passed_off": 2,
+   "checks_passed_on": 2
+  }
+ },
+ "pairs": [
+  {
+   "domain": "working chat",
+   "repeat": 0,
+   "order": [
+    "off",
+    "on"
+   ],
+   "valid": true,
+   "off": {
+    "on": false,
+    "ok": true,
+    "session": "local-0c9af105403f0779c2d89bbd590ecd6deecd51e035ef933c8a71ab8fdaf2aea1",
+    "delta": {
+     "input_tokens": 18149,
+     "output_tokens": 2591,
+     "cache_read_tokens": 293504,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 1381,
+     "api_call_count": 16,
+     "prompt_tokens": 311653
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.0999614,
+    "list_cost_without_reasoning_usd": 0.08754621,
+    "host_estimated_delta_usd": 0.0999614,
+    "recorded": {
+     "model": "moonshotai/kimi-k3",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "high",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "auto_rent": null,
+    "answer_chars": 41
+   },
+   "on": {
+    "on": true,
+    "ok": true,
+    "session": "local-226e4ce05ecd3d2926022096bd01b1d79ca5f14fac694f2648e278d0d18a1414",
+    "delta": {
+     "input_tokens": 19168,
+     "output_tokens": 1792,
+     "cache_read_tokens": 163968,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 717,
+     "api_call_count": 16,
+     "prompt_tokens": 183136
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.06788,
+    "list_cost_without_reasoning_usd": 0.06143417,
+    "host_estimated_delta_usd": 0.06787999999999998,
+    "recorded": {
+     "model": "moonshotai/kimi-k3",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "high",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "auto_rent": {
+     "removed": 5,
+     "read_backs": 0,
+     "off": false
+    },
+    "answer_chars": 41
+   }
+  },
+  {
+   "domain": "working chat",
+   "repeat": 1,
+   "order": [
+    "on",
+    "off"
+   ],
+   "valid": true,
+   "on": {
+    "on": true,
+    "ok": true,
+    "session": "local-a1768e70012cae2d81cbf02fc00ea0aa8234561ecfa48f1bf4e52c632faec506",
+    "delta": {
+     "input_tokens": 20581,
+     "output_tokens": 2689,
+     "cache_read_tokens": 168960,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 1586,
+     "api_call_count": 16,
+     "prompt_tokens": 189541
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.0783413,
+    "list_cost_without_reasoning_usd": 0.06408316,
+    "host_estimated_delta_usd": 0.0783413,
+    "recorded": {
+     "model": "moonshotai/kimi-k3",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "high",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "auto_rent": {
+     "removed": 5,
+     "read_backs": 0,
+     "off": false
+    },
+    "answer_chars": 42
+   },
+   "off": {
+    "on": false,
+    "ok": true,
+    "session": "local-2a75fe36ec0ad34980c9205bd43d73fe8af4a7fbcc382210a27ff8164161ae23",
+    "delta": {
+     "input_tokens": 15909,
+     "output_tokens": 1054,
+     "cache_read_tokens": 286016,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 207,
+     "api_call_count": 16,
+     "prompt_tokens": 301925
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.08242857,
+    "list_cost_without_reasoning_usd": 0.08056764,
+    "host_estimated_delta_usd": 0.08242857,
+    "recorded": {
+     "model": "moonshotai/kimi-k3",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "high",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"high\",\"enabled\":true}}}"
+    },
+    "auto_rent": null,
+    "answer_chars": 43
+   }
+  }
+ ],
+ "limits": [
+  "Costs are list prices applied to recorded usage, not bills.",
+  "Fixtures are synthetic; JSON is pretty-printed like API output.",
+  "One provider and model. It does not extend to other routes.",
+  "The checks cover named facts, not overall answer quality."
+ ]
+}

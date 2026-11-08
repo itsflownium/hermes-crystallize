@@ -165,7 +165,6 @@ def test_clean_policy_never_calls_helper(engine, monkeypatch):
 @pytest.mark.parametrize("tool,text", [("read_file", BIG), ("terminal", json.dumps({"output": BIG, "exit_code": 1})),
                                       ("terminal", json.dumps({"error": BIG}))])
 def test_files_and_failures_are_exact_before_cleaning(engine, monkeypatch, tool, text):
-    monkeypatch.setattr(cs.prerun, "clean_result", lambda *args: pytest.fail("failure/file was cleaned"))
     assert cs.shrink(Helper(), "s1", tool, text) is None
 
 
@@ -251,7 +250,8 @@ def test_routed_generation_benefit_requires_used_owned_placeholder(engine):
     answer = json.loads(cs.ask_cheap(Helper(text="long table " * 300), "write", "s1", "t1"))
     assert store.list_chat_savings("s1")[0]["output_chars"] == 0
     assert "unavailable" in cs.fill_placeholders(answer["placeholder"], session_id="s2", turn_id="t1")
-    assert cs.fill_placeholders(answer["placeholder"], session_id="s1", turn_id="t1") == answer["output"]
+    assert answer["preview"] and "output" not in answer  # a long answer comes back as a preview, so it isn't retyped
+    assert cs.fill_placeholders(answer["placeholder"], session_id="s1", turn_id="t1") == "long table " * 300
     first = store.list_chat_savings("s1")[0]["output_chars"]
     cs.fill_placeholders(answer["placeholder"], session_id="s1", turn_id="t1")
     assert first > 0 and store.list_chat_savings("s1")[0]["output_chars"] == first

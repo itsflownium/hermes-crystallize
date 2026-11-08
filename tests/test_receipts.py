@@ -371,3 +371,29 @@ def test_unknown_session_chain_cannot_reuse_partial_cached_cost(world):
     receipt = proof.receipt("j1", runs=[row])
     assert receipt["recorded_spend"]["actual"]["total_usd"] is None
     assert not receipt["runs"][0]["cost"]["usage_totals_complete"]
+
+
+
+def test_checks_a_snapshot_script_skipped_are_credited_at_no_cost(world, tmp_path):
+    import sqlite3
+    from datetime import datetime, timezone
+    run, _ = world
+    rows = [run("b1", 1, 10), run("b2", 2, 10), run("woke", 5, 10)]
+    for row in rows:
+        row.model, row.provider, row.reasoning_effort = "m", "p", "high"
+    store.set_setting("native_cron:j1", {"status": "applied", "applied_at": 4})
+    proof.record_campaign("j1", {"kind": "native_source", "campaign_id": "native:j1:4", "started_at": 4, "activated_at": 4})
+    folder = tmp_path / "hermes" / "cron"
+    folder.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(folder / "executions.db")
+    conn.execute("CREATE TABLE executions (id TEXT, job_id TEXT, status TEXT, started_at TEXT, scheduled_instant TEXT)")
+    stamp = lambda t: datetime.fromtimestamp(t, timezone.utc).isoformat()
+    conn.executemany("INSERT INTO executions VALUES (?, ?, ?, ?, ?)",
+                     [("b1", "j1", "completed", stamp(1), "x"), ("woke", "j1", "completed", stamp(5), "x"),
+                      ("skip1", "j1", "completed", stamp(6), "x"), ("skip2", "j1", "completed", stamp(7), "x"),
+                      ("early", "j1", "completed", stamp(3), "x"), ("manual", "j1", "completed", stamp(8), None)])
+    conn.commit()
+    conn.close()
+    actual = proof.receipt("j1", runs=rows)["cost_bases"]["actual"]
+    assert actual["live_run_count"] == 3          # the woken run and the two skipped checks
+    assert actual["historical_savings_usd"] == 20  # each skipped check saved a normal $10 run

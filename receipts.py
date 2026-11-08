@@ -350,6 +350,67 @@ def snapshot_routine(routine: dict[str, Any]) -> Optional[dict[str, Any]]:
                            "configuration_id": (meta.get("config_snapshot") or {}).get("fingerprint")})
 
 
+def _execution_starts(job_id: str) -> dict[str, float]:
+    """Completed scheduled checks from Hermes's own cron records, by execution id."""
+    from datetime import datetime
+
+    conn = history._open_readonly(history._hermes_home() / "cron" / "executions.db")
+    if conn is None:
+        return {}
+    try:
+        rows = conn.execute("SELECT id, started_at FROM executions WHERE job_id = ? AND status = 'completed' "
+                            "AND scheduled_instant IS NOT NULL", (job_id,)).fetchall()
+    except Exception:  # noqa: BLE001 — an unknown schema means nothing is credited
+        return {}
+    finally:
+        conn.close()
+    found = {}
+    for execution_id, started in rows:
+        try:
+            found[str(execution_id)] = datetime.fromisoformat(started).timestamp() if isinstance(started, str) else float(started)
+        except (TypeError, ValueError):
+            continue
+    return found
+
+
+def _sync_skipped(job_id: str) -> None:
+    """A check that a snapshot script skipped made no model call, so it cost nothing. It's linked to
+    Hermes's own record of that execution, and takes the settings the job's runs use, because an
+    attached job's configuration can't change without detaching it."""
+    state = store.get_setting("native_cron:" + job_id) or {}
+    attached_at = _number(state.get("applied_at"))
+    if attached_at is None:
+        return
+    ended = _number(state.get("undone_at"))
+    starts = _execution_starts(job_id)
+    with store._lock:
+        conn = store._db()
+        _init(conn)
+        known = {r[0]: json.loads(r[1]) for r in conn.execute("SELECT execution_id, data_json FROM proof_runs WHERE job_id=?", (job_id,))}
+        settings = next((row for row in sorted(known.values(), key=lambda r: r.get("started_at") or 0, reverse=True)
+                         if row.get("comparison_identity")), None)
+        if settings is None:
+            return
+        for execution_id, started in starts.items():
+            if execution_id in known or started < attached_at or (ended is not None and started >= ended):
+                continue
+            data = {"execution_id": execution_id, "session_id": None, "started_at": started, "scheduled": True,
+                    "outcome": "no_change", "finished": True, "duration_s": None, "session_ids": [],
+                    "cost": {"actual_usd": 0.0, "estimated_usd": 0.0, "api_equivalent_usd": 0.0, "provenance": "no_model_call",
+                             "api_equivalent_provenance": "no_model_call_request", "pricing_uncertain": False,
+                             "usage_totals_complete": True, "uncertainty": []},
+                    "tokens": {k: 0 for k in ("input_tokens", "output_tokens", "reasoning_tokens", "cache_read_tokens", "cache_write_tokens")},
+                    "execution_binding": "hermes_cron_record_no_model_call", "attribution_evidence": {"source": "cron/executions.db"}}
+            for key in ("model", "provider", "reasoning_effort", "reasoning_config_fingerprint"):
+                data[key] = settings.get(key)
+            data["identity_attribution_complete"] = True
+            data["usage_totals_complete"] = True
+            data["comparison_identity"] = settings["comparison_identity"]
+            data["comparison_settings_verified"] = True
+            conn.execute("INSERT OR IGNORE INTO proof_runs VALUES (?, ?, ?, ?)", (job_id, execution_id, _json(data), time.time()))
+        conn.commit()
+
+
 def _sync_campaigns(job_id: str) -> None:
     # Match stable IDs only. A renamed/recreated job must not inherit another job's spend.
     for t in store.list_tuning():
@@ -589,6 +650,7 @@ def receipt(job_id: str, *, runs: Optional[list[Any]] = None) -> dict[str, Any]:
     fetched = [r for r in fetched if str(getattr(r, "job_id", "")) == job_id]
     _sync_runs(job_id, fetched)
     _sync_campaigns(job_id)
+    _sync_skipped(job_id)
     rows, runs_complete = _load("proof_runs", job_id)
     rows.sort(key=lambda r: (r["started_at"], r["execution_id"]))
     _sync_helpers(job_id, rows)
@@ -609,7 +671,8 @@ def receipt(job_id: str, *, runs: Optional[list[Any]] = None) -> dict[str, Any]:
     uncertainties = {"Baseline-relative savings are estimates of a counterfactual, even when spend is actual.",
                      "Answer-only comparisons do not measure the cost or correctness of a full live tool execution.",
                      "Trial job spend is charged as setup overhead; trial runs receive no claimed baseline saving.",
-                     "Timestamp-only skip/no-AI markers are not credited unless linked to a recorded completed execution."}
+                     "Timestamp-only skip/no-AI markers are not credited unless linked to a recorded completed execution.",
+                     "A check a snapshot script skipped is credited at no cost, linked to Hermes's own record of that execution."}
     if not campaigns:
         uncertainties.add("No durable optimization start/activation boundary is known; historical savings and break-even are unavailable.")
     if any(c.get("activated_at") is None for c in campaigns):

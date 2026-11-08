@@ -163,7 +163,6 @@ ROUTING_NOTE = (
     "If the helper fails or reports incomplete output, finish the task yourself; do not repeat a failed paid handoff. "
     "Reasoning settings and the main model stay as configured."
 )
-MIN_ROUTING_PRICE_RATIO = 5     # retained for integrations; routing now uses a break-even estimate
 
 
 def _same_model(answered: Optional[str], picked: Optional[str]) -> bool:
@@ -217,9 +216,15 @@ def routing_context(session_id: str = "", parent_session_id: str = "", **_: Any)
     """The note that lets the main model route work. Only in chats with this on and a model picked."""
     if parent_session_id or not session_id or not store.chat_enabled(session_id):
         return None
+    from . import handoffs
+
     picked = chosen_model()
+    if not handoffs_allowed():
+        return None
     if not picked["model"] or not _is_cheaper(picked, session_id, "routed") or not _routing_pays(picked, session_id):
         return None
+    if handoffs.unreused(session_id):
+        return None  # an earlier hand-off was retyped, so they cost this chat more than they saved
     try:  # the note itself is read at the main model's price
         store.add_chat_event(session_id, kind="routing_note", results=0, added_input_chars=len(ROUTING_NOTE))
     except Exception:  # noqa: BLE001
@@ -435,6 +440,12 @@ def read_full(result_id: str, offset: int = 0, session_id: str = "") -> str:
         offset = max(0, int(offset or 0))
     except (TypeError, ValueError, OverflowError):
         return json.dumps({"error": "Use a non-negative character offset."})
+    if offset == 0:
+        try:
+            from . import rent
+            rent.note_read_back(session_id, result_id)
+        except Exception:  # noqa: BLE001
+            logger.debug("crystallize: recording a read-back failed", exc_info=True)
     part = text[offset:offset + MAX_FULL_READ]
     payload = json.dumps({"result": part, "total_chars": len(text), "next_offset": offset + len(part) if offset + len(part) < len(text) else None})
     try:  # reading it back gives up some of what removing it saved
@@ -492,6 +503,13 @@ def _main_model(session_id: Optional[str]) -> dict[str, Optional[str]]:
 
 
 UNPRICED_SETTING = "allow_unpriced_helper"
+# In live tests the main model often wrote a helper's answer out again anyway, so hand-offs cost
+# 18 to 23% more. They stay off until you turn them on.
+HANDOFF_SETTING = "allow_handoffs"
+
+
+def handoffs_allowed() -> bool:
+    return bool(store.get_setting(HANDOFF_SETTING, False))
 
 
 def _unpriced_allowed() -> bool:
@@ -765,9 +783,17 @@ def shrink(ctx: Any, session_id: str, tool: str, result: Any, turn_id: str = "")
     from . import chat_policy
 
     policy = chat_policy.policy_for(session_id, tool)
-    if policy["mode"] == "exact" or _is_error(result) or tool in {"read_file", "read_image", "read_pdf", "read_document"}:
+    if policy["mode"] == "exact" or tool in {"read_file", "read_image", "read_pdf", "read_document"}:
         return None
     cleaned = prerun.clean_result(tool, result)
+    if _is_error(result):
+        # Data can mention a failure. Compacting loses nothing, and clean_result leaves a failed
+        # command exact, so this is all a result like that gets: no summary and no repeat note.
+        if cleaned is None or len(cleaned) >= len(result):
+            return None
+        store.add_chat_event(session_id, turn_id=turn_id, kind="clean", chars=len(result) - len(cleaned),
+                             tokens_removed=_tokens_removed(result, cleaned, session_id))
+        return cleaned
     current = cleaned if cleaned is not None else result
     repeat = _repeat_note(session_id, tool, current, result, turn_id)
     if repeat is not None:
@@ -879,6 +905,11 @@ def _usage_cost(usage: Any, picked: dict[str, Optional[str]]) -> tuple[int, Opti
                          write_rate if write is None else prices["input"])
     return tokens, ((inp - known) * remainder_rate + out * prices["output"]
                     + (read or 0) * read_rate + (write or 0) * write_rate)
+
+
+def _session_key_text(session_id: str) -> str:
+    """One name for a chat across its compressions, for settings that follow the chat."""
+    return store._chat_ids(session_id)[0]
 
 
 def cleanup_session(session_id: str) -> None:

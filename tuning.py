@@ -155,7 +155,7 @@ def evaluate(before: list[history.Run], trial: list[history.Run],
         if not history.comparable_runs(before, trial):
             return fail("model, provider and reasoning evidence must be known and identical to compare savings", "identity")
         return fail("there were no numbers to compare", "saving")
-    if metric == "tokens":
+    if metric == "tokens" and new_value < old_value:
         why = _tokens_mislead(before, trial)
         if why:
             return fail(why, "saving")

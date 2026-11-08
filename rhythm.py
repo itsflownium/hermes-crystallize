@@ -97,8 +97,33 @@ def _positive_int(value: Any, label: str, maximum: int = 525600) -> int:
     return int(value)
 
 
+def _cron_interval(expr: Any) -> Optional[int]:
+    """Minutes between runs for a cron expression that's really an even interval."""
+    parts = expr.split() if isinstance(expr, str) else []
+    if len(parts) != 5 or parts[2:] != ["*", "*", "*"]:
+        return None
+    minute, hour = parts[:2]
+    if hour == "*":
+        if minute.isdigit():
+            return 60
+        found = re.fullmatch(r"\*/([1-9][0-9]?)", minute)
+        return int(found.group(1)) if found and 60 % int(found.group(1)) == 0 else None
+    found = re.fullmatch(r"\*/([1-9][0-9]?)", hour)
+    return int(found.group(1)) * 60 if found and minute.isdigit() and 24 % int(found.group(1)) == 0 else None
+
+
+def _schedule_argument(schedule: Any) -> Optional[str]:
+    """What to give Hermes to put this schedule back exactly."""
+    if isinstance(schedule, dict) and schedule.get("kind") == "cron" and isinstance(schedule.get("expr"), str):
+        return schedule["expr"]
+    minutes = _interval({"schedule": schedule})
+    return f"every {minutes}m" if minutes else None
+
+
 def _interval(job: dict[str, Any]) -> Optional[int]:
     schedule = job.get("schedule")
+    if isinstance(schedule, dict) and schedule.get("kind") == "cron":
+        return _cron_interval(schedule.get("expr")) if not set(schedule) - {"kind", "expr", "display"} else None
     if not isinstance(schedule, dict) or schedule.get("kind") != "interval":
         return None
     if set(schedule) - {"kind", "minutes", "display"}:
@@ -162,7 +187,8 @@ def _temporal_args(value: Any) -> bool:
 def _safety_blockers(job: dict[str, Any], runs: list[history.Run]) -> list[str]:
     blockers = []
     if _interval(job) is None:
-        blockers.append("Only plain recurring interval schedules are supported; timed cron and one-shot jobs are excluded.")
+        blockers.append("Only schedules that repeat evenly are supported, such as every 30 minutes or every 2 hours. A job "
+                        "set for a time of day keeps its time, so change that one yourself if it runs more than it needs to.")
     if job.get("enabled") is False or job.get("state") in {"paused", "completed", "cancelled", "error"} or job.get("paused_at"):
         blockers.append("This job is paused, disabled or terminal.")
     repeat = job.get("repeat")
@@ -479,7 +505,7 @@ def undo(job_id: str, *, expected_config_fingerprint: str, confirmed: bool = Fal
         store.set_setting(_KEY + job_id, state)
         _check_expected(_job(job_id), expected_config_fingerprint)
         try:
-            lifecycle._edit_job(job_id, "--schedule", f"every {original}m")
+            lifecycle._edit_job(job_id, "--schedule", _schedule_argument(state.get("original_schedule")) or f"every {original}m")
         except Exception as exc:
             raise RhythmError("The host did not confirm Undo. Refresh the schedule before retrying; recovery data was retained.") from exc
         after = _job(job_id)

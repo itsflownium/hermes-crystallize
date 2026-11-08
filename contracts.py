@@ -333,8 +333,3 @@ def evaluate(spec: Optional[dict[str, Any]], *, answer: Any, sources: Optional[l
     return {"ok": not failures, "configured": True, "why": failures[0] if failures else "configured outcome checks passed",
             "failures": failures, "checks": checks, "version": VERSION, "fingerprint": fingerprint(spec), "limitations": limitations}
 
-
-def validate_output(spec: Optional[dict[str, Any]], answer: Any, *, observations: Optional[list[Any]] = None,
-                    actions: Optional[list[Any]] = None, status: Optional[str] = None) -> dict[str, Any]:
-    """Convenience interface for same-input comparisons with frozen observations."""
-    return evaluate(spec, answer=answer, sources=observations, actions=actions, status=status)

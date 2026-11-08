@@ -247,11 +247,11 @@ def screenshot_urls(tree: GitTree, repo_url: str, paths: list[str]) -> list[str]
 
 def build_entry(manifest: dict[str, Any], sha: str, repo_url: str, analysis: dict[str, Any]) -> dict[str, Any]:
     entry = {"name": manifest["name"], "repo": _repo_url(repo_url), "sha": sha,
-             "description": "Reduces repeated Hermes chat and cron work with explicit controls and local receipts.",
+             "description": "Spend less on repeated work in Hermes chats and cron jobs, without making your model think less.",
              "maintainer": manifest["author"], "tier": "community", "category": "automation",
              "requires_hermes": manifest["requires_hermes"], "version": manifest["version"],
              "title": "Crystallize", "readme": True,
-             "known_issues": ["No live savings percentage at unchanged reasoning is established for this public-SDK candidate.",
+             "known_issues": ["Live savings at unchanged reasoning are measured on Nous and OpenAI Codex, with small samples and synthetic fixtures; other providers are untested. Hand-offs cost more in live tests and are off by default.",
                               "Frozen fixture checks do not prove semantic equivalence or universal provider coverage."],
              "capabilities": {key: manifest[key] for key in CAPABILITIES}}
     if analysis["core_imports_requiring_public_api_review"]:
@@ -262,7 +262,7 @@ def build_entry(manifest: dict[str, Any], sha: str, repo_url: str, analysis: dic
             "Configured/declared routes have unverified authentication and availability. User rate cards and public provider quotes are estimates, not billing evidence.",
         ])
     if analysis.get("native_snapshot_sources"):
-        entry["known_issues"].append("Optional native Python snapshot sources require explicit complete-source approval and local delivery; copied code/imports run with ordinary cron permissions, and host text trimming/redaction still apply.")
+        entry["known_issues"].append("Optional native Python snapshot sources require explicit source approval, and a job that delivers needs confirmation that an unchanged run sends nothing; copied code/imports run with ordinary cron permissions, and host text trimming/redaction still apply.")
     return entry
 
 
@@ -311,9 +311,9 @@ Hermes floor `{entry['requires_hermes']}`. The pin is an existing plugin feature
 the later catalog-only bundle commit must not replace it with a self-reference.
 
 Crystallize targets repeated context and read planning through explicit per-chat/per-job
-controls and local receipts. Main reasoning is not reduced. No live savings percentage
-at unchanged reasoning is established for this public-SDK candidate. The research,
-writing, data, analysis, coding and cron fixtures have explicitly scoped validation,
+controls and local receipts. Main reasoning is not reduced. Live paired runs at unchanged reasoning on Nous saved 6%
+on short tasks, 20 to 32% on working chats on two of three models, 7% on the third and 60%
+in one cron pair, with small samples on synthetic fixtures. Those fixtures have explicitly scoped validation,
 not proof of universal live task/provider coverage or semantic equivalence. Automatic
 pre-run/no-AI replay of learned tools remains unavailable on the reviewed SDK;
 older savings from that path do not transfer.
@@ -365,6 +365,9 @@ def generate(repo: Path, sha: str, output: Path, repo_url: str | None = None, *,
     validate_capabilities(manifest, analysis)
     entry = build_entry(manifest, tree.sha, repo_url or manifest["homepage"], analysis)
     entry["screenshots"] = screenshot_urls(tree, entry["repo"], screenshots or [])
+    entry["docs_url"] = f"{entry['repo']}/blob/{tree.sha}/README.md"
+    if "assets/social-preview.png" in tree.paths:
+        entry["image"] = screenshot_urls(tree, entry["repo"], ["assets/social-preview.png"])[0]
     payloads = payload_findings(tree)
     static_ready = analysis["public_api_audit"]["ok"] and not payloads
     verified: dict[str, Any] = {"status": "not_supplied", "ok": False}

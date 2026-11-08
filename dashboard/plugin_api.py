@@ -173,8 +173,15 @@ async def native_cron_status(job_id: str) -> dict[str, Any]:
 async def native_cron_preview(body: dict) -> dict[str, Any]:
     return await _serve(lambda: _module("native_cron").preview(_identifier(body.get("job_id"), "job"),
         body.get("source_script"), mode=_choice(body, "mode", ("monitor", "verbatim")),
-        snapshot_only=_boolean(body, "snapshot_only"), verbatim_output=_boolean(body, "verbatim_output")),
+        snapshot_only=_boolean(body, "snapshot_only"), verbatim_output=_boolean(body, "verbatim_output"),
+        skipped_delivery_ok=body.get("skipped_delivery_ok") is True),
         message="Couldn't preview the native cron source.")
+
+
+@router.post("/native-cron-draft")
+async def native_cron_draft(body: dict) -> dict[str, Any]:
+    return await _serve(lambda: _module("starter_script").draft(_identifier(body.get("job_id"), "job")),
+                        message="Couldn't draft a starter script.")
 
 
 @router.post("/native-cron")
@@ -182,6 +189,7 @@ async def native_cron_apply(body: dict) -> dict[str, Any]:
     return await _serve(lambda: _module("native_cron").apply(_identifier(body.get("job_id"), "job"),
         body.get("source_script"), mode=_choice(body, "mode", ("monitor", "verbatim")),
         snapshot_only=_boolean(body, "snapshot_only"), verbatim_output=_boolean(body, "verbatim_output"),
+        skipped_delivery_ok=body.get("skipped_delivery_ok") is True,
         expected_preview_sha256=body.get("expected_preview_sha256"), confirmed=_boolean(body, "confirmed")),
         message="Couldn't attach the native cron source.")
 
@@ -480,8 +488,8 @@ async def auction_history(job_id: str) -> dict[str, Any]:
 
 @router.post("/auction-reconcile")
 async def auction_reconcile(body: dict) -> dict[str, Any]:
-    return await _serve(lambda: _module("auction").reconcile(confirmed=_boolean(body.get("confirmed"), "confirmed")),
-                        "Couldn't clear that auction")
+    return await _serve(lambda: _module("auction").reconcile(confirmed=_boolean(body, "confirmed")),
+                        message="Couldn't clear that auction.")
 
 
 @router.post("/auction-preview")

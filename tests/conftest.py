@@ -36,6 +36,7 @@ def isolated_plugin_storage(monkeypatch, tmp_path):
         conn.execute("ALTER TABLE routines ADD COLUMN meta_json TEXT")
     # Most helper tests use unpriced routes. The default (off) has its own test.
     conn.execute("INSERT INTO settings (key, value) VALUES ('allow_unpriced_helper', 'true')")
+    conn.execute("INSERT INTO settings (key, value) VALUES ('allow_handoffs', 'true')")
     # Tests never touch the network. Price discovery has its own tests with canned lists.
     conn.execute("INSERT INTO settings (key, value) VALUES ('price_discovery', 'false')")
     conn.commit()
