@@ -35,7 +35,7 @@ Turn it on after your first message with `/crystallize chat on`. It needs a know
 
 ## Ideal conditions for cron
 
-- **The data is usually unchanged.** An unchanged check makes no AI call. With the drafted script, a job whose data changed once in 4 checks cost 60% less in one live pair on Nous, or about 47% less leaving out a cache miss on the normal job's side, and 41% less over 3 pairs on Codex, with no pair costing more.
+- **The data is usually unchanged.** An unchanged check makes no AI call. With the drafted script, a job whose data changed once in 4 checks cost 60% less in one live pair on Nous, or about 47% less leaving out a cache miss on the normal job's side, and 36% less over 5 pairs on Codex. One of those pairs cost 8% more, when the normal job happened to hit the provider's cache and the attached job didn't.
 - **It checks often for something that rarely changes,** such as a status page, a queue or a report feed.
 - **It only reads,** with no skills or actions on its runs. Crystallize won't attach a script to a job with either.
 - **Silence is fine when nothing changed.** An unchanged check sends nothing, and a job that delivers somewhere needs you to confirm this.
