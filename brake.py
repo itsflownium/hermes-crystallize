@@ -58,9 +58,9 @@ def plan(job_name: str) -> dict[str, Any]:
     return {"limit": int(max(normal * OVER_NORMAL, max(sizes) * OVER_LARGEST)), "normal": normal, "why": None}
 
 
-def _plan_for_run(job_name: str, session_id: str) -> Optional[dict[str, Any]]:
+def _plan_for_run(job_name: str, run_key: str) -> Optional[dict[str, Any]]:
     """Worked out once per run, because this is checked before every tool."""
-    key = _key(session_id)
+    key = _key(run_key)
     with _lock:
         if key in _limits:
             return _limits[key]
@@ -70,9 +70,9 @@ def _plan_for_run(job_name: str, session_id: str) -> Optional[dict[str, Any]]:
     return found
 
 
-def note_usage(session_id: str, usage: Optional[dict[str, Any]]) -> None:
+def note_usage(run_key: str, usage: Optional[dict[str, Any]]) -> None:
     """Add one AI call's tokens to this run's total."""
-    if not session_id or not usage:
+    if not run_key or not usage:
         return
     if not isinstance(usage, dict):
         return
@@ -83,23 +83,24 @@ def note_usage(session_id: str, usage: Optional[dict[str, Any]]) -> None:
         total = max(0, int(total or 0))
     except (TypeError, ValueError, OverflowError):
         return
-    key = _key(session_id)
+    key = _key(run_key)
     with _lock:
         # Never evict an active run to make room for another run. Session finalization
         # removes its own entry; reaching a process-wide count cannot reset a runaway.
         _used[key] = _used.get(key, 0) + total
 
 
-def check(job_name: str, session_id: str) -> Optional[dict[str, str]]:
+def check(job_name: str, session_id: str, run_key: Optional[str] = None) -> Optional[dict[str, str]]:
     """A block for the next tool if this run has passed its limit, otherwise None."""
-    if not job_name or not session_id or not enabled():
+    run_key = run_key or session_id
+    if not job_name or not run_key or not enabled():
         return None
-    key = _key(session_id)
+    key = _key(run_key)
     with _lock:
         used = _used.get(key, 0)
     if not used:
         return None
-    found = _plan_for_run(job_name, session_id)
+    found = _plan_for_run(job_name, run_key)
     limit = found.get("limit") if found else None
     if not limit or used <= limit:
         return None
@@ -110,8 +111,8 @@ def check(job_name: str, session_id: str) -> Optional[dict[str, str]]:
         "have, and say in your first line that the run was stopped early and what's missing.")}
 
 
-def forget(session_id: str) -> None:
-    key = _key(session_id)
+def forget(run_key: str) -> None:
+    key = _key(run_key)
     with _lock:
         _used.pop(key, None)
         _limits.pop(key, None)

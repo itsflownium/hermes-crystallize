@@ -32,7 +32,8 @@ _LOCK = threading.RLock()
 
 
 def policy(session_id: str) -> dict[str, Any]:
-    value = store.get_setting("reread:" + str(session_id or "")) or {}
+    ids = store._chat_ids(session_id) if session_id else ("",)
+    value = next((found for found in (store.get_setting("reread:" + sid) for sid in reversed(ids)) if found), {})
     value = value if isinstance(value, dict) else {}
     return {**{key: value.get(key) is True for key in ("enabled", "writes", "results", "batching")},
             "reasoning_unchanged": True}

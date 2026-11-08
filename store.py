@@ -80,6 +80,8 @@ CREATE TABLE IF NOT EXISTS chat_saving_events (
     chars           INTEGER NOT NULL DEFAULT 0,
     output_chars    INTEGER NOT NULL DEFAULT 0,
     added_input_chars INTEGER NOT NULL DEFAULT 0,
+    main_output_chars INTEGER NOT NULL DEFAULT 0,
+    tokens_removed  INTEGER,
     results         INTEGER NOT NULL DEFAULT 0,
     helper_call     INTEGER NOT NULL DEFAULT 0,
     cheap_tokens    INTEGER NOT NULL DEFAULT 0,
@@ -109,6 +111,7 @@ CREATE TABLE IF NOT EXISTS evictions (
     call_id     TEXT NOT NULL,
     full_id     TEXT NOT NULL,
     at          REAL NOT NULL,
+    content_sha256 TEXT,
     PRIMARY KEY (session_id, call_id)
 );
 
@@ -155,7 +158,10 @@ def _db() -> sqlite3.Connection:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(routines)")}
         if "meta_json" not in cols:
             conn.execute("ALTER TABLE routines ADD COLUMN meta_json TEXT")
+        if "content_sha256" not in {r[1] for r in conn.execute("PRAGMA table_info(evictions)")}:
+            conn.execute("ALTER TABLE evictions ADD COLUMN content_sha256 TEXT")
         _migrate_chat_savings(conn)
+        _migrate_tuning_keys(conn)
         conn.commit()
         _connections[home] = conn
     _conn = _connections[home]
@@ -169,11 +175,20 @@ def _migrate_chat_savings(conn: sqlite3.Connection) -> None:
     that distinction, so migration must not present those calls as known free calls.
     """
     columns = {r[1] for r in conn.execute("PRAGMA table_info(chat_saving_events)")}
-    for column in ("output_chars", "added_input_chars"):
+    for column in ("output_chars", "added_input_chars", "main_output_chars"):
         if column not in columns:
             conn.execute(f"ALTER TABLE chat_saving_events ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0")
+    if "tokens_removed" not in columns:
+        conn.execute("ALTER TABLE chat_saving_events ADD COLUMN tokens_removed INTEGER")
     marker = "chat_saving_events_v1"
     if conn.execute("SELECT 1 FROM settings WHERE key = ?", (marker,)).fetchone():
+        return
+    # Another process may open the same database for the first time. Take the write
+    # lock before the second look, so only one of them copies the old totals.
+    conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    if conn.execute("SELECT 1 FROM settings WHERE key = ?", (marker,)).fetchone():
+        conn.commit()
         return
     conn.execute(
         """INSERT INTO chat_saving_events
@@ -184,6 +199,23 @@ def _migrate_chat_savings(conn: sqlite3.Connection) -> None:
                   CASE WHEN cheap_tokens > 0 AND cheap_cost = 0 THEN NULL ELSE cheap_cost END,
                   'legacy_estimate', updated_at, updated_at FROM chat_savings""")
     conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)", (marker, "true"))
+    conn.commit()
+
+
+def _migrate_tuning_keys(conn: sqlite3.Connection) -> None:
+    """Job names aren't unique, so a tuning record belongs to its job's id."""
+    for key, data_json, updated_at in conn.execute("SELECT job_name, data_json, updated_at FROM tuning").fetchall():
+        try:
+            job_id = json.loads(data_json).get("job_id")
+        except (ValueError, AttributeError):
+            continue
+        if not job_id or job_id == key:
+            continue
+        existing = conn.execute("SELECT updated_at FROM tuning WHERE job_name = ?", (job_id,)).fetchone()
+        if existing is None or existing[0] < updated_at:
+            conn.execute("INSERT OR REPLACE INTO tuning (job_name, data_json, updated_at) VALUES (?, ?, ?)",
+                         (job_id, data_json, updated_at))
+        conn.execute("DELETE FROM tuning WHERE job_name = ?", (key,))
 
 
 def add_trace(row: dict[str, Any]) -> None:
@@ -377,9 +409,15 @@ def chat_enabled(session_id: Optional[str]) -> bool:
     """Whether the user turned Crystallize on for this chat (off by default)."""
     if not session_id:
         return False
-    with _lock:
-        r = _db().execute("SELECT enabled FROM chats WHERE session_id = ?", (session_id,)).fetchone()
-    return bool(r and r[0])
+    from . import lineage
+
+    # The newest segment with a choice wins, so turning it off after compression sticks.
+    for sid in reversed(lineage.chat_ids(session_id)):
+        with _lock:
+            r = _db().execute("SELECT enabled FROM chats WHERE session_id = ?", (sid,)).fetchone()
+        if r is not None:
+            return bool(r[0])
+    return False
 
 
 def set_chat_enabled(session_id: str, enabled: bool) -> None:
@@ -393,10 +431,15 @@ def set_chat_enabled(session_id: str, enabled: bool) -> None:
         conn.commit()
 
 
-def get_tuning(job_name: str) -> Optional[dict[str, Any]]:
+def get_tuning(job_ref: str) -> Optional[dict[str, Any]]:
+    """By job id. A display name only matches when exactly one record has it."""
     with _lock:
-        row = _db().execute("SELECT data_json FROM tuning WHERE job_name = ?", (job_name,)).fetchone()
-    return json.loads(row[0]) if row else None
+        row = _db().execute("SELECT data_json FROM tuning WHERE job_name = ?", (job_ref,)).fetchone()
+        if row:
+            return json.loads(row[0])
+        rows = _db().execute("SELECT data_json FROM tuning").fetchall()
+    named = [data for data in (json.loads(r[0]) for r in rows) if data.get("job_name") == job_ref]
+    return named[0] if len(named) == 1 else None
 
 
 def list_tuning() -> list[dict[str, Any]]:
@@ -406,10 +449,11 @@ def list_tuning() -> list[dict[str, Any]]:
 
 
 def save_tuning(job_name: str, data: dict[str, Any]) -> None:
+    key = data.get("job_id") or job_name
     with _lock:
         conn = _db()
         conn.execute("INSERT OR REPLACE INTO tuning (job_name, data_json, updated_at) VALUES (?, ?, ?)",
-                     (job_name, json.dumps(data, default=str), time.time()))
+                     (key, json.dumps(data, default=str), time.time()))
         conn.commit()
 
 
@@ -430,6 +474,7 @@ def get_cleaned(job_name: str) -> int:
 
 def add_chat_event(session_id: str, *, turn_id: str = "", kind: str = "clean", status: str = "accepted",
                    chars: int = 0, output_chars: int = 0, added_input_chars: int = 0,
+                   main_output_chars: int = 0, tokens_removed: Optional[int] = None,
                    results: Optional[int] = None, helper_call: bool = False,
                    cheap_tokens: int = 0, cheap_cost: Optional[float] = 0.0,
                    input_tokens: Optional[int] = None, output_tokens: Optional[int] = None,
@@ -447,10 +492,12 @@ def add_chat_event(session_id: str, *, turn_id: str = "", kind: str = "clean", s
         conn = _db()
         cur = conn.execute(
             """INSERT INTO chat_saving_events
-               (session_id, turn_id, kind, status, chars, output_chars, added_input_chars, results, helper_call, cheap_tokens,
+               (session_id, turn_id, kind, status, chars, output_chars, added_input_chars, main_output_chars, tokens_removed,
+                results, helper_call, cheap_tokens,
                 cheap_cost, input_tokens, output_tokens, duration_ms, model, provider, cost_source, ts, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (session_id, str(turn_id or ""), kind, status, max(0, chars), max(0, output_chars), max(0, added_input_chars),
+             max(0, main_output_chars), None if tokens_removed is None else max(0, tokens_removed),
              int(chars > 0) if results is None else max(0, results), int(helper_call),
              max(0, cheap_tokens), cheap_cost, input_tokens, output_tokens, duration_ms,
              model, provider, cost_source, ts, ts))
@@ -501,12 +548,19 @@ def add_chat_saving(session_id: str, chars: int, cheap_tokens: int, cheap_cost: 
                    cost_source="legacy_estimate")
 
 
+def _chat_ids(session_id: str) -> tuple[str, ...]:
+    from . import lineage
+
+    return lineage.chat_ids(session_id) or (session_id,)
+
+
 def chat_events(session_id: Optional[str] = None, limit: int = 500) -> list[dict[str, Any]]:
     query = "SELECT * FROM chat_saving_events"
     params: list[Any] = []
     if session_id is not None:
-        query += " WHERE session_id = ?"
-        params.append(session_id)
+        ids = _chat_ids(session_id)
+        query += f" WHERE session_id IN ({', '.join('?' for _ in ids)})"
+        params.extend(ids)
     query += " ORDER BY ts DESC, id DESC LIMIT ?"
     params.append(min(5000, max(1, int(limit))))
     with _lock:
@@ -517,6 +571,8 @@ def chat_events(session_id: Optional[str] = None, limit: int = 500) -> list[dict
 
 
 _CHAT_TOTALS = """SUM(chars) AS chars, SUM(output_chars) AS output_chars, SUM(added_input_chars) AS added_input_chars,
+    SUM(main_output_chars) AS main_output_chars,
+    SUM(COALESCE(tokens_removed, chars / 4)) AS tokens_removed,
     SUM(results) AS results,
     SUM(cheap_tokens) AS cheap_tokens, SUM(COALESCE(cheap_cost, 0)) AS known_cheap_cost,
     SUM(CASE WHEN helper_call = 1 AND cheap_cost IS NULL THEN 1 ELSE 0 END) AS unknown_cost_calls,
@@ -532,12 +588,15 @@ _CHAT_TOTALS = """SUM(chars) AS chars, SUM(output_chars) AS output_chars, SUM(ad
 def _chat_totals(group: str, session_id: Optional[str] = None, limit: int = 50) -> list[dict[str, Any]]:
     if group not in {"session_id", "turn_id", "kind"}:
         raise ValueError("Unknown accounting grouping.")
-    query = f"SELECT {group}, {_CHAT_TOTALS} FROM chat_saving_events"
-    params: list[Any] = []
+    # One chat's totals span its compressions, shown under the id it was asked for.
+    label = f"? AS {group}" if group == "session_id" and session_id is not None else group
+    query = f"SELECT {label}, {_CHAT_TOTALS} FROM chat_saving_events"
+    params: list[Any] = [session_id] if label != group else []
     if session_id is not None:
-        query += " WHERE session_id = ?"
-        params.append(session_id)
-    query += f" GROUP BY {group} ORDER BY updated_at DESC LIMIT ?"
+        ids = _chat_ids(session_id)
+        query += f" WHERE session_id IN ({', '.join('?' for _ in ids)})"
+        params.extend(ids)
+    query += f" GROUP BY {group if label == group else '1'} ORDER BY updated_at DESC LIMIT ?"
     params.append(limit)
     with _lock:
         cur = _db().execute(query, params)
@@ -585,26 +644,39 @@ def list_brake_stops(limit: int = 10) -> list[dict[str, Any]]:
     return [dict(zip(keys, tuple(r))) for r in rows]
 
 
-def add_eviction(session_id: str, call_id: str, full_id: str) -> None:
+def add_eviction(session_id: str, call_id: str, full_id: str, content_sha256: Optional[str] = None) -> None:
     with _lock:
         conn = _db()
-        conn.execute("INSERT OR REPLACE INTO evictions (session_id, call_id, full_id, at) VALUES (?, ?, ?, ?)",
-                     (session_id, call_id, full_id, time.time()))
+        conn.execute("INSERT OR REPLACE INTO evictions (session_id, call_id, full_id, at, content_sha256) VALUES (?, ?, ?, ?, ?)",
+                     (session_id, call_id, full_id, time.time(), content_sha256))
         conn.commit()
 
 
 def remove_eviction(session_id: str, call_id: str) -> None:
+    from . import lineage
+
     with _lock:
         conn = _db()
-        conn.execute("DELETE FROM evictions WHERE session_id = ? AND call_id = ?", (session_id, call_id))
+        for sid in lineage.chat_ids(session_id) or (session_id,):
+            conn.execute("DELETE FROM evictions WHERE session_id = ? AND call_id = ?", (sid, call_id))
         conn.commit()
 
 
 def evictions(session_id: str) -> dict[str, str]:
     """Tool results removed from this chat: call id to where the original is kept."""
-    with _lock:
-        rows = _db().execute("SELECT call_id, full_id FROM evictions WHERE session_id = ?", (session_id,)).fetchall()
-    return {r[0]: r[1] for r in rows}
+    return {call_id: row["full_id"] for call_id, row in eviction_rows(session_id).items()}
+
+
+def eviction_rows(session_id: str) -> dict[str, dict[str, Any]]:
+    """The same, with a digest of the removed text, across the chat's compressions."""
+    from . import lineage
+
+    found: dict[str, dict[str, Any]] = {}
+    for sid in lineage.chat_ids(session_id):
+        with _lock:
+            rows = _db().execute("SELECT call_id, full_id, content_sha256 FROM evictions WHERE session_id = ?", (sid,)).fetchall()
+        found.update({r[0]: {"full_id": r[1], "content_sha256": r[2]} for r in rows})
+    return found
 
 
 def get_setting(key: str, default: Any = None) -> Any:

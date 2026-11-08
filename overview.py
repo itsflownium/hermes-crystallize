@@ -205,7 +205,6 @@ def ladder(routine: Optional[dict[str, Any]], tune: Optional[dict[str, Any]], ca
         {"key": "clean", "label": "Cleaned tool results", "state": from_tune(bool(t.get("clean")))},
         {"key": "new", "label": "New items only", "state": new_only},
         {"key": "tools", "label": "Only the tools it uses", "state": from_tune(t.get("toolsets") is not None)},
-        {"key": "reasoning", "label": "Lower reasoning", "state": from_tune(bool(t.get("level")))},
     ]
 
 
@@ -229,6 +228,39 @@ def _timeline(before: list[history.Run], after: list[history.Run], limit: int = 
         "included": r.included,
         "tokens": r.total_tokens,
     } for r, is_after in rows[-limit:]]
+
+
+MIN_RUNS_FOR_RATE = 3   # one run can't show a weekly rate
+
+
+def _settings_match(before: list[history.Run], after: list[history.Run]) -> list[history.Run]:
+    """Runs that used the same model, provider and reasoning as the baseline. Nothing else
+    can count as a saving, so thinking less never looks like money saved."""
+    keys = {history.comparison_identity(r) for r in before}
+    if len(keys) != 1 or None in keys:
+        return []
+    key = keys.pop()
+    return [r for r in after if history.comparison_identity(r) == key]
+
+
+def _baseline(runs: list[history.Run], field: str) -> Optional[float]:
+    """The average normal run, quiet days included. Comparing a median of busy days with every
+    later run would show a saving when nothing changed."""
+    values = [getattr(r, field) for r in runs]
+    return sum(values) / len(values) if values and all(v is not None for v in values) else None
+
+
+def _saving_view(job_id: str, cutoff: Optional[float], after: list[history.Run], field: str) -> dict[str, Any]:
+    """Baseline, comparable runs and weekly-rate inputs for one kind of cost."""
+    before = [r for r in history.runs_for_job(job_id) if r.scheduled and r.finished and r.outcome in (None, "completed")
+              and (not cutoff or r.started_ts < cutoff)]
+    matched = _settings_match(before, after)
+    known = [r for r in matched if getattr(r, field) is not None]
+    baseline = _baseline(before, field) if matched else None
+    average = sum(getattr(r, field) for r in known) / len(known) if known else None
+    return {"baseline": baseline, "runs": known, "average": average,
+            "excluded_settings_runs": len(after) - len(matched), "unknown_cost_runs": len(matched) - len(known),
+            "rate_per_run": baseline - average if baseline is not None and average is not None and len(known) >= MIN_RUNS_FOR_RATE else None}
 
 
 def _saved_since(after: list[history.Run], baseline: Optional[float]) -> float:
@@ -336,7 +368,8 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
             tuned_runs = tuned.pop("run_list")
             tuned_saving = tuned["saved"] or 0.0
             rate = tuned["before"] - tuned["after"]
-            tuned["per_week"] = rate * per_week if per_week is not None and tuned["metric"] in ("cost", "api cost") else None
+            tuned["per_week"] = (rate * per_week if per_week is not None and tuned["metric"] in ("cost", "api cost")
+                                 and tune["status"] != "reverted" and tuned["runs"] >= MIN_RUNS_FOR_RATE else None)
             card["tuned"] = tuned
             if tuned["metric"] == "api cost":
                 saved_api += tuned_saving
@@ -374,9 +407,11 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
             job_saved = 0.0
             plan_saved = 0.0
             if is_live:
-                job_saved = _saved_since(after or [], card["before"].get("cost_usd") or meta.get("baseline_cost"))
+                real_view = _saving_view(job_id, cutoff, after or [], "cost_usd")
+                job_saved = _saved_since(real_view["runs"], real_view["baseline"])
                 saved += job_saved
-                plan_saved = _plan_saved(after or [], card["before"].get("api_cost_usd"))
+                list_view = _saving_view(job_id, cutoff, after or [], "api_cost_usd")
+                plan_saved = _plan_saved(list_view["runs"], list_view["baseline"])
                 saved_api += plan_saved
             if tuned and tuned["metric"] == "api cost":
                 plan_saved += tuned_saving
@@ -386,18 +421,21 @@ def build(session_id: Optional[str] = None) -> dict[str, Any]:
         elif routine and routine["status"] == "live":
             score_weight += weight
             score_done += weight
-            job_saved = _saved_since(after or [], card["before"].get("cost_usd") or meta.get("baseline_cost"))
+            real_view = _saving_view(job_id, cutoff, after or [], "cost_usd")
+            job_saved = _saved_since(real_view["runs"], real_view["baseline"])
             saved += job_saved
-            b, af = card["before"], card["after"]
-            if b and af and b.get("api_cost_usd") is not None and af.get("api_cost_usd") is not None:
-                plan_saved = _plan_saved(after or [], b["api_cost_usd"])
+            card["excluded_settings_runs"] = real_view["excluded_settings_runs"]
+            card["unknown_cost_runs"] = real_view["unknown_cost_runs"]
+            list_view = _saving_view(job_id, cutoff, after or [], "api_cost_usd")
+            if list_view["baseline"] is not None and list_view["average"] is not None:
+                plan_saved = _plan_saved(list_view["runs"], list_view["baseline"])
                 saved_api += plan_saved
-                rate = (b["api_cost_usd"] - af["api_cost_usd"]) * (per_week or 0.0)
+                rate = (list_view["rate_per_run"] or 0.0) * (per_week or 0.0)
                 api_week += rate
-                card["plan"] = {"before": b["api_cost_usd"], "after": af["api_cost_usd"], "saved": plan_saved, "per_week": rate,
+                card["plan"] = {"before": list_view["baseline"], "after": list_view["average"], "saved": plan_saved, "per_week": rate,
                                 "included": any(r.included for r in after or [])}
-            if b and af and b.get("cost_usd") is not None and af.get("cost_usd") is not None and per_week:
-                card["saving_per_week"] = (b["cost_usd"] - af["cost_usd"]) * per_week
+            card["saving_per_week"] = (real_view["rate_per_run"] * per_week
+                                       if real_view["rate_per_run"] is not None and per_week else None)
             free_share = (af or {}).get("skipped", 0) / af["runs"] if af and af.get("runs") else 0.0
             if af and af.get("runs", 0) >= 4 and free_share >= 0.5:
                 card["schedule_hint"] = (f"Nothing changed on {af['skipped']} of its last {af['runs']} runs, "

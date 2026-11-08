@@ -26,7 +26,7 @@ from contextvars import copy_context
 from pathlib import Path
 from typing import Any, Optional
 
-from . import history, lifecycle, modelinfo, prerun, store
+from . import estimate, history, lifecycle, modelinfo, prerun, store
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +133,11 @@ def set_model(provider: str, model: str) -> None:
     previous = (modelinfo._config().get("auxiliary") or {}).get(TASK) or {}
     previous = previous if isinstance(previous, dict) else {}
     value = {**previous, "provider": provider.strip(), "model": model.strip()}
+    # A helper thinks as hard as the main model unless you've said otherwise, so a cheaper
+    # result never comes from it quietly thinking less.
+    main_effort = (modelinfo._config().get("agent") or {}).get("reasoning_effort")
+    if isinstance(main_effort, str) and main_effort.strip():
+        value.setdefault("reasoning_effort", main_effort.strip())
     # One structured write uses Hermes's own config lock/atomic save protocol. Two
     # scalar writes could leave a new provider paired with the previous model.
     proc = subprocess.run([*lifecycle._hermes_cmd(), "config", "set", "--force", f"auxiliary.{TASK}", json.dumps(value)],
@@ -188,9 +193,8 @@ _filled: dict[str, set[str]] = {}
 
 def fill_placeholders(response: str, session_id: str = "", turn_id: str = "") -> Optional[str]:
     """Deliver owned originals, with a local recovery notice for unavailable results."""
-    if not isinstance(response, str) or "{{crystal:" not in response:
+    if not isinstance(response, str) or not _PLACEHOLDER.search(response):
         return None
-
     def fill(match: "re.Match[str]") -> str:
         result_id = match.group(1)
         try:
@@ -216,6 +220,10 @@ def routing_context(session_id: str = "", parent_session_id: str = "", **_: Any)
     picked = chosen_model()
     if not picked["model"] or not _is_cheaper(picked, session_id, "routed") or not _routing_pays(picked, session_id):
         return None
+    try:  # the note itself is read at the main model's price
+        store.add_chat_event(session_id, kind="routing_note", results=0, added_input_chars=len(ROUTING_NOTE))
+    except Exception:  # noqa: BLE001
+        logger.debug("crystallize: recording the routing note failed", exc_info=True)
     # Keep the injected text stable as observations change. Live thresholds are
     # exposed in summary(), rather than rewriting the main model's cache prefix.
     return {"context": ROUTING_NOTE}
@@ -291,6 +299,10 @@ def _routing_plan(picked: dict[str, Optional[str]], session_id: Optional[str], *
     fixed = (extra_read or 0.0) + (0 if per_output is not None else inputs * theirs.get("input", 0.0) / success_share)
     # These wrappers are estimates, separate from the observed prefix above.
     fixed += 48 * ours["output"] + (384 if saved_output else 256) * ours.get("input", 0.0)
+    # The main model has to type the work out for the helper, at its own output price.
+    typing_input = inputs * ours["output"]
+    fixed += typing_input
+    plan["main_typing_usd"] = typing_input
     threshold = math.ceil(fixed / margin) + 1 if margin > 0 else None
     plan.update(min_output_tokens=threshold, cost_basis="observed_and_list_price" if per_output is not None else "list_price_estimate",
                 estimated_helper_cost=helper_cost, estimated_success_share=success_share,
@@ -367,8 +379,19 @@ def _keep_full(result: str, session_id: str = "", turn_id: str = "") -> str:
 
 
 def _load_full(result_id: str, session_id: str) -> Optional[str]:
+    """An original this chat owns, including from before context compression."""
+    from . import lineage
+
     if not session_id or not _ID.fullmatch(result_id or ""):
         return None
+    for owner in reversed(lineage.chat_ids(session_id) or (session_id,)):
+        text = _load_full_exact(result_id, owner)
+        if text is not None:
+            return text
+    return None
+
+
+def _load_full_exact(result_id: str, session_id: str) -> Optional[str]:
     path = _session_dir(session_id) / f"{result_id}.json"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -413,7 +436,12 @@ def read_full(result_id: str, offset: int = 0, session_id: str = "") -> str:
     except (TypeError, ValueError, OverflowError):
         return json.dumps({"error": "Use a non-negative character offset."})
     part = text[offset:offset + MAX_FULL_READ]
-    return json.dumps({"result": part, "total_chars": len(text), "next_offset": offset + len(part) if offset + len(part) < len(text) else None})
+    payload = json.dumps({"result": part, "total_chars": len(text), "next_offset": offset + len(part) if offset + len(part) < len(text) else None})
+    try:  # reading it back gives up some of what removing it saved
+        store.add_chat_event(session_id, kind="retrieval", results=0, added_input_chars=len(payload))
+    except Exception:  # noqa: BLE001 — the original matters more than the bookkeeping
+        logger.debug("crystallize: recording a read-back failed", exc_info=True)
+    return payload
 
 
 def ask_full(ctx: Any, result_id: str, question: str, session_id: str = "", turn_id: str = "") -> str:
@@ -463,14 +491,24 @@ def _main_model(session_id: Optional[str]) -> dict[str, Optional[str]]:
     return modelinfo.route({})
 
 
+UNPRICED_SETTING = "allow_unpriced_helper"
+
+
+def _unpriced_allowed() -> bool:
+    return bool(store.get_setting(UNPRICED_SETTING, False))
+
+
 def _is_cheaper(picked: dict[str, Optional[str]], session_id: Optional[str] = None, kind: str = "summary") -> bool:
     """Condensing costs a read by the picked model, so it only pays if that model reads for less
-    than the main one. With no price to compare it stays on, since you chose that model."""
+    than the main one. With no price to compare it stays off, because spending on a helper
+    with no way to show it pays isn't a saving. The setting below overrides that."""
     main = _main_model(session_id)
     if picked["model"] == main.get("model") and picked["provider"] == main.get("provider"):
         return False
     theirs = modelinfo.token_prices(picked["model"], picked["provider"])
     ours = modelinfo.token_prices(main.get("model"), main.get("provider"))
+    if not theirs or not ours:
+        return _unpriced_allowed()
     if kind == "routed":
         return not (theirs and ours and theirs.get("input", 0) >= ours.get("input", 0)
                     and theirs.get("output", 0) >= ours.get("output", 0))
@@ -488,8 +526,8 @@ def _worth_condensing(chars: int, picked: dict[str, Optional[str]], session_id: 
     if len(timings) >= 3 and sum(timings) / len(timings) >= CONDENSE_SECONDS * 1000:
         return False
     if not theirs or not ours:
-        return True
-    tokens = chars / CHARS_PER_TOKEN
+        return _unpriced_allowed()  # no way to tell it pays, so it doesn't spend by default
+    tokens = chars / estimate.chars_per_token(main.get("model"))
     summary = min(tokens * MAX_SUMMARY_SHARE, MAX_SUMMARY_TOKENS)
     helper_cost = tokens * theirs["input"] + summary * theirs["output"]
     measured = [r for r in rows if r["cheap_cost"] is not None and r["input_tokens"]]
@@ -714,6 +752,11 @@ def _is_error(result: str) -> bool:
     return summary_checks.failed_result(result)
 
 
+def _tokens_removed(before: str, after: str, session_id: str) -> int:
+    model = _main_model(session_id).get("model")
+    return max(0, estimate.tokens(before, model) - estimate.tokens(after, model))
+
+
 def shrink(ctx: Any, session_id: str, tool: str, result: Any, turn_id: str = "") -> Optional[str]:
     """A smaller result for this chat, or None to leave it. Anything unexpected leaves it,
     because a saving is never worth breaking the chat."""
@@ -730,7 +773,8 @@ def shrink(ctx: Any, session_id: str, tool: str, result: Any, turn_id: str = "")
     if repeat is not None:
         if len(repeat) >= len(result):
             return None
-        store.add_chat_event(session_id, turn_id=turn_id, kind="repeat", chars=len(result) - len(repeat))
+        store.add_chat_event(session_id, turn_id=turn_id, kind="repeat", chars=len(result) - len(repeat),
+                             tokens_removed=_tokens_removed(result, repeat, session_id))
         return repeat
     condensed_result = False
     picked = chosen_model()
@@ -757,7 +801,7 @@ def shrink(ctx: Any, session_id: str, tool: str, result: Any, turn_id: str = "")
     if len(current) >= len(result):
         return None
     store.add_chat_event(session_id, turn_id=turn_id, kind="summary" if condensed_result else "clean",
-                         chars=len(result) - len(current))
+                         chars=len(result) - len(current), tokens_removed=_tokens_removed(result, current, session_id))
     return current
 
 
@@ -839,11 +883,13 @@ def _usage_cost(usage: Any, picked: dict[str, Optional[str]]) -> tuple[int, Opti
 
 def cleanup_session(session_id: str) -> None:
     """Release ephemeral routing state, retaining original recovery and cost history."""
+    # Hermes calls this at the end of every message, not only when a chat closes. So a problem
+    # pause runs its full length, and repeats are remembered until the tracked-chat limit.
     key = _session_key(session_id)
-    _seen.pop(key, None)
     _filled.pop(key, None)
-    for paused in list(_pauses):
-        if paused[0] == key:
+    now = time.time()
+    for paused, until in list(_pauses.items()):
+        if paused[0] == key and until <= now:
             _pauses.pop(paused, None)
 
 
@@ -863,12 +909,14 @@ def summary(session_id: Optional[str]) -> dict[str, Any]:
                           "reprices_with_current_main": True}
 
     def card(row: dict[str, Any]) -> dict[str, Any]:
-        tokens = row["chars"] // CHARS_PER_TOKEN
+        tokens = row["tokens_removed"] if row.get("tokens_removed") is not None else row["chars"] // CHARS_PER_TOKEN
         once = tokens * input_rate if input_rate is not None else None
         avoided_output = row.get("output_chars", 0) // CHARS_PER_TOKEN
         added_input = math.ceil(row.get("added_input_chars", 0) / CHARS_PER_TOKEN)
         output_benefit = avoided_output * output_rate if output_rate is not None else None
         read_cost = added_input * input_rate if input_rate is not None else None
+        typing_tokens = math.ceil(row.get("main_output_chars", 0) / CHARS_PER_TOKEN)
+        typing_cost = typing_tokens * output_rate if output_rate is not None else None
         prefix = {"usd": 0.0, "calls": 0, "unknown_calls": 0}
         if "session_id" in row:
             prefix = handoffs.overhead(row["session_id"])
@@ -877,11 +925,11 @@ def summary(session_id: Optional[str]) -> dict[str, Any]:
         elif row.get("kind") == "routed":
             prefix = handoffs.overhead(session_id or "")
         prefix_cost = prefix["usd"]
-        net = (once + output_benefit - read_cost - row["cheap_cost"] - prefix_cost
-               if all(cost is not None for cost in (once, output_benefit, read_cost, row["cheap_cost"], prefix_cost)) else None)
+        net = (once + output_benefit - read_cost - typing_cost - row["cheap_cost"] - prefix_cost
+               if all(cost is not None for cost in (once, output_benefit, read_cost, typing_cost, row["cheap_cost"], prefix_cost)) else None)
         return {**row, "tokens_removed": tokens, "once_at_main_price": once,
                 "estimated_output_tokens_avoided": avoided_output, "estimated_output_avoided_usd": output_benefit,
-                "estimated_helper_read_usd": read_cost, "net_once": net,
+                "estimated_helper_read_usd": read_cost, "estimated_main_typing_usd": typing_cost, "net_once": net,
                 "estimated_extra_main_read_usd": prefix_cost, "extra_main_calls": prefix["calls"],
                 "unknown_prefix_cost_calls": prefix["unknown_calls"],
                 "cost_basis": "one_read_at_current_main_list_price", "savings_are_estimates": True,

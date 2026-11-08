@@ -40,7 +40,11 @@ def _job(job_id):
 
 
 def _fingerprint(job):
-    return _hash({"job": {k: v for k, v in job.items() if (k not in runtime._VOLATILE or k == "repeat") and v is not None},
+    # A job's run count moves on every run; only its limit is configuration.
+    fields = {k: v for k, v in job.items() if (k not in runtime._VOLATILE or k == "repeat") and v is not None}
+    if isinstance(fields.get("repeat"), dict):
+        fields["repeat"] = {k: v for k, v in fields["repeat"].items() if k != "completed"}
+    return _hash({"job": fields,
                   "contract": contracts.get(job["id"]),
                   "profile_config_sha256": runtime._profile_config_hash(history._hermes_home())})
 

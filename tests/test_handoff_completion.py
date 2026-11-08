@@ -398,7 +398,7 @@ def test_routing_and_net_account_for_actual_main_prefix_and_each_cache_rate(worl
     assert turn["estimated_extra_main_read_usd"] == pytest.approx(expected)
     assert overall["net_once"] == pytest.approx(overall["once_at_main_price"] +
         overall["estimated_output_avoided_usd"] - overall["estimated_helper_read_usd"] -
-        overall["cheap_cost"] - expected)
+        overall["estimated_main_typing_usd"] - overall["cheap_cost"] - expected)
     assert sum(row["extra_main_calls"] for row in report["breakdown"]) == 1
 
 

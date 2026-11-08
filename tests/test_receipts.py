@@ -338,7 +338,7 @@ def test_receipt_matches_each_run_to_same_settings_baseline_cohort(world):
     assert actual["historical_savings_usd"] == 8
     assert actual["qualified_efficiency_savings_usd"] == 8
     assert actual["qualified_net_payback_usd"] == 8
-    assert actual["efficiency_savings_proven"]
+    assert not actual["efficiency_savings_proven"]  # one matched run isn't proof
     assert actual["comparisons"][0]["baseline_execution_ids"] == ["equivalent"]
 
 
