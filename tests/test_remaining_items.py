@@ -193,6 +193,7 @@ def test_a_job_is_told_whether_skipping_would_help(monkeypatch, digests, verdict
 
 
 def _costs(job, monkeypatch, after):
+    monkeypatch.setattr(starter_script, "checks_since", lambda job_id, since: None)
     monkeypatch.setattr(starter_script.time, "time", lambda: 10_000)
     job["schedule"] = {"kind": "interval", "minutes": 10}
     runs = [SimpleNamespace(scheduled=True, finished=True, started_ts=t, cost_usd=c) for t, c in [(1, 1.0), (2, 1.0), (3, 1.0)] + after]
@@ -208,3 +209,20 @@ def test_an_attached_job_shows_what_it_really_saved(job, monkeypatch):
 def test_an_attached_job_warns_when_it_costs_more(job, monkeypatch):
     out = _costs(job, monkeypatch, [(4_000 + i * 600, 2.5) for i in range(10)])
     assert out["costing_more"] and "undo" in out["message"]
+
+
+def test_checks_are_counted_from_hermes_cron_records(tmp_path):
+    import sqlite3
+    folder = tmp_path / "hermes" / "cron"
+    folder.mkdir(parents=True)
+    conn = sqlite3.connect(folder / "executions.db")
+    conn.execute("CREATE TABLE executions (id TEXT, job_id TEXT, status TEXT, started_at TEXT, scheduled_instant TEXT)")
+    rows = [("1", "j1", "completed", "2026-11-07T10:00:00+00:00", "x"), ("2", "j1", "completed", "2026-11-07T10:02:00+00:00", "x"),
+            ("3", "j1", "completed", "2026-11-07T10:04:00+00:00", None), ("4", "j1", "failed", "2026-11-07T10:06:00+00:00", "x"),
+            ("5", "other", "completed", "2026-11-07T10:08:00+00:00", "x")]
+    conn.executemany("INSERT INTO executions VALUES (?, ?, ?, ?, ?)", rows)
+    conn.commit()
+    conn.close()
+    from datetime import datetime
+    since = datetime.fromisoformat("2026-11-07T10:01:00+00:00").timestamp()
+    assert starter_script.checks_since("j1", since) == 1

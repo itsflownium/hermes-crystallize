@@ -74,10 +74,6 @@ _SAFE_IMPORTS = {"json", "re", "math", "datetime", "time", "statistics", "collec
                  "string", "textwrap", "base64", "hashlib", "decimal", "fractions", "unicodedata", "urllib.parse", "xml",
                  "xml.etree", "xml.etree.ElementTree", "email.utils", "random", "typing", "dataclasses", "operator", "sys",
                  "os.path", "pathlib", "requests", "httpx", "urllib.request", "feedparser", "bs4"}
-_BLOCKED_CALLS = {"exec", "eval", "compile", "__import__", "getattr", "setattr", "delattr", "globals", "locals", "vars",
-                  "breakpoint", "Request", "terminal", "write_file", "patch", "send_message", "delegate_task", "process"}
-_WRITE_METHODS = {"write", "writelines", "truncate", "write_text", "write_bytes", "unlink", "mkdir", "rmdir", "rename", "touch",
-                  "chmod", "symlink_to", "hardlink_to", "post", "put", "patch", "delete", "request", "send", "stream"}
 
 # Blanks, in the order we try them. Each is (kind, pattern, placeholder).
 _FILL_INS: list[tuple[str, re.Pattern[str], str]] = [

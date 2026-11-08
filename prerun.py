@@ -148,22 +148,6 @@ def _field(block: str, *names: str) -> str:
     return ""
 
 
-def _feed_text(text: str) -> Optional[str]:
-    """RSS / Atom → one short block per item (title, link, date, summary)."""
-    items = re.findall(r"(?is)<(item|entry)\b.*?</\1>", text)
-    if not items:
-        return None
-    blocks = re.findall(r"(?is)<(?:item|entry)\b.*?</(?:item|entry)>", text)
-    out = []
-    for b in blocks:
-        title = _field(b, "title")
-        link = _field(b, "link", "guid", "id")
-        date = _field(b, "pubDate", "published", "updated", "dc:date")
-        summary = _field(b, "description", "summary", "content")
-        out.append(" | ".join(x for x in (title, link, date) if x) + (f"\n  {summary}" if summary else ""))
-    return "\n".join(out)
-
-
 _MD_SAME_LINK = re.compile(r"\[(https?://[^\]\s]+)\]\(\1\)")
 
 
@@ -193,35 +177,6 @@ def clean_text(text: str) -> str:
     return text
 
 
-def _unwrap(result: str) -> tuple[str, list[tuple[str, str]]]:
-    """A tool's JSON wrapper → (main text, [(title, text) for each page it fetched])."""
-    try:
-        data = json.loads(result)
-    except (ValueError, TypeError):
-        return result, []
-    if not isinstance(data, dict):
-        return result, []
-    pages = data.get("results")
-    content_keys = ("content", "text", "markdown", "raw_content", "snippet", "description")
-    if isinstance(pages, list) and pages and all(isinstance(p, dict) and any(k in p for k in content_keys) for p in pages):
-        parts = []
-        for p in pages:
-            title = p.get("title") or p.get("url") or "page"
-            key = next((k for k in content_keys if isinstance(p.get(k), str)), None)
-            metadata = {k: v for k, v in p.items() if k != key}
-            body = (_json_text(metadata) + "\n" if metadata else "") + (p[key] if key else _json_text(p))
-            if p.get("url") and p.get("url") != title:
-                title = f"{title} ({p['url']})"
-            parts.append((str(title), body if isinstance(body, str) else json.dumps(body, default=str)))
-        outer = {k: v for k, v in data.items() if k != "results"}
-        return _json_text(outer) if outer else "", parts
-    for key in ("output", "content", "result", "text"):
-        body = data.get(key)
-        if isinstance(body, str) and set(data) <= {key, "exit_code", "error"} and not data.get("error"):
-            return body, []
-    return result, []
-
-
 _PATH = re.compile(r"""(?:(?<=[\s"'=>])|^)((?:~|/|[A-Za-z]:\\)[^\s"'|;&<>()]+)""")
 
 
@@ -238,14 +193,6 @@ def written_files(args: Any, started: float) -> list[Path]:
         if p.is_file() and st.st_mtime >= started - 1 and p not in found:
             found.append(p)
     return found
-
-
-def _cap(text: str, limit: int = MAX_STEP_CHARS) -> str:
-    if len(text) <= limit:
-        return text
-    cut = text.rfind("\n", 0, limit)
-    cut = cut if cut > limit // 2 else limit
-    return text[:cut] + f"\n… ({len(text) - cut} more characters not shown)"
 
 
 def step_block(step: dict, output: dict, *, limit: Optional[int] = None) -> str:
@@ -282,7 +229,6 @@ def step_block(step: dict, output: dict, *, limit: Optional[int] = None) -> str:
 CLEANED_TOOLS = {"web_extract", "web_search", "web_crawl", "terminal", "execute_code"}
 MIN_CLEAN_CHARS = 1500      # below this the saving isn't worth changing anything
 MIN_CLEAN_GAIN = 0.05
-_FULL_TEXT = 1_000_000      # the AI asked for this result itself, so long text is kept whole
 
 
 def _trim_lines(text: str) -> str:
@@ -291,29 +237,8 @@ def _trim_lines(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", re.sub(r"[ \t]+(?=\r?\n)", "", text)).strip("\r\n")
 
 
-def _clean_for_agent(text: str, prose: bool = False) -> str:
-    """Like clean_text, but never shortens the text the AI might be reading it for. Indentation
-    stays, because it can carry meaning. Only prose from the web has its spacing evened out."""
-    s = text.strip("\r\n")
-    if s.lstrip()[:1] in ("[", "{"):
-        try:
-            value = json.loads(s)
-        except ValueError:
-            return _trim_lines(s)
-        return _json_text(value)
-    head = s[:2000].lower()
-    if "<rss" in head or "<feed" in head or "<html" in head or "<body" in head or len(_TAG.findall(s[:5000])) > 30:
-        return clean_text(s)
-    if prose:
-        # Evens out spacing inside lines, as _tidy does, but leaves each line's indentation.
-        return _trim_lines(re.sub(r"(?<=\S)[ \t]{2,}(?=\S)", " ", re.sub(r"\\([#\[\]()_*])", r"\1", s)))
-    return _trim_lines(s)
-
-
 # One test per line, such as "name ... ok", "path::name PASSED [ 10%]" or "ok 12 - name". A summary
 # such as "1 failed, 30 passed" never matches, because it has to stay.
-_PASSING_LINE = re.compile(r"(\s\.\.\.\s+ok\s*$|^\S+\s+PASSED(\s+\[\s*\d+%\])?\s*$|^ok\s+\d+\b|^ok\s+\S+\s+[\d.]+s\s*$|^\s*PASS\s|^\s*[✓✔]\s)")
-MIN_PASSING_LINES = 20      # fewer than this isn't a long test log
 
 
 def collapse_passing(text: str) -> str:

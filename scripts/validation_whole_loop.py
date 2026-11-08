@@ -102,6 +102,39 @@ def run_long(args, on, folder, rates, tasks):
             "auto_rent": rent.auto_state(session) if on else None, "answer_chars": len(final)}
 
 
+HANDOFF_TEXT = " ".join(f"Item {i}: the shipment of {i * 7} crates reached port {i % 9} on day {i % 28 + 1}, and customs held {i % 3} for inspection." for i in range(160))
+HANDOFF_TASK = ("Translate every line of this inventory log into French, keeping every number exactly, and give me the whole translation. "
+                "It's routine work, so hand it off if you have a way to.\n\n" + HANDOFF_TEXT)
+
+
+def run_handoff(args, on, folder, rates, tasks):
+    """A long, routine, checkable job: the main model may hand it to the cheaper helper."""
+    from crystallize import request_settings, store
+
+    nonce = os.urandom(4).hex()
+    session, _, code = ask(args, f"Reply with the single word READY. Reference {nonce}.")
+    if not session:
+        return {"on": on, "ok": False, "why": f"no session (exit {code})"}
+    if on:
+        store.set_chat_enabled(session, True)
+    start = usage(session)
+    _, answer, code1 = ask(args, HANDOFF_TASK, session)
+    end = usage(session)
+    delta = {key: (end.get(key) or 0) - (start.get(key) or 0) for key in COUNTERS}
+    delta["prompt_tokens"] = delta["input_tokens"] + delta["cache_read_tokens"] + delta["cache_write_tokens"]
+    events = store.chat_events(session) if on else []
+    helper = [e for e in events if e.get("helper_call")]
+    helper_cost = sum(e["cheap_cost"] or 0 for e in helper)
+    main_cost = list_cost(delta, rates) if rates else None
+    return {"on": on, "ok": code1 == 0, "session": session, "delta": delta,
+            "checks_passed": all(str(n) in answer for n in (7 * 37, 7 * 120, 7 * 159)),
+            "list_cost_usd": None if main_cost is None else main_cost + helper_cost,
+            "list_cost_without_reasoning_usd": None if main_cost is None else list_cost({**delta, "output_tokens": max(0, delta["output_tokens"] - delta["reasoning_tokens"])}, rates) + helper_cost,
+            "helper_calls": len(helper), "helper_cost_usd": helper_cost, "helper_unknown_cost_calls": sum(e["cheap_cost"] is None for e in helper),
+            "recorded": {"model": end.get("model"), "provider": end.get("billing_provider"), "sent": (request_settings.for_run("chat:" + session) or {}).get("fingerprint")},
+            "requested_on_the_wire": request_settings.for_run("chat:" + session), "answer_chars": len(answer)}
+
+
 def ask(args, prompt, session=None):
     cmd = ["hermes", "chat", "-Q", "--oneshot", "-m", args.model, "--provider", args.provider, "--reasoning", args.reasoning,
            "-t", "terminal,crystallize", "-q", prompt] + (["--resume", session] if session else [])
@@ -206,7 +239,7 @@ def main():
     parser.add_argument("--model", required=True)
     parser.add_argument("--provider", required=True)
     parser.add_argument("--reasoning", default="medium")
-    parser.add_argument("--mode", choices=("clean", "rent", "long"), default="clean",
+    parser.add_argument("--mode", choices=("clean", "rent", "long", "handoff"), default="clean",
                         help="clean: Crystallize Chat on from the start. rent: remove the largest result, then measure later "
                              "turns. long: a working chat over many messages, with everything automatic")
     parser.add_argument("--long-rounds", type=int, default=1, help="How many times the later messages repeat in long mode")
@@ -223,7 +256,7 @@ def main():
     if report_path.exists():
         raise SystemExit("Use a new report file; existing evidence is never overwritten.")
     tasks = _fixtures()
-    chosen = ["working chat"] if args.mode == "long" else args.task or list(tasks)
+    chosen = ["working chat"] if args.mode == "long" else ["hand-off"] if args.mode == "handoff" else args.task or list(tasks)
     if not args.run:
         print(json.dumps({"planned_sessions": 2 * args.pairs * len(chosen), "tasks": chosen}))
         return
@@ -247,7 +280,8 @@ def main():
                 arms = {}
                 for on in order:
                     try:
-                        arms["on" if on else "off"] = (run_long(args, on, Path(folder), rates, tasks) if args.mode == "long"
+                        arms["on" if on else "off"] = (run_long(args, on, Path(folder), rates, tasks) if args.mode == "long" else
+                                                       run_handoff(args, on, Path(folder), rates, tasks) if args.mode == "handoff"
                                                        else run_arm(args, tasks[domain], on, Path(folder), rates))
                     except subprocess.TimeoutExpired:
                         arms["on" if on else "off"] = {"on": on, "ok": False, "why": "timeout"}

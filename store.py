@@ -541,13 +541,6 @@ def chat_event_updater(event_id: int) -> Callable[..., None]:
     return update
 
 
-def add_chat_saving(session_id: str, chars: int, cheap_tokens: int, cheap_cost: Optional[float]) -> None:
-    """Compatibility writer for integrations predating the per-attempt ledger."""
-    add_chat_event(session_id, kind="legacy", chars=chars, cheap_tokens=cheap_tokens,
-                   cheap_cost=cheap_cost, helper_call=cheap_tokens > 0,
-                   cost_source="legacy_estimate")
-
-
 def _chat_ids(session_id: str) -> tuple[str, ...]:
     from . import lineage
 

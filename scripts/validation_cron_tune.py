@@ -32,6 +32,7 @@ def main() -> None:
     parser.add_argument("--provider", required=True)
     parser.add_argument("--reasoning", default="medium")
     parser.add_argument("--minutes", type=float, default=15)
+    parser.add_argument("--before-runs", type=int, default=4, help="Normal runs before the trial, so the comparison isn't all noise")
     parser.add_argument("--report", required=True)
     args = parser.parse_args()
     report = Path(args.report)
@@ -56,7 +57,7 @@ def main() -> None:
                           f"Run `cat {data}` with the terminal tool, then name the one item whose state isn't ok.",
                           args.model, args.provider, args.reasoning)
         try:
-            while time.time() < deadline and len(finished()) < tuning.MIN_BEFORE_RUNS:
+            while time.time() < deadline and len(finished()) < max(args.before_runs, tuning.MIN_BEFORE_RUNS):
                 time.sleep(5)
             result["trial"] = {"started": tuning.start(job["id"])["status"]}
             trial_at = time.time()

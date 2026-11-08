@@ -208,10 +208,6 @@ def _set_job_fields(job_id: str, fields: dict[str, Any]) -> None:
         _edit_job(job_id, "--interpreter", value or "")
 
 
-def _set_prompt(job_id: str, prompt: str) -> None:
-    _edit_job(job_id, "--prompt", prompt)
-
-
 def _legacy_crystallized_prompt(routine_id: str, original: str) -> str:
     return (
         f"{MARKER} {routine_id}] First call the crystal_run tool with routine_id \"{routine_id}\". "

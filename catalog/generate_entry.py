@@ -247,7 +247,7 @@ def screenshot_urls(tree: GitTree, repo_url: str, paths: list[str]) -> list[str]
 
 def build_entry(manifest: dict[str, Any], sha: str, repo_url: str, analysis: dict[str, Any]) -> dict[str, Any]:
     entry = {"name": manifest["name"], "repo": _repo_url(repo_url), "sha": sha,
-             "description": "Reduces repeated Hermes chat and cron work with explicit controls and local receipts.",
+             "description": "Spend less on repeated work in Hermes chats and cron jobs, without making your model think less.",
              "maintainer": manifest["author"], "tier": "community", "category": "automation",
              "requires_hermes": manifest["requires_hermes"], "version": manifest["version"],
              "title": "Crystallize", "readme": True,
@@ -365,6 +365,9 @@ def generate(repo: Path, sha: str, output: Path, repo_url: str | None = None, *,
     validate_capabilities(manifest, analysis)
     entry = build_entry(manifest, tree.sha, repo_url or manifest["homepage"], analysis)
     entry["screenshots"] = screenshot_urls(tree, entry["repo"], screenshots or [])
+    entry["docs_url"] = f"{entry['repo']}/blob/{tree.sha}/README.md"
+    if "assets/social-preview.png" in tree.paths:
+        entry["image"] = screenshot_urls(tree, entry["repo"], ["assets/social-preview.png"])[0]
     payloads = payload_findings(tree)
     static_ready = analysis["public_api_audit"]["ok"] and not payloads
     verified: dict[str, Any] = {"status": "not_supplied", "ok": False}

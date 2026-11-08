@@ -144,20 +144,49 @@ def fit(job_id: str, runs: Any = None) -> dict[str, Any]:
     return {"verdict": "mixed", "share": share, "message": f"{counted}. It should save a little, but check its results after attaching."}
 
 
+def checks_since(job_id: str, since: float) -> Optional[int]:
+    """Scheduled checks that finished since a time, from Hermes's own cron records. These include
+    the checks that skipped the AI, which leave no session behind."""
+    from datetime import datetime
+
+    conn = history._open_readonly(history._hermes_home() / "cron" / "executions.db")
+    if conn is None:
+        return None
+    try:
+        rows = conn.execute("SELECT started_at FROM executions WHERE job_id = ? AND status = 'completed' "
+                            "AND scheduled_instant IS NOT NULL", (job_id,)).fetchall()
+    except Exception:  # noqa: BLE001 — an unknown schema means no count
+        return None
+    finally:
+        conn.close()
+    count = 0
+    for (started,) in rows:
+        try:
+            when = datetime.fromisoformat(started).timestamp() if isinstance(started, str) else float(started)
+        except (TypeError, ValueError):
+            continue
+        count += when >= since
+    return count
+
+
 def since_attached(job_id: str, state: dict[str, Any]) -> Optional[dict[str, Any]]:
     """What this job has really cost since its script was attached, against its own earlier runs."""
     from . import rhythm
 
     attached_at = state.get("applied_at")
-    job = lifecycle._bound_job(job_id)
-    minutes = rhythm._interval(job) if job else None
-    if state.get("status") != "applied" or not attached_at or not minutes:
+    if state.get("status") != "applied" or not attached_at:
         return None
+    counted = checks_since(job_id, attached_at)
+    if counted is None:  # no cron records to read, so estimate from the schedule
+        job = lifecycle._bound_job(job_id)
+        minutes = rhythm._interval(job) if job else None
+        if not minutes:
+            return None
+        counted = int((time.time() - attached_at) // (minutes * 60))
     finished = [r for r in history.runs_for_job(job_id) if r.scheduled and r.finished]
     before = [r.cost_usd for r in finished if r.started_ts < attached_at and r.cost_usd is not None]
     after = [r for r in finished if r.started_ts >= attached_at]
-    elapsed = time.time() - attached_at
-    checks = int(elapsed // (minutes * 60))
+    checks = counted
     if len(before) < MIN_RUNS or checks < MIN_RUNS or any(r.cost_usd is None for r in after):
         return None
     normal = sum(before) / len(before)

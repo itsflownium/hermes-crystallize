@@ -163,7 +163,6 @@ ROUTING_NOTE = (
     "If the helper fails or reports incomplete output, finish the task yourself; do not repeat a failed paid handoff. "
     "Reasoning settings and the main model stay as configured."
 )
-MIN_ROUTING_PRICE_RATIO = 5     # retained for integrations; routing now uses a break-even estimate
 
 
 def _same_model(answered: Optional[str], picked: Optional[str]) -> bool:

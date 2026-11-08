@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from . import store
 
@@ -119,6 +119,13 @@ def _run_key(run: Any, session_id: str) -> str:
     return str(execution_id) if execution_id is not None else session_id
 
 
+def _own_tool_chars() -> int:
+    from . import schemas
+
+    return sum(len(json.dumps(schema)) for schema in (schemas.CRYSTAL_LIST, schemas.CRYSTAL_RUN,
+                                                      schemas.CRYSTAL_FULL_RESULT, schemas.CRYSTAL_CHEAP))
+
+
 def make_post_api_request(ctx: Any) -> Callable[..., None]:
     """Observe real Chat usage and keep Cron token totals for Runaway Brake."""
     from . import brake
@@ -131,6 +138,8 @@ def make_post_api_request(ctx: Any) -> Callable[..., None]:
             if run is None:
                 if store.chat_enabled(session_id):
                     handoffs.note_usage(session_id, usage)
+                    # Crystallize's own tools are sent with this call, so they count against its savings.
+                    store.add_chat_event(session_id, kind="own_tools", results=0, added_input_chars=_own_tool_chars())
             elif brake.enabled():
                 # Compression gives a run a new session id, but it's still one run.
                 brake.note_usage(_run_key(run, session_id), usage)
@@ -169,6 +178,43 @@ def make_pre_tool_call(ctx: Any) -> Callable[..., Any]:
     return before_tool
 
 
+OWN_TOOLS = frozenset({"crystal_list", "crystal_run", "crystal_full_result", "crystal_cheap"})
+
+
+def _tool_name(tool: Any) -> Optional[str]:
+    """A tool definition's name, in each provider's request shape."""
+    if not isinstance(tool, dict):
+        return None
+    for found in (tool.get("name"), (tool.get("function") or {}).get("name") if isinstance(tool.get("function"), dict) else None,
+                  (tool.get("toolSpec") or {}).get("name") if isinstance(tool.get("toolSpec"), dict) else None):
+        if isinstance(found, str):
+            return found
+    return None
+
+
+def drop_own_tools(request: Any) -> Optional[dict[str, Any]]:
+    """Leave Crystallize's own tools out where they can't be used, so they cost nothing there.
+
+    Every tool definition is re-sent on every AI call, and these four add about 800 tokens."""
+    if not isinstance(request, dict):
+        return None
+    changed = dict(request)
+    found = False
+    if isinstance(request.get("tools"), list):
+        kept = [tool for tool in request["tools"] if _tool_name(tool) not in OWN_TOOLS]
+        if len(kept) != len(request["tools"]):
+            changed["tools"], found = kept, True
+            if not kept:
+                changed.pop("tools")
+                changed.pop("tool_choice", None)
+    config = request.get("toolConfig")
+    if isinstance(config, dict) and isinstance(config.get("tools"), list):
+        kept = [tool for tool in config["tools"] if _tool_name(tool) not in OWN_TOOLS]
+        if len(kept) != len(config["tools"]):
+            changed["toolConfig"], found = {**config, "tools": kept}, True
+    return changed if found else None
+
+
 def make_llm_request(ctx: Any) -> Callable[..., Any]:
     """Apply independent, opt-in wire savings. Every layer fails open on its own."""
     from . import rent, reread
@@ -187,7 +233,14 @@ def make_llm_request(ctx: Any) -> Callable[..., Any]:
         except Exception:  # noqa: BLE001
             logger.debug("crystallize: recording the request failed", exc_info=True)
         try:
-            changed = rent.apply(request, session_id)
+            if ctx.current_cron_execution() is not None or not store.chat_enabled(session_id):
+                changed = drop_own_tools(current)
+                if isinstance(changed, dict):
+                    current = changed
+        except Exception:  # noqa: BLE001 — leaving the tools in is always safe
+            logger.debug("crystallize: leaving out unused tools failed", exc_info=True)
+        try:
+            changed = rent.apply(current, session_id)
             if isinstance(changed, dict):
                 current = changed
         except Exception:  # noqa: BLE001 — a failed saving must never stop the AI call

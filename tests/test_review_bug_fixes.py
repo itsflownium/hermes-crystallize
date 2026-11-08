@@ -394,3 +394,40 @@ def test_a_failed_command_is_never_touched(monkeypatch):
     store.set_chat_enabled("s", True)
     result = json.dumps({"output": json.dumps({"a": list(range(900))}, indent=2), "exit_code": 1})
     assert cs.shrink(SimpleNamespace(), "s", "terminal", result) is None
+
+
+def _requests_with_own_tools():
+    def openai(name):
+        return {"type": "function", "function": {"name": name, "parameters": {}}}
+    return [
+        {"messages": [], "tools": [openai("terminal"), openai("crystal_cheap"), openai("crystal_full_result")]},
+        {"input": [], "tools": [{"type": "function", "name": "crystal_list"}, {"type": "function", "name": "web_search"}]},
+        {"messages": [], "tools": [{"name": "crystal_run", "input_schema": {}}, {"name": "read_file", "input_schema": {}}]},
+        {"messages": [], "toolConfig": {"tools": [{"toolSpec": {"name": "crystal_cheap"}}, {"toolSpec": {"name": "terminal"}}]}},
+    ]
+
+
+@pytest.mark.parametrize("request_body", _requests_with_own_tools())
+def test_crystallize_tools_are_left_out_where_chat_is_off(request_body):
+    out = capture.make_llm_request(SimpleNamespace(current_cron_execution=lambda: None))(request=request_body, session_id="off")["request"]
+    names = {capture._tool_name(t) for t in out.get("tools") or out.get("toolConfig", {}).get("tools", [])}
+    assert names and not names & capture.OWN_TOOLS
+
+
+def test_crystallize_tools_stay_where_chat_is_on():
+    store.set_chat_enabled("on", True)
+    body = _requests_with_own_tools()[0]
+    assert capture.make_llm_request(SimpleNamespace(current_cron_execution=lambda: None))(request=body, session_id="on") is None
+
+
+def test_a_request_with_only_crystallize_tools_drops_the_tool_choice_too():
+    body = {"messages": [], "tools": [{"name": "crystal_list"}], "tool_choice": "auto"}
+    out = capture.drop_own_tools(body)
+    assert "tools" not in out and "tool_choice" not in out and body["tools"]
+
+
+def test_own_tools_are_charged_to_a_chat_with_crystallize_on():
+    store.set_chat_enabled("on", True)
+    hook = capture.make_post_api_request(SimpleNamespace(current_cron_execution=lambda: None))
+    hook(session_id="on", usage={"prompt_tokens": 10})
+    assert store.list_chat_savings("on")[0]["added_input_chars"] == capture._own_tool_chars() > 2000

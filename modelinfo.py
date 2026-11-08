@@ -151,10 +151,6 @@ def output_price(r: dict[str, Optional[str]]) -> Optional[float]:
     return prices["output"] if prices is not None else None
 
 
-def _nonnegative(value: Any) -> Optional[float]:
-    return public_pricing.number(value)
-
-
 def exact_token_prices(model: Optional[str], provider: Optional[str],
                        base_url: Optional[str] = None) -> Optional[dict[str, Any]]:
     """Explicit user card in USD/token, preserving zero and unknown buckets/fees.
