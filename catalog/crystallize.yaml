@@ -1,7 +1,7 @@
 # Submission bundle only. Copy into hermes-agent/plugin-catalog/ in a maintainer-reviewed PR.
 name: "crystallize"
 repo: "https://github.com/itsflownium/hermes-crystallize"
-sha: "eb4e014f53db5cb249e9acc07dd4b32fed65c957"
+sha: "bc48bed320375434c5a98578169cc6960670a2d6"
 description: "Spend less on repeated work in Hermes chats and cron jobs, without making your model think less."
 maintainer: "itsflownium"
 tier: "community"
@@ -11,7 +11,7 @@ version: "0.6.0"
 title: "Crystallize"
 readme: true
 known_issues:
-  - "Live savings at unchanged reasoning are measured on Nous only, with small samples and synthetic fixtures; other providers are untested."
+  - "Live savings at unchanged reasoning are measured on Nous and OpenAI Codex, with small samples and synthetic fixtures; other providers are untested. Hand-offs cost more in live tests and are off by default."
   - "Frozen fixture checks do not prove semantic equivalence or universal provider coverage."
   - "Automatic nested tool execution and pre-run/no-AI replay of learned tool plans are unavailable on the audited SDK; explicit tool mode returns pending normal-host-tool plans."
   - "Configured/declared routes have unverified authentication and availability. User rate cards and public provider quotes are estimates, not billing evidence."
@@ -22,7 +22,7 @@ capabilities:
   provides_middleware: ["llm_request", "tool_execution"]
   requires_env: []
 screenshots:
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/eb4e014f53db5cb249e9acc07dd4b32fed65c957/assets/review/panel-cron-and-chat.png"
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/eb4e014f53db5cb249e9acc07dd4b32fed65c957/assets/review/panel-job-details.png"
-docs_url: "https://github.com/itsflownium/hermes-crystallize/blob/eb4e014f53db5cb249e9acc07dd4b32fed65c957/README.md"
-image: "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/eb4e014f53db5cb249e9acc07dd4b32fed65c957/assets/social-preview.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/bc48bed320375434c5a98578169cc6960670a2d6/assets/review/panel-cron-and-chat.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/bc48bed320375434c5a98578169cc6960670a2d6/assets/review/panel-job-details.png"
+docs_url: "https://github.com/itsflownium/hermes-crystallize/blob/bc48bed320375434c5a98578169cc6960670a2d6/README.md"
+image: "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/bc48bed320375434c5a98578169cc6960670a2d6/assets/social-preview.png"
