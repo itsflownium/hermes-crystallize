@@ -6,7 +6,7 @@
   "owner_submission_approval": null,
   "release_ready_meaning": "Technical checks do not establish live effectiveness, installed-build activation or owner approval to submit.",
   "catalog_ready_meaning": "Human admission/listing is not established by local technical checks.",
-  "pinned_commit": "c6890c46564148a22a410d7df5b61f84823f567c",
+  "pinned_commit": "eb4e014f53db5cb249e9acc07dd4b32fed65c957",
   "pinned_manifest_version": "0.6.0",
   "literal_capabilities_match_manifest": true,
   "source_analysis": {
@@ -343,7 +343,7 @@
     "host_validation": {
       "status": "operator_supplied_exact_pin_host_validation",
       "ok": true,
-      "sha256": "dce519e86f2f5f6bb5b0ac3c150d04fa1d671d950ef07417382511c691b5e3ac",
+      "sha256": "1320a1798a56fc011b7a6e7e360932993661fbcff89f349a7e4a3e172d0d5eae",
       "checks_passed": 16,
       "host_source_commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
       "warnings": [],
@@ -354,8 +354,8 @@
   "ui_evidence": {
     "status": "offline_fixture_captures",
     "screenshots": [
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/c6890c46564148a22a410d7df5b61f84823f567c/assets/review/panel-cron-and-chat.png",
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/c6890c46564148a22a410d7df5b61f84823f567c/assets/review/panel-job-details.png"
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/eb4e014f53db5cb249e9acc07dd4b32fed65c957/assets/review/panel-cron-and-chat.png",
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/eb4e014f53db5cb249e9acc07dd4b32fed65c957/assets/review/panel-job-details.png"
     ],
     "live_proof": false
   },
