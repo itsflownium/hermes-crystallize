@@ -19,7 +19,7 @@ Paired runs through the real Hermes gateway: the same task, model and provider o
 | Cron, drafted script, 4 checks with one change | `tencent/hy3`, medium | 1 | $0.0065 | $0.0026 | 60% | not checked |
 | Working chat, 11 messages, Codex | `gpt-5.6-terra`, medium | 2 | $0.2309 | $0.2008 | 13% | 2 / 2 |
 | Working chat, 11 messages, Codex | `gpt-5.6-luna`, medium | 2 valid of 3 | $0.0217 | $0.0176 | 19% | 2 / 2 |
-| Cron, drafted script, 4 checks with one change, Codex | `gpt-5.6-luna`, medium | 1 | $0.0139 | $0.0071 | 49% | not checked |
+| Cron, drafted script, 4 checks with one change, Codex | `gpt-5.6-luna`, medium | 3 | $0.0317 | $0.0187 | 41% (pairs: 49%, 21%, 49%) | not checked |
 | Hand-off to a cheaper helper, Codex | `gpt-5.6-luna` to `gpt-6-luna` | 3 | $0.0357 | $0.0440 | **23% more** | 3 / 3 |
 | Same, after returning a preview instead | `gpt-5.6-luna` to `gpt-6-luna` | 3 | $0.0379 | $0.0446 | **18% more** | 3 / 3 |
 
@@ -31,15 +31,16 @@ Things that came out badly or unclear, which are kept in `docs/evidence/`:
 - **The first chat pilot is not a fair measure of Clean.** It ran before Clean's fix for data mentioning a failure.
 - **A `tune` trial ran 27% cheaper in typical runs** on Nous ($0.00164 against $0.00224), but hadn't reached its decision when the 15-minute test ended. On Codex a trial did reach its decision: it reverted and restored the job's settings, because its 2 trial runs didn't show a saving beyond normal variation.
 - **Hand-offs cost more in both live tests.** The main model often wrote the helper's answer out itself anyway, even when it only got a preview. Hand-offs are now off by default, and they stop in a chat if an answer is retyped.
+- **Context compression, live on Codex:** after `/compress` took a chat from about 22,000 to 10,000 tokens, Crystallize was still on, the removed result stayed removed, and the AI read the original back. This Hermes compresses a manual `/compress` in place; automatic compression into a new session is covered by offline tests. In one run the compression summary dropped the note naming the removed result, so the AI needed the result id from the panel to read it back.
 - **Codex's cached reads cost a tenth of normal input,** so automatic removal didn't trigger there, and the Codex chat savings come from Clean alone.
 - **Re-read on its own shows no clear saving** beyond what Clean gives: median cost ratios of 0.77, 1.00 and 1.07 across 3 task types, at 3 pairs each.
 
 - **Crystallize's own tools used to cost every chat.** Its 4 tool definitions, about 3,300 characters, were sent on every AI call in every chat, even with Crystallize off. They're now left out unless Crystallize Chat is on in that chat, and where they're sent they count against its savings. This was found after the runs above, so those runs included them in both arms.
 - **A hand-off test couldn't run.** The Nous account ran out of credits (HTTP 402), so hand-offs remain untested live.
 
-Not measured live: providers other than Nous and Codex, Blind Taste Test, Model Auction, Rhythm, Runaway Brake on this version, context compression, and how a real user's work compares with these fixtures.
+Not measured live: providers other than Nous and Codex, Blind Taste Test, Model Auction, Rhythm, Runaway Brake on this version, automatic compression into a new session, and how a real user's work compares with these fixtures.
 
-Reproduce with `scripts/validation_whole_loop.py`, `scripts/validation_cron_pair.py` and `scripts/validation_cron_tune.py`.
+Reproduce with `scripts/validation_whole_loop.py`, `scripts/validation_cron_pair.py`, `scripts/validation_cron_tune.py` and `scripts/validation_compression.py`.
 
 ## Final activation and CI record
 
