@@ -28,6 +28,11 @@ TIMEOUT_SECONDS = 10
 MAX_BYTES = 40_000_000
 _PER_MILLION = 1_000_000
 
+# Subscription routes bill by plan, not per token, so they publish no price. They serve the same
+# models as the vendor's API, so that model's public API list price stands in: it lets Context Rent
+# weigh a removal on a real price. Exact model names only; a rate card you enter still wins.
+LIST_PRICE_SOURCE = {"openai-codex": "openai"}
+
 _lock = threading.Lock()
 _memory: dict[str, dict[str, Any]] = {}
 _running: set[str] = set()
@@ -135,8 +140,13 @@ def _load(provider: str, base_url: Optional[str]) -> dict[str, dict[str, Any]]:
             logger.debug("crystallize: no public price list at %s", listed, exc_info=True)
     if use_catalog:
         try:
-            for name, entry in parse_catalog(_fetch_json(CATALOG_URL), provider).items():
+            catalog = _fetch_json(CATALOG_URL)
+            for name, entry in parse_catalog(catalog, provider).items():
                 models.setdefault(name, entry)  # the route's own list wins
+            source = LIST_PRICE_SOURCE.get(provider)
+            if source:
+                for name, entry in parse_catalog(catalog, source).items():
+                    models.setdefault(name, {**entry, "list_price_of": source})
         except Exception:  # noqa: BLE001
             logger.debug("crystallize: the public price catalog is unavailable", exc_info=True)
     return models

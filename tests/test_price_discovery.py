@@ -136,3 +136,21 @@ def test_a_similar_model_name_is_not_a_match(monkeypatch):
     _serve(monkeypatch, None, CATALOG)
     pd.refresh("acme")
     assert pd.rates("big-2", "acme") is None and pd.rates("BIG", "acme") is None
+
+
+def test_a_subscription_route_uses_the_same_models_api_list_price(monkeypatch):
+    catalog = {"openai": {"models": {"gpt-x": {"cost": {"input": 2, "output": 12, "cache_read": 0.2, "cache_write": 2.5}}}}}
+    _serve(monkeypatch, None, catalog)
+    pd.refresh("openai-codex")
+    found = pd.rates("gpt-x", "openai-codex")
+    assert found["input"] == pytest.approx(2e-6) and found["list_price_of"] == "openai"
+    assert pd.rates("gpt-x-mini", "openai-codex") is None
+    card = public_pricing.exact_rate_card("gpt-x", "openai-codex")
+    assert card["list_price_of"] == "openai" and card["provenance"] == "public_list_price"
+
+
+def test_other_routes_never_borrow_another_vendors_prices(monkeypatch):
+    catalog = {"openai": {"models": {"gpt-x": {"cost": {"input": 2, "output": 12}}}}}
+    _serve(monkeypatch, None, catalog)
+    pd.refresh("acme")
+    assert pd.rates("gpt-x", "acme") is None
