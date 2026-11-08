@@ -461,3 +461,12 @@ def test_hand_offs_continue_when_answers_are_reused(monkeypatch):
     store.add_chat_event("s", turn_id="t1", kind="routed", status="accepted", helper_call=True, cheap_cost=0.004)
     store.add_chat_event("s", turn_id="t1", kind="routed_output", results=0, output_chars=5000)
     assert handoffs.unreused("s") == 0
+
+
+
+def test_hand_offs_are_off_until_turned_on(monkeypatch):
+    store.set_setting(cs.HANDOFF_SETTING, False)
+    store.set_chat_enabled("s", True)
+    monkeypatch.setattr(cs, "chosen_model", lambda: {"model": "m", "provider": "p"})
+    assert cs.routing_context(session_id="s") is None
+    assert "off" in json.loads(handoffs.execute(SimpleNamespace(), "Translate this.", "s", "t"))["error"]

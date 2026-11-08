@@ -42,7 +42,7 @@ hermes crystal brake on                       # stop runaway cron runs
 
 Savings depend on the work. In live paired tests at unchanged reasoning, working chats of 11 messages
 cost 20 to 23% less on two of three models, and 23-message chats cost 32% less on one. Short tasks saved
-about 6%. A cron job whose data changed once in 4 checks cost 60% less in one pair. A job whose data changes on nearly every
+about 6%. On Codex, working chats saved 13 to 19%. A cron job whose data changed once in 4 checks cost 60% less on Nous and 49% less on Codex. A job whose data changes on nearly every
 run gains nothing and can cost a little more, so each job shows its own verdict and real cost. See [when it saves, and when it can cost more](docs/when-it-saves.md).
 
 A saving only counts between runs with the same model, provider and reasoning, taken from what each

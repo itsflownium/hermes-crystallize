@@ -158,8 +158,8 @@ def test_rent_command_reports_and_restores(capsys, monkeypatch):
 
 
 def test_prices_command_controls_lookup_and_the_unpriced_helper(capsys):
-    out = json.loads(_run(capsys, "prices", "--lookup", "off", "--allow-unpriced-helper", "off"))
-    assert out == {"lookup": False, "allow_unpriced_helper": False}
+    out = json.loads(_run(capsys, "prices", "--lookup", "off", "--allow-unpriced-helper", "off", "--handoffs", "off"))
+    assert out == {"lookup": False, "allow_unpriced_helper": False, "handoffs": False}
 
 
 def test_auction_reconcile_command_needs_confirmation_when_locked(capsys):

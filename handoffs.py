@@ -352,6 +352,8 @@ def execute(ctx: Any, text: str, session_id: str, turn_id: str = "", *, input_fi
     except (ValueError, RuntimeError) as exc:
         return respond({"error": str(exc), "written": False})
     picked = chat.chosen_model()
+    if not chat.handoffs_allowed():
+        return respond({"error": "Hand-offs are off, because in tests they often cost more. Do this task yourself."})
     if unreused(session_id, turn_id):
         return respond({"error": "An earlier hand-off's answer wasn't reused, so hand-offs cost more than they saved in this chat. Do this task yourself."})
     if not picked.get("model") or not chat._is_cheaper(picked, session_id, "routed"):

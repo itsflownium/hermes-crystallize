@@ -251,7 +251,7 @@ def build_entry(manifest: dict[str, Any], sha: str, repo_url: str, analysis: dic
              "maintainer": manifest["author"], "tier": "community", "category": "automation",
              "requires_hermes": manifest["requires_hermes"], "version": manifest["version"],
              "title": "Crystallize", "readme": True,
-             "known_issues": ["Live savings at unchanged reasoning are measured on Nous only, with small samples and synthetic fixtures; other providers are untested.",
+             "known_issues": ["Live savings at unchanged reasoning are measured on Nous and OpenAI Codex, with small samples and synthetic fixtures; other providers are untested. Hand-offs cost more in live tests and are off by default.",
                               "Frozen fixture checks do not prove semantic equivalence or universal provider coverage."],
              "capabilities": {key: manifest[key] for key in CAPABILITIES}}
     if analysis["core_imports_requiring_public_api_review"]:

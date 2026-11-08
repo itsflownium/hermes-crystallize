@@ -219,6 +219,8 @@ def routing_context(session_id: str = "", parent_session_id: str = "", **_: Any)
     from . import handoffs
 
     picked = chosen_model()
+    if not handoffs_allowed():
+        return None
     if not picked["model"] or not _is_cheaper(picked, session_id, "routed") or not _routing_pays(picked, session_id):
         return None
     if handoffs.unreused(session_id):
@@ -501,6 +503,13 @@ def _main_model(session_id: Optional[str]) -> dict[str, Optional[str]]:
 
 
 UNPRICED_SETTING = "allow_unpriced_helper"
+# In live tests the main model often wrote a helper's answer out again anyway, so hand-offs cost
+# 18 to 23% more. They stay off until you turn them on.
+HANDOFF_SETTING = "allow_handoffs"
+
+
+def handoffs_allowed() -> bool:
+    return bool(store.get_setting(HANDOFF_SETTING, False))
 
 
 def _unpriced_allowed() -> bool:

@@ -296,8 +296,14 @@ def main():
         remove_cards = temporary_rate_cards([(args.provider, args.model)] + ([tuple(helper)] if helper else []), args.prices_from)
     if helper:
         chat_savings.set_model(*helper)
+        handoffs_before = chat_savings.handoffs_allowed()
+        store.set_setting(chat_savings.HANDOFF_SETTING, True)
+        atexit_restore = lambda: store.set_setting(chat_savings.HANDOFF_SETTING, handoffs_before)
+    else:
+        atexit_restore = lambda: None
     import atexit
     atexit.register(remove_cards)  # also when interrupted, so no temporary card is left behind
+    atexit.register(atexit_restore)
     price_discovery.refresh(args.provider)
     rates = modelinfo.token_prices(args.model, args.provider) or price_discovery.rates(args.model, args.provider)
     seed = args.seed if args.seed is not None else int(time.time())

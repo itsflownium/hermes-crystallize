@@ -519,6 +519,7 @@ def _setup(subparser: Any) -> None:
     pc.add_argument("--model")
     pc.add_argument("--lookup", choices=("on", "off"), help="Whether to look up list prices from public model lists")
     pc.add_argument("--allow-unpriced-helper", choices=("on", "off"), help="Whether a helper with no known price may spend")
+    pc.add_argument("--handoffs", choices=("on", "off"), help="Whether the main model may hand work to the helper (off by default)")
     mr = subs.add_parser("model-route", help="Declare an exact model route; this does not sign in or select a helper")
     mr.add_argument("--provider")
     mr.add_argument("--model")
@@ -583,7 +584,10 @@ def _completion_action(sub: str, args: Any) -> None:
                 store.set_setting(price_discovery.SETTING, args.lookup == "on")
             if args.allow_unpriced_helper:
                 store.set_setting(chat_savings.UNPRICED_SETTING, args.allow_unpriced_helper == "on")
-            result = {"lookup": price_discovery.enabled(), "allow_unpriced_helper": chat_savings._unpriced_allowed()}
+            if args.handoffs:
+                store.set_setting(chat_savings.HANDOFF_SETTING, args.handoffs == "on")
+            result = {"lookup": price_discovery.enabled(), "allow_unpriced_helper": chat_savings._unpriced_allowed(),
+                      "handoffs": chat_savings.handoffs_allowed()}
             if bool(args.provider) != bool(args.model):
                 raise ValueError("Give both --provider and --model.")
             if args.provider:

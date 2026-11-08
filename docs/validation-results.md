@@ -6,7 +6,7 @@ compatibility, semantic equivalence or marketplace admission.
 
 ## Live savings at unchanged reasoning (version 0.6.0)
 
-Paired runs through the real Hermes gateway: the same task, model and provider on both sides, with the reasoning read from each request as sent. A pair is marked invalid if those differ, and none were. Costs are list prices from the route's public model list applied to recorded usage, not bills. Order is randomised per pair, and every attempt is kept. Fixtures are synthetic, samples are small, and everything ran on Nous only.
+Paired runs through the real Hermes gateway: the same task, model and provider on both sides, with the reasoning read from each request as sent. A pair is marked invalid if those differ or a message fails. Costs are list prices applied to recorded usage, not bills: from Nous's public model list, and for Codex, which is subscription-based, from OpenAI's public price for the same model. Order is randomised per pair, and every attempt is kept. Fixtures are synthetic and samples are small. Two providers: Nous and OpenAI Codex.
 
 | Test | Model and reasoning | Pairs | Off | On | Saving | Checks passed, off / on |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -17,6 +17,11 @@ Paired runs through the real Hermes gateway: the same task, model and provider o
 | Working chat, 11 messages | `deepseek/deepseek-v4.1-flash`, high | 3 | $0.0139 | $0.0129 | 7% | 3 / 3 |
 | Short tasks in 7 domains, Clean only | `tencent/hy3`, medium | 14 | $0.0203 | $0.0191 | 6% | 14 / 14 |
 | Cron, drafted script, 4 checks with one change | `tencent/hy3`, medium | 1 | $0.0065 | $0.0026 | 60% | not checked |
+| Working chat, 11 messages, Codex | `gpt-5.6-terra`, medium | 2 | $0.2309 | $0.2008 | 13% | 2 / 2 |
+| Working chat, 11 messages, Codex | `gpt-5.6-luna`, medium | 2 valid of 3 | $0.0217 | $0.0176 | 19% | 2 / 2 |
+| Cron, drafted script, 4 checks with one change, Codex | `gpt-5.6-luna`, medium | 1 | $0.0139 | $0.0071 | 49% | not checked |
+| Hand-off to a cheaper helper, Codex | `gpt-5.6-luna` to `gpt-6-luna` | 3 | $0.0357 | $0.0440 | **23% more** | 3 / 3 |
+| Same, after returning a preview instead | `gpt-5.6-luna` to `gpt-6-luna` | 3 | $0.0379 | $0.0446 | **18% more** | 3 / 3 |
 
 Things that came out badly or unclear, which are kept in `docs/evidence/`:
 
@@ -24,13 +29,15 @@ Things that came out badly or unclear, which are kept in `docs/evidence/`:
 - **One DeepSeek pair cost 8% more.** Removal doesn't pay on near-free cached reads, so only Clean ran there.
 - **A script that printed the data cost 21% more** in one cron pair, despite skipping half its checks. Scripts now print only a fingerprint. An earlier pair with that script saved 43%, so the variation is wide.
 - **The first chat pilot is not a fair measure of Clean.** It ran before Clean's fix for data mentioning a failure.
-- **A `tune` trial ran 27% cheaper in typical runs** ($0.00164 against $0.00224), but hadn't reached its keep-or-revert decision when the 15-minute test ended. That decision is not live-verified.
+- **A `tune` trial ran 27% cheaper in typical runs** on Nous ($0.00164 against $0.00224), but hadn't reached its decision when the 15-minute test ended. On Codex a trial did reach its decision: it reverted and restored the job's settings, because its 2 trial runs didn't show a saving beyond normal variation.
+- **Hand-offs cost more in both live tests.** The main model often wrote the helper's answer out itself anyway, even when it only got a preview. Hand-offs are now off by default, and they stop in a chat if an answer is retyped.
+- **Codex's cached reads cost a tenth of normal input,** so automatic removal didn't trigger there, and the Codex chat savings come from Clean alone.
 - **Re-read on its own shows no clear saving** beyond what Clean gives: median cost ratios of 0.77, 1.00 and 1.07 across 3 task types, at 3 pairs each.
 
 - **Crystallize's own tools used to cost every chat.** Its 4 tool definitions, about 3,300 characters, were sent on every AI call in every chat, even with Crystallize off. They're now left out unless Crystallize Chat is on in that chat, and where they're sent they count against its savings. This was found after the runs above, so those runs included them in both arms.
 - **A hand-off test couldn't run.** The Nous account ran out of credits (HTTP 402), so hand-offs remain untested live.
 
-Not measured live: other providers, hand-offs, Blind Taste Test, Model Auction, Rhythm, Runaway Brake on this version, context compression, and how a real user's work compares with these fixtures.
+Not measured live: providers other than Nous and Codex, Blind Taste Test, Model Auction, Rhythm, Runaway Brake on this version, context compression, and how a real user's work compares with these fixtures.
 
 Reproduce with `scripts/validation_whole_loop.py`, `scripts/validation_cron_pair.py` and `scripts/validation_cron_tune.py`.
 
