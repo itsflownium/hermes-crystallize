@@ -431,3 +431,33 @@ def test_own_tools_are_charged_to_a_chat_with_crystallize_on():
     hook = capture.make_post_api_request(SimpleNamespace(current_cron_execution=lambda: None))
     hook(session_id="on", usage={"prompt_tokens": 10})
     assert store.list_chat_savings("on")[0]["added_input_chars"] == capture._own_tool_chars() > 2000
+
+
+
+def test_a_trial_that_used_more_tokens_says_so(monkeypatch):
+    monkeypatch.setattr(history, "comparable_runs", lambda a, b: True)
+    monkeypatch.setattr(tuning.adaptive, "savings_evidence", lambda a, b: {"ok": False})
+    run = lambda tokens, output: SimpleNamespace(cost_usd=None, api_cost_usd=None, total_tokens=tokens, output_tokens=output,
+                                                 outcome="completed", session_id="s", steps=[], reasoning_tokens=None)
+    out = tuning.evaluate([run(100, 10), run(100, 10)], [run(120, 20), run(120, 20)], {"s": "answer"})
+    assert "fewer tokens" not in out["why"] and "cheaper" in out["why"]
+
+
+
+def test_hand_offs_stop_in_a_chat_where_an_answer_was_retyped(monkeypatch):
+    store.set_chat_enabled("s", True)
+    store.add_chat_event("s", turn_id="t1", kind="routed", status="accepted", helper_call=True, cheap_cost=0.004)
+    assert handoffs.unreused("s") == 1 and handoffs.unreused("s", "t1") == 0
+    monkeypatch.setattr(cs, "chosen_model", lambda: {"model": "m", "provider": "p"})
+    monkeypatch.setattr(cs, "_is_cheaper", lambda *a: True)
+    monkeypatch.setattr(cs, "_routing_pays", lambda *a: True)
+    assert cs.routing_context(session_id="s") is None
+    answer = json.loads(handoffs.execute(SimpleNamespace(), "Translate this.", "s", "t2"))
+    assert "retyped" not in answer["error"] and "wasn't reused" in answer["error"]
+
+
+def test_hand_offs_continue_when_answers_are_reused(monkeypatch):
+    store.set_chat_enabled("s", True)
+    store.add_chat_event("s", turn_id="t1", kind="routed", status="accepted", helper_call=True, cheap_cost=0.004)
+    store.add_chat_event("s", turn_id="t1", kind="routed_output", results=0, output_chars=5000)
+    assert handoffs.unreused("s") == 0

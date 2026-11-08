@@ -1,0 +1,177 @@
+{
+ "schema": 1,
+ "mode": "long",
+ "reread": false,
+ "model": "gpt-5.6-terra",
+ "provider": "openai-codex",
+ "requested_reasoning": "medium",
+ "seed": 1794104004,
+ "frozen_list_rates_per_token": {
+  "input": 2e-06,
+  "output": 1.2e-05,
+  "cache_read": 2.0000000000000002e-07,
+  "cache_write": 2.5e-06
+ },
+ "stopped": null,
+ "by_task": {
+  "working chat": {
+   "valid_pairs": 2,
+   "invalid_pairs": 0,
+   "median_cost_ratio_on_vs_off": 0.869484082923901,
+   "median_cost_ratio_excluding_reasoning_output": 0.8675073623211291,
+   "median_prompt_token_ratio": 0.8667600767870085,
+   "checks_passed_off": 2,
+   "checks_passed_on": 2
+  }
+ },
+ "pairs": [
+  {
+   "domain": "working chat",
+   "repeat": 0,
+   "order": [
+    "on",
+    "off"
+   ],
+   "valid": true,
+   "on": {
+    "on": true,
+    "ok": true,
+    "session": "local-b6e0f03fd9c175f5907817f07686dc100749275e4a72989b0dcbee05a64017bb",
+    "delta": {
+     "input_tokens": 21493,
+     "output_tokens": 842,
+     "cache_read_tokens": 238592,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 99,
+     "api_call_count": 16,
+     "prompt_tokens": 260085
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.10080839999999999,
+    "list_cost_without_reasoning_usd": 0.0996204,
+    "host_estimated_delta_usd": 0,
+    "recorded": {
+     "model": "gpt-5.6-terra",
+     "provider": "openai-codex",
+     "sent": "{\"other\":{},\"reasoning\":{\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "medium",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"}}}"
+    },
+    "auto_rent": {
+     "removed": 0,
+     "read_backs": 0,
+     "off": false
+    },
+    "answer_chars": 43
+   },
+   "off": {
+    "on": false,
+    "ok": true,
+    "session": "local-b4096df8dadcf394d89d98395e3331bc1eba8f8d2aeed031121f6c9a1eff62d9",
+    "delta": {
+     "input_tokens": 25448,
+     "output_tokens": 786,
+     "cache_read_tokens": 274432,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 67,
+     "api_call_count": 16,
+     "prompt_tokens": 299880
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.1152144,
+    "list_cost_without_reasoning_usd": 0.1144104,
+    "host_estimated_delta_usd": 0,
+    "recorded": {
+     "model": "gpt-5.6-terra",
+     "provider": "openai-codex",
+     "sent": "{\"other\":{},\"reasoning\":{\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "medium",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"}}}"
+    },
+    "auto_rent": null,
+    "answer_chars": 43
+   }
+  },
+  {
+   "domain": "working chat",
+   "repeat": 1,
+   "order": [
+    "off",
+    "on"
+   ],
+   "valid": true,
+   "off": {
+    "on": false,
+    "ok": true,
+    "session": "local-971a50257b0a81482004d9ec2e838676f462c801007c321d88f7460eb2b01182",
+    "delta": {
+     "input_tokens": 25351,
+     "output_tokens": 841,
+     "cache_read_tokens": 274432,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 120,
+     "api_call_count": 16,
+     "prompt_tokens": 299783
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.1156804,
+    "list_cost_without_reasoning_usd": 0.11424039999999999,
+    "host_estimated_delta_usd": 0,
+    "recorded": {
+     "model": "gpt-5.6-terra",
+     "provider": "openai-codex",
+     "sent": "{\"other\":{},\"reasoning\":{\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "medium",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"}}}"
+    },
+    "auto_rent": null,
+    "answer_chars": 42
+   },
+   "on": {
+    "on": true,
+    "ok": true,
+    "session": "local-43246629bc37a7cec6da17f9f9edcaa4cc06b3e3e166faaa53c79b0a963bbb0f",
+    "delta": {
+     "input_tokens": 21087,
+     "output_tokens": 838,
+     "cache_read_tokens": 238592,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 101,
+     "api_call_count": 16,
+     "prompt_tokens": 259679
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.09994839999999999,
+    "list_cost_without_reasoning_usd": 0.0987364,
+    "host_estimated_delta_usd": 0,
+    "recorded": {
+     "model": "gpt-5.6-terra",
+     "provider": "openai-codex",
+     "sent": "{\"other\":{},\"reasoning\":{\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "medium",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"reasoning\":{\"effort\":\"medium\",\"summary\":\"auto\"}}}"
+    },
+    "auto_rent": {
+     "removed": 0,
+     "read_backs": 0,
+     "off": false
+    },
+    "answer_chars": 45
+   }
+  }
+ ],
+ "limits": [
+  "Costs are list prices applied to recorded usage, not bills.",
+  "Fixtures are synthetic; JSON is pretty-printed like API output.",
+  "One provider and model. It does not extend to other routes.",
+  "The checks cover named facts, not overall answer quality."
+ ]
+}

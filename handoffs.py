@@ -233,6 +233,20 @@ def _write_evidence(result: Any, output: str) -> dict:
                                        "ok", "success", "written", "status", "warning", "_warning") if key in data}
 
 
+INLINE_OUTPUT_CHARS = 1500   # shorter answers come back whole, because retyping them costs little
+PREVIEW_CHARS = 500
+
+
+def unreused(session_id: str, turn_id: str = "") -> int:
+    """Helper answers from earlier messages that were never reused through their placeholder.
+    The main model then retyped them, so the hand-off cost more than doing it directly."""
+    rows = store.chat_events(session_id) if session_id else []
+    accepted = sum(1 for r in rows if r.get("helper_call") and r.get("kind") == "routed" and r.get("status") == "accepted"
+                   and (not turn_id or r.get("turn_id") != str(turn_id)))
+    reused = sum(1 for r in rows if r.get("kind") in ("routed_output", "routed_saved"))
+    return max(0, accepted - reused)
+
+
 def credit_output(result_id: str, session_id: str, turn_id: str, chars: int, *, kind: str = "routed_output") -> None:
     """Best-effort credit, independent of delivery, without duplicate savings."""
     from . import chat_savings as chat
@@ -338,6 +352,8 @@ def execute(ctx: Any, text: str, session_id: str, turn_id: str = "", *, input_fi
     except (ValueError, RuntimeError) as exc:
         return respond({"error": str(exc), "written": False})
     picked = chat.chosen_model()
+    if unreused(session_id, turn_id):
+        return respond({"error": "An earlier hand-off's answer wasn't reused, so hand-offs cost more than they saved in this chat. Do this task yourself."})
     if not picked.get("model") or not chat._is_cheaper(picked, session_id, "routed"):
         return respond({"error": "Choose a helper with a lower listed price before handing off work. Do this task yourself."})
     # A missing size estimate is deliberately conservative; it is not inferred
@@ -405,6 +421,14 @@ def execute(ctx: Any, text: str, session_id: str, turn_id: str = "", *, input_fi
         response.update(path=evidence.get("resolved_path") or save_to, written=True,
                         preview=output[:500], preview_truncated=len(output) > 500, write_result=evidence)
         credit_output(result_id, session_id, turn_id, len(output), kind="routed_saved")
+    elif len(output) > INLINE_OUTPUT_CHARS:
+        # Seeing the whole answer, the main model tends to write it out again, paying for it
+        # twice. A preview and the placeholder leave nothing to retype, and the full text is
+        # still one read away if it needs checking.
+        response.update(preview=output[:PREVIEW_CHARS], preview_truncated=True, output_chars=len(output),
+                        note=("Put the placeholder in your answer, or in a text field of a tool such as write_file, to "
+                              "deliver the full text without retyping it. Read it with crystal_full_result and this "
+                              "result_id if you need to check something."))
     else:
         response["output"] = output
     return respond(response)

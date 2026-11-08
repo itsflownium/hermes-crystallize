@@ -1,0 +1,222 @@
+{
+ "schema": 1,
+ "model": "gpt-5.6-luna",
+ "provider": "openai-codex",
+ "requested_reasoning": "medium",
+ "events": [
+  {
+   "changed_data_at": 1794105011.291847,
+   "tick": 3
+  }
+ ],
+ "draft": {
+  "ok": true,
+  "why": null,
+  "commands": [
+   "cat /var/folders/n7/90_0w18s7zlgmk6lvdyzpt8m0000gn/T/crystal-cron-31ce3p2p/status.json"
+  ],
+  "urls": [],
+  "left_out": [],
+  "complete": true,
+  "source_script": "crystallize-drafts/45c92776234b.py"
+ },
+ "blockers": [],
+ "attached_at": 1794104775.343425,
+ "normal": {
+  "before": [
+   {
+    "execution": "e53f6bb561614ecb9a8d1b181df23ef4",
+    "started": 1794104526.722251,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15229,
+    "output_tokens": 150,
+    "cache_read_tokens": 13696,
+    "reasoning_tokens": 72,
+    "cost_usd": 0.0,
+    "api_cost_usd": 0.0034997200000000004,
+    "cost_basis": "list price",
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "3ad5cd6d37d046e399795304a98f285b",
+    "started": 1794104646.014389,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15218,
+    "output_tokens": 135,
+    "cache_read_tokens": 13696,
+    "reasoning_tokens": 53,
+    "cost_usd": 0.0,
+    "api_cost_usd": 0.0034795200000000003,
+    "cost_basis": "list price",
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "e420ee52116b4e179ae443c46f1d24fd",
+    "started": 1794104766.727446,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 1539,
+    "output_tokens": 118,
+    "cache_read_tokens": 27392,
+    "reasoning_tokens": 39,
+    "cost_usd": 0.0,
+    "api_cost_usd": 0.00099724,
+    "cost_basis": "list price",
+    "requested_reasoning": "medium",
+    "comparable": true
+   }
+  ],
+  "after": [
+   {
+    "execution": "7b28659d7ac6405a834d64a841993bd9",
+    "started": 1794104886.393548,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15231,
+    "output_tokens": 114,
+    "cache_read_tokens": 13696,
+    "reasoning_tokens": 35,
+    "cost_usd": 0.0,
+    "api_cost_usd": 0.00345692,
+    "cost_basis": "list price",
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "1a5b8dafdb57471fbfe660c0c0f704fb",
+    "started": 1794105006.1663842,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15230,
+    "output_tokens": 113,
+    "cache_read_tokens": 13696,
+    "reasoning_tokens": 34,
+    "cost_usd": 0.0,
+    "api_cost_usd": 0.00345552,
+    "cost_basis": "list price",
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "0810e672e5564f559de860fc6167d091",
+    "started": 1794105126.5155141,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15232,
+    "output_tokens": 131,
+    "cache_read_tokens": 13696,
+    "reasoning_tokens": 51,
+    "cost_usd": 0.0,
+    "api_cost_usd": 0.0034775200000000004,
+    "cost_basis": "list price",
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "5ce2b5b0d7ca40d08d3734268a6fe248",
+    "started": 1794105247.625976,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15185,
+    "output_tokens": 128,
+    "cache_read_tokens": 13696,
+    "reasoning_tokens": 52,
+    "cost_usd": 0.0,
+    "api_cost_usd": 0.00346452,
+    "cost_basis": "list price",
+    "requested_reasoning": "medium",
+    "comparable": true
+   }
+  ]
+ },
+ "attached": {
+  "before": [
+   {
+    "execution": "07e0fa39e2fb4f9c98ccc4e116714846",
+    "started": 1794104527.601042,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15252,
+    "output_tokens": 135,
+    "cache_read_tokens": 13696,
+    "reasoning_tokens": 56,
+    "cost_usd": 0.0,
+    "api_cost_usd": 0.0034863200000000002,
+    "cost_basis": "list price",
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "c983b76ad1dc4f98b33d996fe04b154c",
+    "started": 1794104646.636645,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15236,
+    "output_tokens": 139,
+    "cache_read_tokens": 13696,
+    "reasoning_tokens": 58,
+    "cost_usd": 0.0,
+    "api_cost_usd": 0.0034879200000000003,
+    "cost_basis": "list price",
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "2abeb9b0169d4520b2924102cf0aea94",
+    "started": 1794104766.72718,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 1555,
+    "output_tokens": 168,
+    "cache_read_tokens": 27392,
+    "reasoning_tokens": 87,
+    "cost_usd": 0.0,
+    "api_cost_usd": 0.00106044,
+    "cost_basis": "list price",
+    "requested_reasoning": "medium",
+    "comparable": true
+   }
+  ],
+  "after": [
+   {
+    "execution": "ab95005131994e398e9cdc2a0c18e027",
+    "started": 1794104886.622981,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15418,
+    "output_tokens": 153,
+    "cache_read_tokens": 13824,
+    "reasoning_tokens": 71,
+    "cost_usd": 0.0,
+    "api_cost_usd": 0.00354368,
+    "cost_basis": "list price",
+    "requested_reasoning": "medium",
+    "comparable": true
+   },
+   {
+    "execution": "1d193431114e420195f6c4d98e8f0c1e",
+    "started": 1794105127.608319,
+    "outcome": "completed",
+    "api_calls": 2,
+    "input_tokens": 15538,
+    "output_tokens": 96,
+    "cache_read_tokens": 14208,
+    "reasoning_tokens": 22,
+    "cost_usd": 0.0,
+    "api_cost_usd": 0.0035069600000000004,
+    "cost_basis": "list price",
+    "requested_reasoning": "medium",
+    "comparable": true
+   }
+  ]
+ },
+ "limits": [
+  "Costs are recorded host estimates, not bills.",
+  "One provider and model, on a small synthetic status file.",
+  "How often a real job's data stays unchanged decides the saving."
+ ]
+}

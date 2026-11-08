@@ -123,7 +123,8 @@ def test_self_contained_public_text_helper_still_works_with_unknown_prices(world
     ctx = PublicContext()
     result = json.loads(handoffs.execute(ctx, "Translate this supplied source text: bonjour.", "owner", "text",
                                         subtask=True, expected_output_tokens=900))
-    assert result["output"] == ctx.text and len(ctx.calls) == 1
+    full = result.get("output") or cs._load_full(result["full_result_id"], "owner")
+    assert full == ctx.text and len(ctx.calls) == 1
     assert result["completion"]["limit_requested_not_guaranteed"]
     assert set(ctx.calls[0][1]) == {"task", "timeout", "max_tokens", "purpose"}
     assert store.list_chat_savings("owner")[0]["cheap_cost"] == 0.003

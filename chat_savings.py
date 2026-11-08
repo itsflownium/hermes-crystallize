@@ -216,9 +216,13 @@ def routing_context(session_id: str = "", parent_session_id: str = "", **_: Any)
     """The note that lets the main model route work. Only in chats with this on and a model picked."""
     if parent_session_id or not session_id or not store.chat_enabled(session_id):
         return None
+    from . import handoffs
+
     picked = chosen_model()
     if not picked["model"] or not _is_cheaper(picked, session_id, "routed") or not _routing_pays(picked, session_id):
         return None
+    if handoffs.unreused(session_id):
+        return None  # an earlier hand-off was retyped, so they cost this chat more than they saved
     try:  # the note itself is read at the main model's price
         store.add_chat_event(session_id, kind="routing_note", results=0, added_input_chars=len(ROUTING_NOTE))
     except Exception:  # noqa: BLE001
