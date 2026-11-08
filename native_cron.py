@@ -206,6 +206,9 @@ def apply(job_id, source_script, *, mode="monitor", snapshot_only=False, verbati
             raise NativeCronError("The host did not retain the native-source fields. Recovery is pending; refresh before retrying.")
         record.update(status="applied", applied_at=time.time())
         store.set_setting(_KEY + job_id, record)
+        from . import receipts
+        receipts.record_campaign(job_id, {"kind": "native_source", "campaign_id": f"native:{job_id}:{record['applied_at']}",
+                                          "started_at": record["applied_at"], "activated_at": record["applied_at"], "status": "live"})
         return {**status(job_id), "applied": True, "message": "Attached the reviewed native source through Hermes. Model and reasoning fields were not edited."}
 
 
@@ -259,5 +262,9 @@ def undo(job_id, *, expected_config_fingerprint, confirmed=False):
         if any(after.get(key) != value for key, value in original.items()):
             raise NativeCronError("The host did not confirm native-source Undo. Recovery was retained.")
         state.update(status="undone", undone_at=time.time())
+        if state.get("applied_at"):
+            from . import receipts
+            receipts.record_campaign(job_id, {"kind": "native_source", "campaign_id": f"native:{job_id}:{state['applied_at']}",
+                                              "started_at": state["applied_at"], "ended_at": state["undone_at"], "status": "undone"})
         store.set_setting(_KEY + job_id, state)
         return {**status(job_id), "undone": True, "message": "Restored the native-source fields; other job settings were preserved."}
