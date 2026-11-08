@@ -6,7 +6,7 @@ not themselves establish an upstream PR, catalog listing, maintainer approval, o
 marketplace compliance. Independently checked publication/review status is recorded
 separately; only a maintainer-merged upstream catalog entry establishes listing.
 
-Pin: `bc48bed320375434c5a98578169cc6960670a2d6` in https://github.com/itsflownium/hermes-crystallize; version `0.6.0`;
+Pin: `d8bead3c926fac78f88f6782a1aa713b28b67fe0` in https://github.com/itsflownium/hermes-crystallize; version `0.6.0`;
 Hermes floor `>=0.22.7`. The pin is an existing plugin feature commit;
 the later catalog-only bundle commit must not replace it with a self-reference.
 

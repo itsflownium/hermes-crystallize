@@ -1,6 +1,6 @@
 {
   "source_kind": "hermes_plugins_validate",
-  "pinned_commit": "bc48bed320375434c5a98578169cc6960670a2d6",
+  "pinned_commit": "d8bead3c926fac78f88f6782a1aa713b28b67fe0",
   "host_source_commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
   "ok": true,
   "checks_passed": 16,

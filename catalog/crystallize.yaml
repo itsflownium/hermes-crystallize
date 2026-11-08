@@ -1,7 +1,7 @@
 # Submission bundle only. Copy into hermes-agent/plugin-catalog/ in a maintainer-reviewed PR.
 name: "crystallize"
 repo: "https://github.com/itsflownium/hermes-crystallize"
-sha: "bc48bed320375434c5a98578169cc6960670a2d6"
+sha: "d8bead3c926fac78f88f6782a1aa713b28b67fe0"
 description: "Spend less on repeated work in Hermes chats and cron jobs, without making your model think less."
 maintainer: "itsflownium"
 tier: "community"
@@ -22,7 +22,7 @@ capabilities:
   provides_middleware: ["llm_request", "tool_execution"]
   requires_env: []
 screenshots:
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/bc48bed320375434c5a98578169cc6960670a2d6/assets/review/panel-cron-and-chat.png"
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/bc48bed320375434c5a98578169cc6960670a2d6/assets/review/panel-job-details.png"
-docs_url: "https://github.com/itsflownium/hermes-crystallize/blob/bc48bed320375434c5a98578169cc6960670a2d6/README.md"
-image: "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/bc48bed320375434c5a98578169cc6960670a2d6/assets/social-preview.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/d8bead3c926fac78f88f6782a1aa713b28b67fe0/assets/review/panel-cron-and-chat.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/d8bead3c926fac78f88f6782a1aa713b28b67fe0/assets/review/panel-job-details.png"
+docs_url: "https://github.com/itsflownium/hermes-crystallize/blob/d8bead3c926fac78f88f6782a1aa713b28b67fe0/README.md"
+image: "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/d8bead3c926fac78f88f6782a1aa713b28b67fe0/assets/social-preview.png"
