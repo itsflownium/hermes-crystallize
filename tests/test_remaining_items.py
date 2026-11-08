@@ -226,3 +226,20 @@ def test_checks_are_counted_from_hermes_cron_records(tmp_path):
     from datetime import datetime
     since = datetime.fromisoformat("2026-11-07T10:01:00+00:00").timestamp()
     assert starter_script.checks_since("j1", since) == 1
+
+
+
+def test_a_changed_timeout_setting_doesnt_hide_a_steady_read(job, monkeypatch):
+    runs = [SimpleNamespace(steps=[SimpleNamespace(tool_name="terminal", args={"command": "cat a.json", **({"timeout": 30} if i % 2 else {})})])
+            for i in range(3)]
+    monkeypatch.setattr(history, "runs_for_job", lambda ref, only_usable=False: runs)
+    _steps(monkeypatch, _step("terminal", {"command": "cat a.json", "timeout": 30}, kind="varies"))
+    out = starter_script.plan("j1")
+    assert out["ok"] and out["commands"] == ["cat a.json"] and out["complete"]
+
+
+def test_a_command_that_really_changes_is_still_left_out(job, monkeypatch):
+    runs = [SimpleNamespace(steps=[SimpleNamespace(tool_name="terminal", args={"command": f"cat day{i}.json"})]) for i in range(3)]
+    monkeypatch.setattr(history, "runs_for_job", lambda ref, only_usable=False: runs)
+    _steps(monkeypatch, _step("terminal", {"command": "cat day2.json"}, kind="varies"))
+    assert not starter_script.plan("j1")["ok"]

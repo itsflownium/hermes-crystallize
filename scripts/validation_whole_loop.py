@@ -233,6 +233,31 @@ def summarise(pairs):
     return out
 
 
+
+def temporary_rate_cards(routes, catalog_provider):
+    """Save rate cards for these exact routes from a public catalog's list prices, and return a
+    function that removes them. For routes such as a subscription that publish no price list."""
+    from crystallize import price_discovery, public_pricing
+
+    catalog = price_discovery.parse_catalog(price_discovery._fetch_json(price_discovery.CATALOG_URL), catalog_provider)
+    saved = []
+    existing = {(card["provider"], card["model"]) for card in public_pricing.list_rate_cards()}
+    for provider, model in routes:
+        if (provider, model) in existing:
+            continue  # someone else's card: use it, and leave it in place afterwards
+        found = catalog.get(model)
+        if not found:
+            raise SystemExit(f"No list price for {model} under {catalog_provider}.")
+        public_pricing.save_rate_card({"provider": provider, "model": model, "currency": "USD", "unit": "per_token",
+                                       **{k: found[k] for k in ("input", "output", "cache_read", "cache_write")},
+                                       "request_cost": 0, "tiers_known": True, "source_url": price_discovery.CATALOG_URL})
+        saved.append((provider, model))
+
+    def remove():
+        for provider, model in saved:
+            public_pricing.delete_rate_card(provider, model)
+    return remove
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true", help="Make paid calls")
@@ -251,6 +276,8 @@ def main():
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--stop-recording", action="store_true", help="Turn off chat settings recording when done; leave it on while other tests run")
     parser.add_argument("--report", required=True)
+    parser.add_argument("--prices-from", help="Price these routes with this catalog provider's list prices, for a subscription route with no price list")
+    parser.add_argument("--helper", help="provider/model for the helper in hand-off mode, priced the same way")
     args = parser.parse_args()
     report_path = Path(args.report)
     if report_path.exists():
@@ -260,11 +287,19 @@ def main():
     if not args.run:
         print(json.dumps({"planned_sessions": 2 * args.pairs * len(chosen), "tasks": chosen}))
         return
-    from crystallize import price_discovery, request_settings, store
+    from crystallize import chat_savings, modelinfo, price_discovery, request_settings, store
 
     store.set_setting(request_settings.RECORD_CHATS, True)
+    remove_cards = lambda: None
+    helper = args.helper.split("/", 1) if args.helper else None
+    if args.prices_from:
+        remove_cards = temporary_rate_cards([(args.provider, args.model)] + ([tuple(helper)] if helper else []), args.prices_from)
+    if helper:
+        chat_savings.set_model(*helper)
+    import atexit
+    atexit.register(remove_cards)  # also when interrupted, so no temporary card is left behind
     price_discovery.refresh(args.provider)
-    rates = price_discovery.rates(args.model, args.provider)
+    rates = modelinfo.token_prices(args.model, args.provider) or price_discovery.rates(args.model, args.provider)
     seed = args.seed if args.seed is not None else int(time.time())
     rng = random.Random(seed)
     deadline = time.time() + args.minutes * 60
@@ -294,6 +329,12 @@ def main():
               "frozen_list_rates_per_token": rates, "stopped": stopped, "by_task": summarise(pairs), "pairs": pairs,
               "limits": ["Costs are list prices applied to recorded usage, not bills.", "Fixtures are synthetic; JSON is pretty-printed like API output.",
                          "One provider and model. It does not extend to other routes.", "The checks cover named facts, not overall answer quality."]}
+    remove_cards()
+    if helper:
+        import subprocess as _subprocess
+        from crystallize import lifecycle
+        _subprocess.run([*lifecycle._hermes_cmd(), "config", "set", "--force", f"auxiliary.{chat_savings.TASK}",
+                         json.dumps({"provider": "", "model": ""})], env=lifecycle.hermes_env(), capture_output=True)
     if args.stop_recording:
         store.set_setting(request_settings.RECORD_CHATS, False)
     report_path.write_text(json.dumps(result, indent=1))

@@ -68,6 +68,18 @@ def _urls(args: Any) -> list[str]:
     return [u for u in found or [] if isinstance(u, str) and u.startswith("https://")]
 
 
+def _steady_commands(runs: list[Any]) -> set[str]:
+    """Commands every run used, judged by the command alone. A model may add an optional setting
+    such as a timeout on some runs, which doesn't change what the command reads."""
+    seen = None
+    for run in runs:
+        found = {step.args.get("command") for step in getattr(run, "steps", None) or []
+                 if getattr(step, "tool_name", None) in ("terminal", "shell") and isinstance(step.args, dict)
+                 and isinstance(step.args.get("command"), str)}
+        seen = found if seen is None else seen & found
+    return seen or set()
+
+
 def plan(job_id: str) -> dict[str, Any]:
     """Which of this job's recorded steps a script can cover, and which it can't."""
     runs = history.runs_for_job(job_id, only_usable=True)
@@ -78,10 +90,14 @@ def plan(job_id: str) -> dict[str, Any]:
     commands: list[str] = []
     urls: list[str] = []
     left_out: list[dict[str, str]] = []
+    steady = _steady_commands(runs)
     for step in analyze.analyze_runs(runs, analyze.job_prompt(job_id)).steps:
         args, tool = step.args, step.tool_name
         unsafe = analyze.observation_safety_error(tool, args)
-        if step.kind != "fixed":
+        command = args.get("command") if isinstance(args, dict) else None
+        if step.kind != "fixed" and tool in ("terminal", "shell") and command in steady and not unsafe:
+            commands.append(command)  # only a setting such as a timeout changed, not what it reads
+        elif step.kind != "fixed":
             left_out.append({"tool": tool, "why": "its input changes between runs"})
         elif unsafe:
             left_out.append({"tool": tool, "why": unsafe})

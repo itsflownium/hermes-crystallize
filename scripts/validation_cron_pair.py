@@ -49,8 +49,34 @@ def _row(run, history):
     return {"execution": run.execution_id, "started": run.started_ts, "outcome": run.outcome, "api_calls": run.api_calls,
             "input_tokens": run.input_tokens, "output_tokens": run.output_tokens, "cache_read_tokens": run.cache_read_tokens,
             "reasoning_tokens": run.reasoning_tokens, "cost_usd": run.cost_usd, "api_cost_usd": run.api_cost_usd,
+            "cost_basis": "host" if run.cost_usd else "list price",
             "requested_reasoning": run.reasoning_effort, "comparable": history.comparison_identity(run) is not None}
 
+
+
+def temporary_rate_cards(routes, catalog_provider):
+    """Save rate cards for these exact routes from a public catalog's list prices, and return a
+    function that removes them. For routes such as a subscription that publish no price list."""
+    from crystallize import price_discovery, public_pricing
+
+    catalog = price_discovery.parse_catalog(price_discovery._fetch_json(price_discovery.CATALOG_URL), catalog_provider)
+    saved = []
+    existing = {(card["provider"], card["model"]) for card in public_pricing.list_rate_cards()}
+    for provider, model in routes:
+        if (provider, model) in existing:
+            continue  # someone else's card: use it, and leave it in place afterwards
+        found = catalog.get(model)
+        if not found:
+            raise SystemExit(f"No list price for {model} under {catalog_provider}.")
+        public_pricing.save_rate_card({"provider": provider, "model": model, "currency": "USD", "unit": "per_token",
+                                       **{k: found[k] for k in ("input", "output", "cache_read", "cache_write")},
+                                       "request_cost": 0, "tiers_known": True, "source_url": price_discovery.CATALOG_URL})
+        saved.append((provider, model))
+
+    def remove():
+        for provider, model in saved:
+            public_pricing.delete_rate_card(provider, model)
+    return remove
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -61,6 +87,8 @@ def main() -> None:
     parser.add_argument("--minutes", type=float, default=15)
     parser.add_argument("--after-ticks", type=int, default=4)
     parser.add_argument("--report", required=True)
+    parser.add_argument("--prices-from", help="Price these routes with this catalog provider's list prices, for a subscription route with no price list")
+    parser.add_argument("--helper", help="provider/model for the helper in hand-off mode, priced the same way")
     args = parser.parse_args()
     report = Path(args.report)
     if report.exists():
@@ -70,6 +98,7 @@ def main() -> None:
         return
     from crystallize import history, lifecycle, native_cron, starter_script
 
+    remove_cards = temporary_rate_cards([(args.provider, args.model)], args.prices_from) if args.prices_from else (lambda: None)
     deadline = time.time() + args.minutes * 60
     result = {"schema": 1, "model": args.model, "provider": args.provider, "requested_reasoning": args.reasoning, "events": []}
     with tempfile.TemporaryDirectory(prefix="crystal-cron-") as folder:
@@ -121,6 +150,7 @@ def main() -> None:
             report.with_suffix(".partial").unlink(missing_ok=True)
             result["limits"] = ["Costs are recorded host estimates, not bills.", "One provider and model, on a small synthetic status file.",
                                 "How often a real job's data stays unchanged decides the saving."]
+            remove_cards()
             report.write_text(json.dumps(result, indent=1))
             print(json.dumps({k: result.get(k) for k in ("stopped", "blockers", "cleanup_notes")}))
 
