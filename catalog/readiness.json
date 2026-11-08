@@ -6,7 +6,7 @@
   "owner_submission_approval": null,
   "release_ready_meaning": "Technical checks do not establish live effectiveness, installed-build activation or owner approval to submit.",
   "catalog_ready_meaning": "Human admission/listing is not established by local technical checks.",
-  "pinned_commit": "ab986e77135c7f859f6a29050da5c1c1c83cc173",
+  "pinned_commit": "74025419e0f85c8c076a294836a7c56284afb61b",
   "pinned_manifest_version": "0.6.0",
   "literal_capabilities_match_manifest": true,
   "source_analysis": {
@@ -137,7 +137,7 @@
         },
         {
           "file": "price_discovery.py",
-          "line": 112,
+          "line": 117,
           "module": "providers",
           "name": "get_provider_profile",
           "public": true
@@ -151,7 +151,7 @@
         },
         {
           "file": "public_pricing.py",
-          "line": 353,
+          "line": 355,
           "module": "providers",
           "name": "get_provider_profile",
           "public": true
@@ -288,7 +288,7 @@
       },
       {
         "file": "price_discovery.py",
-        "line": 112,
+        "line": 117,
         "module": "providers",
         "name": "get_provider_profile",
         "public": true
@@ -302,7 +302,7 @@
       },
       {
         "file": "public_pricing.py",
-        "line": 353,
+        "line": 355,
         "module": "providers",
         "name": "get_provider_profile",
         "public": true
@@ -343,7 +343,7 @@
     "host_validation": {
       "status": "operator_supplied_exact_pin_host_validation",
       "ok": true,
-      "sha256": "d1f4d9f543be0fff7b6c0ba98c7d7578a03911a1721dd94f019621ef740450f5",
+      "sha256": "6197a0c8b21d11a4052efeb4b9d03390218d2cac8dcbc1f81a4ebc75a69c5022",
       "checks_passed": 16,
       "host_source_commit": "2bd378ed1b8d6bf2192cb26e0a55ff3091e6bd19",
       "warnings": [],
@@ -354,8 +354,8 @@
   "ui_evidence": {
     "status": "offline_fixture_captures",
     "screenshots": [
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/ab986e77135c7f859f6a29050da5c1c1c83cc173/assets/review/panel-cron-and-chat.png",
-      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/ab986e77135c7f859f6a29050da5c1c1c83cc173/assets/review/panel-job-details.png"
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/74025419e0f85c8c076a294836a7c56284afb61b/assets/review/panel-cron-and-chat.png",
+      "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/74025419e0f85c8c076a294836a7c56284afb61b/assets/review/panel-job-details.png"
     ],
     "live_proof": false
   },
