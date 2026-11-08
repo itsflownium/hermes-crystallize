@@ -246,6 +246,8 @@ def _discovered_card(model: str, provider: str, base_url: Optional[str]) -> Opti
     card.update({key: found[key] for key in _BUCKETS})
     card["request_cost"] = found.get("request_cost", 0.0)
     card["cache_rates_assumed"] = bool(found.get("cache_rates_assumed"))
+    if found.get("list_price_of"):
+        card["list_price_of"] = found["list_price_of"]  # a subscription route priced at the vendor's API list price
     return card
 
 

@@ -202,7 +202,9 @@ hermes crystal rate-card --file exact-route-rates.json --confirm
 Crystallize looks up list prices for your exact provider and model from the route's own public
 model list, then from a public catalog ([models.dev](https://models.dev)). It uses a plain request
 with no credentials or chat data, caches for a day, and can be turned off with
-`hermes crystal prices --lookup off`. With no known price, a paid helper stays off unless you allow
+`hermes crystal prices --lookup off`. Codex (`openai-codex`) bills by subscription and publishes
+no per-token price, so it uses the same model's OpenAI API list price; that lets automatic Context
+Rent run there with no setup, but it isn't what your plan charges. With no known price, a paid helper stays off unless you allow
 it with `hermes crystal prices --allow-unpriced-helper on`.
 
 Rate cards are explicit user estimates and always win over a list price. They use declared currency/units and exact
