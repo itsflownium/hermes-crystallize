@@ -83,8 +83,45 @@ def parse_endpoint(data: Any) -> dict[str, dict[str, Any]]:
                            price.get("input_cache_write", price.get("cache_write", price.get("cache_creation"))),
                            price.get("request"))
             if entry:
+                windows = _windows(price)
+                if windows:
+                    entry["windows"] = windows
                 models[row["id"]] = entry
     return models
+
+
+def _windows(price: dict[str, Any]) -> list[dict[str, Any]]:
+    """Time-of-day prices, such as a cheaper overnight rate. Each has a UTC start and end as HHMM;
+    an end at or before the start wraps past midnight. Unreadable windows are left out."""
+    found = []
+    for row in price.get("overrides") or [] if isinstance(price.get("overrides"), list) else []:
+        if not isinstance(row, dict):
+            continue
+        start, end = row.get("utc_start"), row.get("utc_end")
+        if not all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 2400 and v % 100 < 60 for v in (start, end)):
+            continue
+        entry = _entry(row.get("prompt", price.get("prompt")), row.get("completion", price.get("completion")),
+                       row.get("input_cache_read", price.get("input_cache_read", price.get("cache_read"))),
+                       row.get("input_cache_write", price.get("input_cache_write", price.get("cache_write"))),
+                       row.get("request", price.get("request")))
+        if entry:
+            found.append({"utc_start": start, "utc_end": end, **entry})
+    return found
+
+
+def _at(entry: dict[str, Any], when: float) -> dict[str, Any]:
+    """The price in force at this moment."""
+    windows = entry.get("windows") or []
+    stamp = time.gmtime(when)
+    now = stamp.tm_hour * 100 + stamp.tm_min
+    base = {key: value for key, value in entry.items() if key != "windows"}
+    for window in windows:
+        start, end = window["utc_start"] % 2400, window["utc_end"] % 2400
+        inside = start <= now < end if start < end else (now >= start or now < end)
+        if inside:
+            return {**base, **{key: value for key, value in window.items() if key not in ("utc_start", "utc_end")},
+                    "time_of_day_price": True}
+    return base
 
 
 def parse_catalog(data: Any, provider: str) -> dict[str, dict[str, Any]]:
@@ -211,9 +248,11 @@ def _refresh_in_background(key: str, provider: str, base_url: Optional[str], hom
     threading.Thread(target=contextvars.copy_context().run, args=(work,), name="crystallize-prices", daemon=True).start()
 
 
-def rates(model: Optional[str], provider: Optional[str], base_url: Optional[str] = None) -> Optional[dict[str, Any]]:
+def rates(model: Optional[str], provider: Optional[str], base_url: Optional[str] = None,
+          when: Optional[float] = None, fetch: bool = True) -> Optional[dict[str, Any]]:
     """Per-token rates for this exact route, or None. Never waits on the network: a chat's hooks
-    call this, so the first look starts a fetch and the prices apply as soon as it finishes."""
+    call this, so the first look starts a fetch and the prices apply as soon as it finishes. With
+    fetch off it only reads prices already saved."""
     if not model or not provider or not enabled():
         return None
     key = f"{provider}|{base_url or ''}"
@@ -226,7 +265,7 @@ def rates(model: Optional[str], provider: Optional[str], base_url: Optional[str]
                 _memory[key] = saved
     now = time.time()
     stale = saved is None or now - saved.get("fetched_at", 0) > CACHE_SECONDS
-    if stale and now >= (saved or {}).get("retry_at", 0):
+    if fetch and stale and now >= (saved or {}).get("retry_at", 0):
         _refresh_in_background(key, provider, base_url, history._hermes_home)
     entry = (saved or {}).get("models", {}).get(model)
-    return dict(entry) if isinstance(entry, dict) else None
+    return _at(entry, now if when is None else when) if isinstance(entry, dict) else None

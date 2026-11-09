@@ -1,0 +1,177 @@
+{
+ "schema": 1,
+ "mode": "long",
+ "reread": false,
+ "model": "stepfun/step-3.7-flash",
+ "provider": "nous",
+ "requested_reasoning": "low",
+ "seed": 1794201509,
+ "frozen_list_rates_per_token": {
+  "input": 2e-07,
+  "output": 1.15e-06,
+  "cache_read": 4e-08,
+  "cache_write": 2e-07
+ },
+ "stopped": null,
+ "by_task": {
+  "working chat": {
+   "valid_pairs": 1,
+   "invalid_pairs": 1,
+   "median_cost_ratio_on_vs_off": 0.866613727451214,
+   "median_cost_ratio_excluding_reasoning_output": 0.866613727451214,
+   "median_prompt_token_ratio": 0.6334957177653807,
+   "checks_passed_off": 1,
+   "checks_passed_on": 1
+  }
+ },
+ "pairs": [
+  {
+   "domain": "working chat",
+   "repeat": 0,
+   "order": [
+    "on",
+    "off"
+   ],
+   "valid": true,
+   "on": {
+    "on": true,
+    "ok": true,
+    "session": "local-ca80be6b6ca742deeb72b039de7b67c15e403bd085c5c83d8c7ddf7847b1de3d",
+    "delta": {
+     "input_tokens": 47327,
+     "output_tokens": 1547,
+     "cache_read_tokens": 130048,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 0,
+     "api_call_count": 16,
+     "prompt_tokens": 177375
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.016446370000000002,
+    "list_cost_without_reasoning_usd": 0.016446370000000002,
+    "host_estimated_delta_usd": 0.016446370000000002,
+    "recorded": {
+     "model": "stepfun/step-3.7-flash",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "low",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "auto_rent": {
+     "removed": 5,
+     "read_backs": 0,
+     "off": false
+    },
+    "answer_chars": 41
+   },
+   "off": {
+    "on": false,
+    "ok": true,
+    "session": "local-e3a1177911d7b22eb7c92e3428e707f5ee7f551ed8a8428953183019be6ec258",
+    "delta": {
+     "input_tokens": 35258,
+     "output_tokens": 1858,
+     "cache_read_tokens": 244736,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 0,
+     "api_call_count": 15,
+     "prompt_tokens": 279994
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.01897774,
+    "list_cost_without_reasoning_usd": 0.01897774,
+    "host_estimated_delta_usd": 0.018977740000000003,
+    "recorded": {
+     "model": "stepfun/step-3.7-flash",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "low",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "auto_rent": null,
+    "answer_chars": 50
+   }
+  },
+  {
+   "domain": "working chat",
+   "repeat": 1,
+   "order": [
+    "off",
+    "on"
+   ],
+   "valid": false,
+   "off": {
+    "on": false,
+    "ok": true,
+    "session": "local-072051a68247803abccd395ff9fc676d37178296d41186b77f1bd4508729ebbb",
+    "delta": {
+     "input_tokens": 35354,
+     "output_tokens": 1626,
+     "cache_read_tokens": 243968,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 0,
+     "api_call_count": 15,
+     "prompt_tokens": 279322
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.01869942,
+    "list_cost_without_reasoning_usd": 0.01869942,
+    "host_estimated_delta_usd": 0.018699420000000005,
+    "recorded": {
+     "model": "stepfun/step-3.7-flash",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "low",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "auto_rent": null,
+    "answer_chars": 41
+   },
+   "on": {
+    "on": true,
+    "ok": false,
+    "session": "local-a8a5d6f6c762932232d3d0b13e94fd396e878e78a2b82827e47d983084a4124f",
+    "delta": {
+     "input_tokens": 40417,
+     "output_tokens": 2031,
+     "cache_read_tokens": 155136,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 0,
+     "api_call_count": 17,
+     "prompt_tokens": 195553
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.01662449,
+    "list_cost_without_reasoning_usd": 0.01662449,
+    "host_estimated_delta_usd": 0.01662449,
+    "recorded": {
+     "model": "stepfun/step-3.7-flash",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "low",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "auto_rent": {
+     "removed": 5,
+     "read_backs": 2,
+     "off": false
+    },
+    "answer_chars": 71
+   }
+  }
+ ],
+ "limits": [
+  "Costs are list prices applied to recorded usage, not bills.",
+  "Fixtures are synthetic; JSON is pretty-printed like API output.",
+  "One provider and model. It does not extend to other routes.",
+  "The checks cover named facts, not overall answer quality."
+ ]
+}

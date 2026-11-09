@@ -187,3 +187,26 @@ def test_concurrent_manual_entries_do_not_lose_routes(world):
         thread.join(5)
     assert not errors and all(not thread.is_alive() for thread in threads)
     assert {entry["model"] for entry in store.get_setting("additional_model_routes")} == {f"model-{i}" for i in range(8)}
+
+
+def test_known_prices_show_without_fetching(world, monkeypatch):
+    from crystallize import price_discovery as pd, public_pricing
+
+    world.profiles.append(profile(static_models=("listed", "unlisted", "carded")))
+    store.set_setting(pd.SETTING, True)
+    monkeypatch.setattr(pd, "_fetch_json", lambda url: pytest.fail("the picker fetched prices"))
+    monkeypatch.setitem(pd._memory, "public-cloud|", {"fetched_at": 0, "models": {
+        "listed": {"input": 1e-7, "output": 5e-7, "cache_read": 1e-8, "cache_write": 1e-7, "request_cost": 0.0}}})
+    public_pricing.save_rate_card({"provider": "public-cloud", "model": "carded", "currency": "USD", "unit": "per_token",
+                                   "input": 2e-6, "output": 8e-6, "cache_read": 2e-7, "cache_write": 2e-6,
+                                   "request_cost": 0, "tiers_known": True})
+    try:
+        actual = rows(models.inventory())
+        assert actual["public-cloud", "listed"]["input_per_million"] == pytest.approx(0.1)
+        assert actual["public-cloud", "listed"]["price_source"] == "list_price"
+        assert actual["public-cloud", "carded"]["output_per_million"] == pytest.approx(8.0)
+        assert actual["public-cloud", "carded"]["price_source"] == "your_rate_card"
+        assert actual["public-cloud", "unlisted"]["input_per_million"] is None
+    finally:
+        public_pricing.delete_rate_card("public-cloud", "carded")
+        store.set_setting(pd.SETTING, False)
