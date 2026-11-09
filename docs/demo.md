@@ -2,9 +2,9 @@
 
 ## Recorded demo
 
-[`assets/demo/crystallize-demo.mp4`](../assets/demo/crystallize-demo.mp4) (3 min 16 s) was recorded live in Hermes Desktop
+[`assets/demo/crystallize-demo.mp4`](../assets/demo/crystallize-demo.mp4) (3 min 32 s, narrated) was recorded live in Hermes Desktop
 (the Webapp, v0.23.0) on Nous Portal on 9 November 2026. Nothing in it is mocked: the cron job, chat and
-panel figures are real runs, sped up where the AI was working.
+panel figures are real runs, sped up where the AI was working. The voice-over is macOS text to speech.
 
 | What | Route | Result |
 |---|---|---|
