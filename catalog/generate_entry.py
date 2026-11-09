@@ -245,9 +245,12 @@ def screenshot_urls(tree: GitTree, repo_url: str, paths: list[str]) -> list[str]
     return urls
 
 
+DESCRIPTION = ("Spend less on repeated work in Hermes chats and cron jobs, without making your model think less: trims repeated context and tool output in chats, and lets a cron job skip its AI run when its input has not changed, with local receipts showing what each change saved. Disclosure — reads Hermes session costs (state.db), cron outcomes and job definitions (cron/executions.db, cron/jobs.json) and your config and rate cards; looks up public model prices from the active route's /models endpoint and models.dev once a day with no credentials or chat data (off with hermes crystal prices --lookup off); the optional helper, compare and check features make paid model calls through your own Hermes route; cron tuning, promote and undo run hermes cron CLI commands that edit the chosen job, and approved snapshot scripts are copied under scripts/crystallize-native/; stores captured tool results, cache entries and receipts in its plugin-data folder; no telemetry, no credential reads, no self-update.")
+
+
 def build_entry(manifest: dict[str, Any], sha: str, repo_url: str, analysis: dict[str, Any]) -> dict[str, Any]:
     entry = {"name": manifest["name"], "repo": _repo_url(repo_url), "sha": sha,
-             "description": "Spend less on repeated work in Hermes chats and cron jobs, without making your model think less.",
+             "description": DESCRIPTION,
              "maintainer": manifest["author"], "tier": "community", "category": "automation",
              "requires_hermes": manifest["requires_hermes"], "version": manifest["version"],
              "title": "Crystallize", "readme": True,
