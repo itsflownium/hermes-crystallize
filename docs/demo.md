@@ -1,5 +1,26 @@
 # Demo script
 
+## Recorded demo
+
+[`assets/demo/crystallize-demo.mp4`](../assets/demo/crystallize-demo.mp4) (3 min 16 s) was recorded live in Hermes Desktop
+(the Webapp, v0.23.0) on Nous Portal on 9 November 2026. Nothing in it is mocked: the cron job, chat and
+panel figures are real runs, sped up where the AI was working.
+
+| What | Route | Result |
+|---|---|---|
+| Cron job skipping unchanged checks | `tencent/hy3`, reasoning low | 6 checks since attaching cost $0.0053 against an expected $0.0134 (60% less): 4 skipped, plus 2 AI runs (the first data and a real billing failure, which it reported) |
+| Working chats, Crystallize on vs off | `tencent/hy3`, low | 33% cheaper (2 pairs: 39%, 27%); automatic Context Rent removed 4 old results, none read back |
+| | `stepfun/step-3.7-flash`, low | 13% cheaper (1 valid pair; the other was invalid because a run errored) |
+| | `deepseek/deepseek-v4.1-flash`, low | 5% cheaper (pairs: +0.7%, −10%); cached reads cost almost nothing there, so only Clean applied |
+
+The pair reports are in `docs/evidence/demo-chat-*.json`. Costs are the portal's list prices for the exact
+tokens each side used, with the same model, provider and reasoning on both sides. These are small samples.
+
+The video also shows a case that costs more: asking for a detail from a removed file makes the AI read it
+back, which turned that short chat's net slightly negative (−$0.0009). The panel shows that figure too.
+
+## Recording it yourself
+
 A short walkthrough for recording, about three minutes. It needs one model route and a cron job you can run a few times.
 
 ## 1. A cron job that skips when nothing changed (about 90 seconds)

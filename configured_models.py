@@ -208,12 +208,33 @@ def inventory() -> dict[str, Any]:
             except Exception:
                 profile = None
         add(provider, model, source, profile, configured=True)
+    _add_prices(rows)
     for row in rows.values():
         row["models"].sort(key=lambda model: (not model["configured"], model["id"].lower()))
     return {"providers": sorted(rows.values(), key=lambda row: (not any(m["configured"] for m in row["models"]), row["slug"])),
             "availability": "configured_and_declared_only", "authentication_verified": False, "catalog_complete": False,
             "manual_route_entry": True, "provenance": ["public_provider_declarations", "sanitized_selected_configuration", "explicit_plugin_routes"],
             "warnings": list(dict.fromkeys([_NOTICE, *warnings]))}
+
+
+def _add_prices(rows: dict[str, dict[str, Any]]) -> None:
+    """Show each route's price where one is already known: your rate card first, then a list price
+    Crystallize saved earlier. Never fetches, so opening the picker makes no network call."""
+    from . import price_discovery, public_pricing
+
+    for slug, row in rows.items():
+        for model in row["models"]:
+            try:
+                card = public_pricing.exact_rate_card(model["id"], slug, discovered=False)
+                found, source = (card, "your_rate_card") if card else (
+                    price_discovery.rates(model["id"], slug, fetch=False), "list_price")
+            except Exception:  # noqa: BLE001 — a price is optional
+                continue
+            if not found or not isinstance(found.get("input"), (int, float)) or not isinstance(found.get("output"), (int, float)):
+                continue
+            model["input_per_million"] = found["input"] * 1_000_000
+            model["output_per_million"] = found["output"] * 1_000_000
+            model["price_source"] = source
 
 
 def describe_routes(routes: list[dict[str, str]]) -> list[dict[str, Any]]:

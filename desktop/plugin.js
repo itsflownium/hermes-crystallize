@@ -615,7 +615,7 @@ function DelegationControls({ ctx, picked }) {
 }
 
 // Public metadata describes configured choices, never credential verification.
-const inventoryNotice = 'Choices come from configured and user-declared routes. The public SDK does not expose a verified authenticated-model inventory; Hermes checks authentication when an explicit model call runs.'
+const inventoryNotice = 'Models from your Hermes setup. Hermes checks your sign-in when the helper is first used.'
 const routeLabel = route => route && [route.provider, route.model].filter(Boolean).join(' / ') || 'No route selected'
 const metadataWarnings = inventory => Array.isArray(inventory && inventory.warnings) ? inventory.warnings.filter(value => typeof value === 'string') : []
 
@@ -1014,7 +1014,7 @@ function explain(item, status) {
   const n = item.fetch_steps || 0
   if (!n) return null
   if (item.mode === 'tool') return 'The learned read plan guides the main agent. Hermes executes each tool through its normal permissions and tool flow; your main model and reasoning stay configured.'
-  if (promotionPolicy(item).automatic_replay_available !== true) return 'Automatic replay is unavailable on this host. Use the explicit host-tool plan or normal Hermes execution; tool permissions and approvals stay with Hermes.'
+  if (promotionPolicy(item).automatic_replay_available !== true) return 'Crystallize learned what this job reads. Hermes still runs every tool with its normal permissions.'
   const what = n === 1 ? 'the fetch step' : `${n} fetch steps`
   if (status === 'live' && item.mode === 'no_ai') return `The verified routine runs ${what} and returns its output in the approved no-AI mode.`
   return `The verified routine runs ${what} before the AI writes the result. Review the capability report and per-job requirements.`
@@ -1103,7 +1103,7 @@ function JobBubble({ item, status, trialRuns, act, exp, ctx, compatibility }) {
     jsx(Periods, { key: 'p', periods: item.periods, timeline: item.timeline }),
     explain(item, status) ? small(explain(item, status), C.soft) : null,
     status === 'live' ? jsx(LiveOptions, { key: 'o', item, act, compatibility }) : null,
-    status !== 'live' && promotionPolicy(item).test_execution === 'observe_normal_host_runs' ? small('Learns from fresh, normally executed Hermes runs. Background tool replay is unavailable on this host.', C.soft) : null,
+    status !== 'live' && promotionPolicy(item).test_execution === 'observe_normal_host_runs' ? small('Learns from this job\'s normal runs.', C.soft) : null,
     status === 'testing' && item.ready && !canUseMode(item, 'prerun', compatibility) ? small(`Automatic Promote unavailable: ${unavailableMode(item, 'prerun')}`, C.soft) : null,
     item.schedule_hint ? small(item.schedule_hint, C.soft) : null,
     jsx(SavingsMap, { key: 'm', item }),
@@ -1194,8 +1194,7 @@ function HowItWorks({ onHide }) {
     row('How Crystallize Cron saves', pill('Got it', onHide, C.muted)),
     small('Saves most on jobs that check often for something that rarely changes, only read, and can stay quiet when nothing changed. It can cost more on a job whose data changes every run, so each job shows how often its data changes.'),
     small('A cron job costs roughly its prompt size times its AI calls, plus reasoning. Crystallize shows where each job\'s money goes and works on all of it.', C.soft),
-    small('Trials use supported controls and recorded cost and outcome checks. Your main reasoning setting is preserved. A change stays only when its checks pass and its cost, or its tokens where no price is known, falls beyond normal variation. Otherwise the earlier settings come back.', C.soft),
-    small('Repeated jobs can learn a read plan from normal runs. When guarded nested execution is unavailable, the main agent follows the plan through normal Hermes tools. Automatic pre-run and no-AI modes stay unavailable until their host capability is verified.', C.soft)
+    small('A trial keeps your model and reasoning. It stays only if its checks pass and it costs clearly less than the job normally does; otherwise the old settings come back.', C.soft)
   ], 'how')
 }
 
@@ -1856,8 +1855,7 @@ function ModelPicker({ ctx, picked, onPicked }) {
     small(picked && picked.model ? `Selected: ${routeLabel(picked)}` : 'No helper selected', C.soft),
     small('Used for explicit text subtasks and permitted summaries. Your main model and reasoning stay as configured.', C.soft),
     small(inventoryNotice, C.soft),
-    ...metadataWarnings(inventory).map((message, index) => jsx('div', { key: `inventory-warning-${index}`, children: small(message, C.soft) })),
-    !inventory && !error ? statusLine('Loading configured and declared route choices…') : null,
+    !inventory && !error ? statusLine('Loading models…') : null,
     error ? jsxs('div', { style: panelStyle, children: [statusLine(error, C.yellow), actionButton('Refresh model choices', refresh, !!saving)] }) : null,
     inventory && !providers.length ? small('No route choices were returned. Add the provider and model identifiers accepted by your Hermes setup below.') : null,
     provider ? jsx('div', {
@@ -1873,11 +1871,12 @@ function ModelPicker({ ctx, picked, onPicked }) {
     provider ? jsx('div', { key: 'models', style: { display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 280, overflowY: 'auto' }, children: models.length ? models.slice(0, 60).map(model => {
       const selected = picked && picked.provider === provider.slug && picked.model === model.id
       const priced = typeof model.input_per_million === 'number' && typeof model.output_per_million === 'number'
-      const price = priced ? `${model.input_per_million.toLocaleString(undefined, { maximumSignificantDigits: 6 })} input · ${model.output_per_million.toLocaleString(undefined, { maximumSignificantDigits: 6 })} output USD per million · supplied estimate` : 'Price unknown · add a user-supplied rate card'
+      const money = value => '$' + value.toLocaleString(undefined, { maximumSignificantDigits: 3 })
+      const price = priced ? `${money(model.input_per_million)} in · ${money(model.output_per_million)} out per million tokens · ${model.price_source === 'your_rate_card' ? 'your rate card' : 'list price'}` : 'Price not known yet · it appears after this route is used, or add a rate card'
       return jsxs('button', {
         key: model.id, type: 'button', disabled: !!saving, onClick: () => choose(model),
         style: { display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left', padding: '6px 8px', borderRadius: 6, cursor: saving ? 'wait' : 'pointer', border: `0.5px solid ${selected ? C.green : C.stroke}`, background: selected ? C.tile : 'none', color: C.text },
-        children: [jsx('span', { style: { fontSize: '0.75rem', overflowWrap: 'anywhere' }, children: saving === model.id ? `Saving ${model.id}…` : model.id }), small(price), small('Declared route · authentication unverified')]
+        children: [jsx('span', { style: { fontSize: '0.75rem', overflowWrap: 'anywhere' }, children: saving === model.id ? `Saving ${model.id}…` : model.id }), small(price)]
       })
     }) : small('No route choices match this search.') }) : null,
     models.length > 60 ? small(`${models.length} matches. Refine the search to see more.`) : null,

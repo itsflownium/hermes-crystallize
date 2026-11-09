@@ -326,7 +326,7 @@ await test('manual routes stay declarations and preserve arbitrary identifiers',
 await test('empty or failed inventory still offers manual route entry', async () => {
   for(const inventory of [{providers:[],authentication_verified:false}, {ok:false,error:'Inventory unavailable'}]){
     const api=makeContext({'GET /chat-models':()=>inventory}); const view=mount('ModelPicker',{ctx:api.ctx,picked:null,onPicked:()=>{}}); await view.flush();
-    assert.ok(all(view).find(node=>node.type===sandbox.parts.RouteEntry)); assert.ok(text(view.tree).includes('public SDK does not expose a verified authenticated-model inventory'));
+    assert.ok(all(view).find(node=>node.type===sandbox.parts.RouteEntry)); assert.ok(text(view.tree).includes('Models from your Hermes setup'));
     assert.equal(api.posts().length,0); view.dispose();
   }
 });
@@ -390,7 +390,7 @@ await test('native source undo requires current configuration and explicit appro
 });
 await test('observation starts only through its explicit control', async () => {
   const calls=[];const view=mount('JobBubble',{item:{...modeItem,ready:false},status:'spotted',trialRuns:3,ctx:makeContext().ctx,compatibility:unsupported,act:(path,body)=>calls.push({path,body}),exp:{open:{'job-a':true},toggle:()=>{}}});await view.flush();assert.equal(calls.length,0);const action=all(view).find(node=>node.type && node.type.name==='JobHeader').props.action;assert.equal(text(action),'Observe next runs');action.props.onClick();view.render();
-  assert.deepEqual(plain(calls),[{path:'/try',body:{job_id:'job-a'}}]);assert.ok(text(view.tree).includes('normally executed Hermes runs'));view.dispose();
+  assert.deepEqual(plain(calls),[{path:'/try',body:{job_id:'job-a'}}]);assert.ok(text(view.tree).includes('Learns from this job'));view.dispose();
 });
 await test('compatibility explains normal host-tool file plans', async () => {
   const view=mount('CompatibilityCard',{state:{data:unsupported,error:null,load:()=>{}}});await view.flush();click(view,'▸ Capability details');

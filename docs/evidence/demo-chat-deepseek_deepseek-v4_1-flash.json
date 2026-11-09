@@ -1,0 +1,177 @@
+{
+ "schema": 1,
+ "mode": "long",
+ "reread": false,
+ "model": "deepseek/deepseek-v4.1-flash",
+ "provider": "nous",
+ "requested_reasoning": "low",
+ "seed": 1794202220,
+ "frozen_list_rates_per_token": {
+  "input": 1.06e-07,
+  "output": 5.13e-07,
+  "cache_read": 4e-09,
+  "cache_write": 1.06e-07
+ },
+ "stopped": null,
+ "by_task": {
+  "working chat": {
+   "valid_pairs": 2,
+   "invalid_pairs": 0,
+   "median_cost_ratio_on_vs_off": 0.9519130070627462,
+   "median_cost_ratio_excluding_reasoning_output": 0.9458977705458992,
+   "median_prompt_token_ratio": 1.0157240141842165,
+   "checks_passed_off": 2,
+   "checks_passed_on": 2
+  }
+ },
+ "pairs": [
+  {
+   "domain": "working chat",
+   "repeat": 0,
+   "order": [
+    "on",
+    "off"
+   ],
+   "valid": true,
+   "on": {
+    "on": true,
+    "ok": true,
+    "session": "local-b9e7f6770a778a0966e41aa24241291eb2784f6b56bfc7f853ec5378e7f4ef64",
+    "delta": {
+     "input_tokens": 14109,
+     "output_tokens": 1656,
+     "cache_read_tokens": 322432,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 475,
+     "api_call_count": 18,
+     "prompt_tokens": 336541
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.0036348100000000005,
+    "list_cost_without_reasoning_usd": 0.003391135,
+    "host_estimated_delta_usd": 0.0036348100000000005,
+    "recorded": {
+     "model": "deepseek/deepseek-v4.1-flash",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "low",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "auto_rent": {
+     "removed": 0,
+     "read_backs": 0,
+     "off": false
+    },
+    "answer_chars": 127
+   },
+   "off": {
+    "on": false,
+    "ok": true,
+    "session": "local-5d41398f421137237b7c416091dedb44c8de471dad46ef82f8e8bcbeff6bf466",
+    "delta": {
+     "input_tokens": 16484,
+     "output_tokens": 1391,
+     "cache_read_tokens": 287488,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 470,
+     "api_call_count": 15,
+     "prompt_tokens": 303972
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.0036108390000000002,
+    "list_cost_without_reasoning_usd": 0.003369729,
+    "host_estimated_delta_usd": 0.0036108390000000002,
+    "recorded": {
+     "model": "deepseek/deepseek-v4.1-flash",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "low",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "auto_rent": null,
+    "answer_chars": 128
+   }
+  },
+  {
+   "domain": "working chat",
+   "repeat": 1,
+   "order": [
+    "on",
+    "off"
+   ],
+   "valid": true,
+   "on": {
+    "on": true,
+    "ok": true,
+    "session": "local-a5008262e859bf8cb40f9e1575aea2e7fabcd672ace15d335eefb191127a5f93",
+    "delta": {
+     "input_tokens": 14216,
+     "output_tokens": 1064,
+     "cache_read_tokens": 278912,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 327,
+     "api_call_count": 16,
+     "prompt_tokens": 293128
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.0031683760000000005,
+    "list_cost_without_reasoning_usd": 0.003000625,
+    "host_estimated_delta_usd": 0.003168376,
+    "recorded": {
+     "model": "deepseek/deepseek-v4.1-flash",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "low",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "auto_rent": {
+     "removed": 0,
+     "read_backs": 0,
+     "off": false
+    },
+    "answer_chars": 88
+   },
+   "off": {
+    "on": false,
+    "ok": true,
+    "session": "local-31418a02b40d5947191df4ff74a8acddbfc5cebeb6b5d61d4ac79993c2ec9e24",
+    "delta": {
+     "input_tokens": 16462,
+     "output_tokens": 1138,
+     "cache_read_tokens": 300672,
+     "cache_write_tokens": 0,
+     "reasoning_tokens": 278,
+     "api_call_count": 16,
+     "prompt_tokens": 317134
+    },
+    "checks_passed": true,
+    "list_cost_usd": 0.003531454,
+    "list_cost_without_reasoning_usd": 0.0033888400000000006,
+    "host_estimated_delta_usd": 0.0035314540000000007,
+    "recorded": {
+     "model": "deepseek/deepseek-v4.1-flash",
+     "provider": "nous",
+     "sent": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "requested_on_the_wire": {
+     "effort": "low",
+     "fingerprint": "{\"other\":{},\"reasoning\":{\"extra_body.reasoning\":{\"effort\":\"low\",\"enabled\":true}}}"
+    },
+    "auto_rent": null,
+    "answer_chars": 102
+   }
+  }
+ ],
+ "limits": [
+  "Costs are list prices applied to recorded usage, not bills.",
+  "Fixtures are synthetic; JSON is pretty-printed like API output.",
+  "One provider and model. It does not extend to other routes.",
+  "The checks cover named facts, not overall answer quality."
+ ]
+}

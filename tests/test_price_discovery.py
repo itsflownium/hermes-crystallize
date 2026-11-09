@@ -154,3 +154,30 @@ def test_other_routes_never_borrow_another_vendors_prices(monkeypatch):
     _serve(monkeypatch, None, catalog)
     pd.refresh("acme")
     assert pd.rates("gpt-x", "acme") is None
+
+
+def test_time_of_day_prices_follow_the_clock(monkeypatch):
+    import calendar
+
+    listing = {"data": [{"id": "vendor/night", "pricing": {
+        "prompt": "0.000000132", "completion": "0.000000528", "input_cache_read": "0.000000033",
+        "overrides": [{"utc_start": 0, "utc_end": 1600, "prompt": "0.000000132", "completion": "0.000000528", "input_cache_read": "0.000000033"},
+                      {"utc_start": 1600, "utc_end": 0, "prompt": "0.0000000825", "completion": "0.00000033", "input_cache_read": "0.000000020625"},
+                      {"utc_start": "bad", "utc_end": 0, "prompt": "1"}]}}]}
+    _serve(monkeypatch, listing, None)
+    pd.refresh("acme")
+    day = calendar.timegm((2026, 11, 9, 10, 0, 0))
+    night = calendar.timegm((2026, 11, 9, 20, 30, 0))
+    after_midnight = calendar.timegm((2026, 11, 10, 0, 5, 0))
+    assert pd.rates("vendor/night", "acme", when=day)["input"] == pytest.approx(1.32e-7)
+    assert pd.rates("vendor/night", "acme", when=night)["input"] == pytest.approx(8.25e-8)
+    assert pd.rates("vendor/night", "acme", when=night)["cache_read"] == pytest.approx(2.0625e-8)
+    assert pd.rates("vendor/night", "acme", when=after_midnight)["input"] == pytest.approx(1.32e-7)
+    assert "windows" not in pd.rates("vendor/night", "acme", when=day)
+
+
+def test_a_flat_price_has_no_windows(monkeypatch):
+    _serve(monkeypatch, ENDPOINT, None)
+    pd.refresh("acme")
+    found = pd.rates("vendor/fast", "acme")
+    assert "windows" not in found and "time_of_day_price" not in found
