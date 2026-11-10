@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from . import capture, chat_savings, cli, experiments, fetch_cache, output_delivery, schemas, store, tools
+from . import capture, chat_commands, chat_savings, cli, live_notice, experiments, fetch_cache, output_delivery, schemas, store, tools
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,7 @@ def register(ctx: Any) -> None:
     ctx.register_hook("pre_llm_call", capture.make_pre_llm_call(ctx))
     ctx.register_hook("post_api_request", capture.make_post_api_request(ctx))
     ctx.register_hook("pre_tool_call", capture.make_pre_tool_call(ctx))
+    ctx.register_hook("post_llm_call", live_notice.make_post_llm_call(ctx))
     ctx.register_hook("transform_llm_output", capture.make_transform_llm_output(ctx),
                       **output_delivery.registration_options(ctx))
 
@@ -72,25 +73,12 @@ def register(ctx: Any) -> None:
         logger.warning("crystallize: couldn't register the chat model slot", exc_info=True)
 
     def _crystallize_command(raw_args: str = "", *, session_id: str = "", **_: Any) -> str:
-        parts = (raw_args or "").strip().lower().split()
-        if parts[:1] == ["chat"] and len(parts) == 2 and parts[1] in ("on", "off"):
-            return chat_savings.set_enabled(session_id, parts[1] == "on")["message"]
-        if parts and parts != ["status"]:
-            return "Usage: /crystallize [status] | /crystallize chat on|off"
-        try:
-            state = chat_savings.status_for(session_id)
-            picked = chat_savings.chosen_model()
-            chat_line = (f"Crystallize Chat is {'on' if state['enabled'] else 'off'} for this chat. "
-                         f"Cheap model: {picked['model'] or 'none picked'}.") if session_id else ""
-            return "\n".join(line for line in (_status_text(), chat_line) if line)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("crystallize: status failed: %s", exc)
-            return "Crystallize couldn't read its data. Check `hermes logs` for details."
+        return chat_commands.handle(raw_args, session_id)
 
     ctx.register_command(
         "crystallize", handler=_crystallize_command,
-        description="See what Crystallize is doing, or turn Crystallize Chat on or off for this chat",
-        args_hint="[status | chat on|off]",
+        description="See what Crystallize saved, what this chat re-reads, your cron jobs, Runaway Brake and prices",
+        args_hint="[chat on|off | rent [remove|restore N] | jobs | brake [on|off] | prices | line on|off | help]",
     )
 
     cli.register(ctx)
