@@ -1,4 +1,4 @@
-Adds `plugin-catalog/crystallize.yaml` for [Crystallize](https://github.com/itsflownium/hermes-crystallize), pinned at `b77511ae58d42d7d659c73e01e28d8764ae43495` (version `0.6.0`, `requires_hermes: ">=0.22.7"`, also declared in `plugin.yaml`). I'm the repository's owner (`itsflownium`).
+Adds `plugin-catalog/crystallize.yaml` for [Crystallize](https://github.com/itsflownium/hermes-crystallize), pinned at `fc34138782796e94bca9131dd12c71f2dd843031` (version `0.6.0`, `requires_hermes: ">=0.22.7"`, also declared in `plugin.yaml`). I'm the repository's owner (`itsflownium`).
 
 ## What it does
 
@@ -12,7 +12,7 @@ Measured live at unchanged model, provider and reasoning, priced at public list 
 
 ## Demo
 
-An 87-second narrated demo, recorded live on Nous Portal: the TUI (the status line, `/crystallize rent`, removing a 14.8k-token result so the next turn's context drops from 37.7k to 16.9k tokens), the classic CLI, the Desktop panel and a cron job that skips unchanged checks: [crystallize-demo.mp4](https://github.com/itsflownium/hermes-crystallize/blob/b77511ae58d42d7d659c73e01e28d8764ae43495/assets/demo/crystallize-demo.mp4). A longer 3½-minute walkthrough is [crystallize-demo-full.mp4](https://github.com/itsflownium/hermes-crystallize/blob/b77511ae58d42d7d659c73e01e28d8764ae43495/assets/demo/crystallize-demo-full.mp4). The raw pair reports are in [`docs/evidence/`](https://github.com/itsflownium/hermes-crystallize/tree/b77511ae58d42d7d659c73e01e28d8764ae43495/docs/evidence), and the write-up is in [`docs/demo.md`](https://github.com/itsflownium/hermes-crystallize/blob/b77511ae58d42d7d659c73e01e28d8764ae43495/docs/demo.md).
+An 87-second narrated demo, recorded live on Nous Portal: the TUI (the status line, `/crystallize rent`, removing a 14.8k-token result so the next turn's context drops from 37.7k to 16.9k tokens), the classic CLI, the Desktop panel and a cron job that skips unchanged checks: [crystallize-demo.mp4](https://github.com/itsflownium/hermes-crystallize/blob/fc34138782796e94bca9131dd12c71f2dd843031/assets/demo/crystallize-demo.mp4). A longer 3½-minute walkthrough is [crystallize-demo-full.mp4](https://github.com/itsflownium/hermes-crystallize/blob/fc34138782796e94bca9131dd12c71f2dd843031/assets/demo/crystallize-demo-full.mp4). The raw pair reports are in [`docs/evidence/`](https://github.com/itsflownium/hermes-crystallize/tree/fc34138782796e94bca9131dd12c71f2dd843031/docs/evidence), and the write-up is in [`docs/demo.md`](https://github.com/itsflownium/hermes-crystallize/blob/fc34138782796e94bca9131dd12c71f2dd843031/docs/demo.md).
 
 ## Hermes surfaces used
 
@@ -47,7 +47,7 @@ An 87-second narrated demo, recorded live on Nous Portal: the TUI (the status li
 
 ## Validation
 
-`hermes plugins validate <clean clone at b77511a> --install-deps` was run with this branch's Hermes (`NousResearch/hermes-agent@c93bbc0`, isolated `HERMES_HOME`):
+`hermes plugins validate <clean clone at fc34138> --install-deps` was run with this branch's Hermes (`NousResearch/hermes-agent@c93bbc0`, isolated `HERMES_HOME`):
 
 ```
 ✓ manifest  ✓ manifest fields  ✓ requires_hermes  ✓ config schema  ✓ requires_env  ✓ oauth
@@ -63,8 +63,8 @@ Validation passed.   (no warnings)
 
 The images are the real Desktop panel rendered with sample figures (labelled as such in the repo):
 
-![Cron and chat](https://raw.githubusercontent.com/itsflownium/hermes-crystallize/b77511ae58d42d7d659c73e01e28d8764ae43495/assets/review/panel-cron-and-chat.png)
-![Job details](https://raw.githubusercontent.com/itsflownium/hermes-crystallize/b77511ae58d42d7d659c73e01e28d8764ae43495/assets/review/panel-job-details.png)
+![Cron and chat](https://raw.githubusercontent.com/itsflownium/hermes-crystallize/fc34138782796e94bca9131dd12c71f2dd843031/assets/review/panel-cron-and-chat.png)
+![Job details](https://raw.githubusercontent.com/itsflownium/hermes-crystallize/fc34138782796e94bca9131dd12c71f2dd843031/assets/review/panel-job-details.png)
 
 ## Known limits (also in `known_issues`)
 
