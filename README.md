@@ -28,13 +28,39 @@ hermes plugins install itsflownium/hermes-crystallize
 hermes plugins enable crystallize
 ```
 
-Open the Crystallize panel in Hermes Desktop (**Capabilities → Plugins**), or use the commands below.
+It works the same in the classic CLI (`hermes chat`), the TUI (`hermes chat --tui`) and Hermes Desktop.
+
+### In the CLI and TUI
+
+Type `/crystallize` in any chat. Everything the Desktop panel shows is there as text:
 
 ```text
-/crystallize chat on                          # start working on this chat
+/crystallize                      what this chat and your cron jobs have saved
+/crystallize chat on|off          turn Crystallize on or off for this chat
+/crystallize chat default on      start every new chat with Crystallize on
+/crystallize rent                 what this chat keeps paying to re-read
+/crystallize rent remove N        stop sending result N (the AI can still read it back)
+/crystallize jobs                 each cron job's cost, and whether skipping would help
+/crystallize brake on|off         Runaway Brake for cron runs
+/crystallize prices               this chat's model price
+```
+
+After each turn, a short Crystallize line shows what it's doing, for example `◆ −3.2k tok/call · /crystallize`.
+In the TUI it sits in the status line and updates in place; the classic CLI prints it after the turn.
+It uses Hermes's own `post_message`, never changes the AI's answer, and `/crystallize line off` hides it.
+Messaging chats don't get it, so Crystallize never sends anyone a message.
+With `plugins.isolation: host` Hermes can't hand plugins a live message, so the line is skipped there; `/crystallize` still works.
+
+### In Hermes Desktop
+
+Open the Crystallize panel (**Capabilities → Plugins**, then the Crystallize button in the status bar).
+
+### From a shell
+
+```text
 hermes crystal tune my-job                    # trial lower-cost settings on a cron job
 hermes crystal native-cron JOB_ID --draft     # draft a script that skips unchanged runs
-hermes crystal rent SESSION_ID                # what this chat keeps paying to re-read
+hermes crystal rent SESSION_ID                # what a chat keeps paying to re-read
 hermes crystal brake on                       # stop runaway cron runs
 ```
 

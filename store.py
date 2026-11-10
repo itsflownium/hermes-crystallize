@@ -405,8 +405,33 @@ def execution_traces(execution_id: str) -> list[dict[str, Any]]:
     return results
 
 
+CHAT_DEFAULT_SETTING = "chat_default_on"
+INTERACTIVE_SOURCES = frozenset({"cli", "tui", "desktop", "gui", "local"})
+_interactive: dict[str, bool] = {}
+
+
+def _interactive_chat(session_id: str) -> bool:
+    """Whether Hermes recorded this session as a chat a person types in (cached once known)."""
+    if session_id in _interactive:
+        return _interactive[session_id]
+    from . import history
+    conn = history._open_readonly(history._hermes_home() / "state.db")
+    if conn is None:
+        return False
+    try:
+        row = conn.execute("SELECT source FROM sessions WHERE id = ?", (session_id,)).fetchone()
+    except Exception:  # noqa: BLE001 — unknown means no default
+        row = None
+    finally:
+        conn.close()
+    if row is None:
+        return False
+    _interactive[session_id] = str(row[0] or "") in INTERACTIVE_SOURCES
+    return _interactive[session_id]
+
+
 def chat_enabled(session_id: Optional[str]) -> bool:
-    """Whether the user turned Crystallize on for this chat (off by default)."""
+    """Whether the user turned Crystallize on for this chat (off unless they chose on for new chats)."""
     if not session_id:
         return False
     from . import lineage
@@ -417,7 +442,9 @@ def chat_enabled(session_id: Optional[str]) -> bool:
             r = _db().execute("SELECT enabled FROM chats WHERE session_id = ?", (sid,)).fetchone()
         if r is not None:
             return bool(r[0])
-    return False
+    # An explicit "on for new chats" choice. It covers chats a person types in, never cron,
+    # subagent or tool sessions, which keep their own path.
+    return get_setting(CHAT_DEFAULT_SETTING, False) is True and _interactive_chat(session_id)
 
 
 def set_chat_enabled(session_id: str, enabled: bool) -> None:

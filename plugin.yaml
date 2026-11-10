@@ -27,6 +27,7 @@ provides_hooks:
   - transform_llm_output
   - post_api_request
   - pre_tool_call
+  - post_llm_call
 
 provides_middleware:
   - llm_request

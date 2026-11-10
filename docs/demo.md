@@ -2,9 +2,17 @@
 
 ## Recorded demo
 
-[`assets/demo/crystallize-demo.mp4`](../assets/demo/crystallize-demo.mp4) (3 min 32 s, narrated) was recorded live in Hermes Desktop
-(the Webapp, v0.23.0) on Nous Portal on 9 November 2026. Nothing in it is mocked: the cron job, chat and
-panel figures are real runs, sped up where the AI was working. The voice-over is macOS text to speech.
+[`assets/demo/crystallize-demo.mp4`](../assets/demo/crystallize-demo.mp4) (1 min 27 s, narrated) shows Crystallize in the
+TUI, the classic CLI, Hermes Desktop and a cron job. The terminal parts were recorded live on 10 November 2026 in
+`hermes chat --tui` and `hermes chat` (v0.23.0, `deepseek/deepseek-v4.1-flash` on Nous Portal). The agent read two
+status files; `/crystallize rent` showed the 14.8k-token result being re-sent with every call; after
+`/crystallize rent remove 1` the next turn's context went from 37.7k to 16.9k tokens and the status line read
+`◆ −14.6k tok/call`. Idle waits are sped up and the startup screen is cut; nothing is mocked.
+
+[`assets/demo/crystallize-demo-full.mp4`](../assets/demo/crystallize-demo-full.mp4) (3 min 32 s, narrated) is the longer
+walkthrough recorded live in Hermes Desktop (the Webapp, v0.23.0) on Nous Portal on 9 November 2026: the cron job,
+chat and panel figures are real runs, sped up where the AI was working. Both voice-overs are macOS text to speech.
+The results below come from these runs.
 
 | What | Route | Result |
 |---|---|---|
