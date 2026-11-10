@@ -1,8 +1,8 @@
 # Submission bundle only. Copy into hermes-agent/plugin-catalog/ in a maintainer-reviewed PR.
 name: "crystallize"
 repo: "https://github.com/itsflownium/hermes-crystallize"
-sha: "9571c8a5d6915a33aad86b2684625987344ab40a"
-description: "Spend less on repeated work in Hermes chats and cron jobs, without making your model think less: trims repeated context and tool output in chats, and lets a cron job skip its AI run when its input has not changed, with local receipts showing what each change saved. Disclosure — reads Hermes session costs (state.db), cron outcomes and job definitions (cron/executions.db, cron/jobs.json) and your config and rate cards; looks up public model prices from the active route's /models endpoint and models.dev once a day with no credentials or chat data (off with hermes crystal prices --lookup off); the optional helper, compare and check features make paid model calls through your own Hermes route; cron tuning, promote and undo run hermes cron CLI commands that edit the chosen job, and approved snapshot scripts are copied under scripts/crystallize-native/; stores captured tool results, cache entries and receipts in its plugin-data folder; no telemetry, no credential reads, no self-update."
+sha: "b77511ae58d42d7d659c73e01e28d8764ae43495"
+description: "Spend less on repeated work in Hermes chats and cron jobs, without making your model think less: trims repeated context and tool output in chats, and lets a cron job skip its AI run when its input has not changed, with local receipts showing what each change saved. Disclosure — reads Hermes session costs (state.db), cron outcomes and job definitions (cron/executions.db, cron/jobs.json) and your config and rate cards; looks up public model prices from the active route's /models endpoint and models.dev once a day with no credentials or chat data (off with hermes crystal prices --lookup off); the optional helper, compare and check features make paid model calls through your own Hermes route; cron tuning, promote and undo run hermes cron CLI commands that edit the chosen job, and approved snapshot scripts are copied under scripts/crystallize-native/; in CLI and TUI chats posts one short status line after each turn with ctx.post_message (never on Desktop or messaging platforms; off with /crystallize line off); stores captured tool results, cache entries and receipts in its plugin-data folder; no telemetry, no credential reads, no self-update."
 maintainer: "itsflownium"
 tier: "community"
 category: "automation"
@@ -18,11 +18,11 @@ known_issues:
   - "Optional native Python snapshot sources require explicit source approval, and a job that delivers needs confirmation that an unchanged run sends nothing; copied code/imports run with ordinary cron permissions, and host text trimming/redaction still apply."
 capabilities:
   provides_tools: ["crystal_cheap", "crystal_full_result", "crystal_list", "crystal_run"]
-  provides_hooks: ["on_session_end", "post_api_request", "post_tool_call", "pre_llm_call", "pre_tool_call", "transform_llm_output", "transform_tool_result"]
+  provides_hooks: ["on_session_end", "post_api_request", "post_llm_call", "post_tool_call", "pre_llm_call", "pre_tool_call", "transform_llm_output", "transform_tool_result"]
   provides_middleware: ["llm_request", "tool_execution"]
   requires_env: []
 screenshots:
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/9571c8a5d6915a33aad86b2684625987344ab40a/assets/review/panel-cron-and-chat.png"
-  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/9571c8a5d6915a33aad86b2684625987344ab40a/assets/review/panel-job-details.png"
-docs_url: "https://github.com/itsflownium/hermes-crystallize/blob/9571c8a5d6915a33aad86b2684625987344ab40a/README.md"
-image: "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/9571c8a5d6915a33aad86b2684625987344ab40a/assets/social-preview.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/b77511ae58d42d7d659c73e01e28d8764ae43495/assets/review/panel-cron-and-chat.png"
+  - "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/b77511ae58d42d7d659c73e01e28d8764ae43495/assets/review/panel-job-details.png"
+docs_url: "https://github.com/itsflownium/hermes-crystallize/blob/b77511ae58d42d7d659c73e01e28d8764ae43495/README.md"
+image: "https://raw.githubusercontent.com/itsflownium/hermes-crystallize/b77511ae58d42d7d659c73e01e28d8764ae43495/assets/social-preview.png"
